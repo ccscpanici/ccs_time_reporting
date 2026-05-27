@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <h1 class="h4 mb-0">User Profile</h1>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+
+          <h2 class="h5">User Information</h2>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label" for="{{ user_form.first_name.id_for_label }}">First name</label>
+              {{ user_form.first_name }}
+              {{ user_form.first_name.errors }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="{{ user_form.last_name.id_for_label }}">Last name</label>
+              {{ user_form.last_name }}
+              {{ user_form.last_name.errors }}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label" for="{{ user_form.email.id_for_label }}">Email</label>
+              {{ user_form.email }}
+              {{ user_form.email.errors }}
+            </div>
+          </div>
+
+          <hr>
+
+          <h2 class="h5">Employee Information</h2>
+          <div class="mb-3">
+            <label class="form-label" for="{{ employee_form.office_location.id_for_label }}">Office Location</label>
+            {{ employee_form.office_location }}
+            {{ employee_form.office_location.errors }}
+            <div class="form-text">Select the company office you are assigned to.</div>
+          </div>
+
+          <h3 class="h6 mt-4">Home Address</h3>
+          <div class="row g-3 mb-3">
+            <div class="col-md-12">
+              <label class="form-label" for="{{ employee_form.address_1.id_for_label }}">Address 1</label>
+              {{ employee_form.address_1 }}
+              {{ employee_form.address_1.errors }}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label" for="{{ employee_form.address_2.id_for_label }}">Address 2</label>
+              {{ employee_form.address_2 }}
+              {{ employee_form.address_2.errors }}
+            </div>
+            <div class="col-md-5">
+              <label class="form-label" for="{{ employee_form.city.id_for_label }}">City</label>
+              {{ employee_form.city }}
+              {{ employee_form.city.errors }}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="{{ employee_form.state.id_for_label }}">State</label>
+              {{ employee_form.state }}
+              {{ employee_form.state.errors }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="{{ employee_form.postal_code.id_for_label }}">ZIP / Postal Code</label>
+              {{ employee_form.postal_code }}
+              {{ employee_form.postal_code.errors }}
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">Save Profile</button>
+          <a class="btn btn-outline-secondary" href="{% url 'timesheet_list' %}">Cancel</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

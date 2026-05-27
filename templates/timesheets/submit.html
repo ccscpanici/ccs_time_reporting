@@ -1,0 +1,35 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Submit week of {{ timesheet.week_start }}</h1>
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <p class="text-muted">Email automation will be added later. For now, submitting will timestamp the timesheet, create a submission artifact, and immediately download the selected file.</p>
+    {% if not timesheet.can_export_excel %}
+      <div class="alert alert-warning">Excel export unavailable: one or more dates contain more than 5 time entries. Please use PDF Report format.</div>
+    {% endif %}
+    <form method="post" action="{% url 'timesheet_submit' timesheet.pk %}" target="_self">
+      {% csrf_token %}
+      <h2 class="h5">Export Format</h2>
+      <div class="mb-3">
+        {% for radio in form.export_format %}
+          <div class="form-check mb-2">{{ radio.tag }} <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label></div>
+        {% endfor %}
+        <div class="form-text">
+          Excel export only works if there are 5 or fewer timesheet entries per date. PDF supports larger timesheets.
+        </div>
+      </div>
+      {% if form.errors %}
+        <div class="alert alert-danger">Please choose a valid export format.</div>
+      {% endif %}
+      {% if timesheet.can_submit %}
+        <button type="submit" class="btn btn-primary">Submit and Download</button>
+      {% else %}
+        <button type="submit" class="btn btn-primary" disabled>Submit and Download</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">Cancel</a>
+    </form>
+<p class="text-muted small mt-3">Need a copy without submitting? Use the Download Excel/PDF buttons on the timesheet detail page.</p>
+  </div>
+</div>
+{% endblock %}

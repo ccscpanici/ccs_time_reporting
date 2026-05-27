@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Project Hours Report</h1>
+    <p class="text-muted mb-0">Search by job number to see total hours and employee breakdown.</p>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label" for="job_number">Job Number</label>
+        <input class="form-control" id="job_number" name="job_number" value="{{ job_number }}" placeholder="Example: 25038S-161" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="start">Start Date</label>
+        <input class="form-control" type="date" id="start" name="start" value="{{ start }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="end">End Date</label>
+        <input class="form-control" type="date" id="end" name="end" value="{{ end }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="status">Status</label>
+        <select class="form-select" id="status" name="status">
+          <option value="" {% if not status %}selected{% endif %}>All statuses</option>
+          {% for value,label in statuses %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" type="submit">Run Report</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if job_number and summary %}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Total Hours</div>
+        <div class="h3 mb-0">{{ summary.total_hours }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Regular</div>
+        <div class="h3 mb-0">{{ summary.regular_hours }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">OT</div>
+        <div class="h3 mb-0">{{ summary.overtime_hours }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">DT</div>
+        <div class="h3 mb-0">{{ summary.doubletime_hours }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-header bg-body-tertiary rounded-top-4">
+    <h2 class="h5 mb-0">Employee Breakdown</h2>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th class="text-end">Regular</th>
+          <th class="text-end">OT</th>
+          <th class="text-end">DT</th>
+          <th class="text-end">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in employee_rows %}
+        <tr>
+          <td>{{ row.employee_name }}</td>
+          <td class="text-end">{{ row.regular_hours }}</td>
+          <td class="text-end">{{ row.overtime_hours }}</td>
+          <td class="text-end">{{ row.doubletime_hours }}</td>
+          <td class="text-end fw-bold">{{ row.total_hours }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">No hours found for this job number.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-header bg-body-tertiary rounded-top-4">
+    <h2 class="h5 mb-0">Detailed Entries</h2>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Employee</th>
+          <th>Work Code</th>
+          <th class="text-end">Reg</th>
+          <th class="text-end">OT</th>
+          <th class="text-end">DT</th>
+          <th class="text-end">Total</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail_rows %}
+        <tr>
+          <td>{{ row.work_date|date:"m/d/Y" }}</td>
+          <td>{{ row.employee_name }}</td>
+          <td>{% if row.work_code %}{{ row.work_code }}{% endif %}</td>
+          <td class="text-end">{{ row.regular_hours }}</td>
+          <td class="text-end">{{ row.overtime_hours }}</td>
+          <td class="text-end">{{ row.doubletime_hours }}</td>
+          <td class="text-end fw-bold">{{ row.total_hours }}</td>
+          <td>{{ row.description }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">No detail entries found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% elif job_number %}
+<div class="alert alert-warning rounded-4">No entries were found for job number <strong>{{ job_number }}</strong>.</div>
+{% endif %}
+{% endblock %}

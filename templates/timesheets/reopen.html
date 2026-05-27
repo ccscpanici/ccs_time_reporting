@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Reopen week of {{ timesheet.week_start }}</h1>
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <p class="text-muted">Reopening a submitted timesheet will make it editable again. A reason is required so there is an audit trail for the correction.</p>
+    <form method="post" action="{% url 'timesheet_reopen' timesheet.pk %}">
+      {% csrf_token %}
+      <div class="mb-3">
+        {{ form.reason.label_tag }}
+        {{ form.reason }}
+        {% if form.reason.errors %}<div class="text-danger small">{{ form.reason.errors }}</div>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-warning">Reopen Timesheet</button>
+      <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">My Billability</h1>
+    <p class="text-muted mb-0">Shows your billable hours divided by your total hours for the selected timeframe.</p>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="start">Start Date</label>
+        <input class="form-control" type="date" id="start" name="start" value="{{ start }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="end">End Date</label>
+        <input class="form-control" type="date" id="end" name="end" value="{{ end }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="status">Status</label>
+        <select class="form-select" id="status" name="status">
+          <option value="" {% if not status %}selected{% endif %}>All statuses</option>
+          {% for value,label in statuses %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary w-100" type="submit">Run Report</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Billability</div>
+        <div class="h3 mb-0">{{ summary.billability|floatformat:1 }}%</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Billable Hours</div>
+        <div class="h3 mb-0">{{ summary.billable_hours }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Non-Billable Hours</div>
+        <div class="h3 mb-0">{{ summary.non_billable_hours }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body">
+        <div class="text-muted small">Total Hours</div>
+        <div class="h3 mb-0">{{ summary.total_hours }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-header bg-body-tertiary rounded-top-4">
+    <h2 class="h5 mb-0">Hours Summary</h2>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Regular</th>
+          <th>OT</th>
+          <th>DT</th>
+          <th>Total</th>
+          <th>Billable</th>
+          <th>Non-Billable</th>
+          <th>Billability</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ summary.total_regular }}</td>
+          <td>{{ summary.total_ot }}</td>
+          <td>{{ summary.total_dt }}</td>
+          <td>{{ summary.total_hours }}</td>
+          <td>{{ summary.billable_hours }}</td>
+          <td>{{ summary.non_billable_hours }}</td>
+          <td>{{ summary.billability|floatformat:1 }}%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-header bg-body-tertiary rounded-top-4">
+    <h2 class="h5 mb-0">Detail Entries</h2>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Job #</th>
+          <th>Work Code</th>
+          <th class="text-end">Reg</th>
+          <th class="text-end">OT</th>
+          <th class="text-end">DT</th>
+          <th class="text-end">Total</th>
+          <th>Billable?</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in detail_rows %}
+        <tr>
+          <td>{{ row.work_date|date:"m/d/Y" }}</td>
+          <td>{{ row.job_number }}</td>
+          <td>{% if row.work_code %}{{ row.work_code }}{% endif %}</td>
+          <td class="text-end">{{ row.regular_hours }}</td>
+          <td class="text-end">{{ row.overtime_hours }}</td>
+          <td class="text-end">{{ row.doubletime_hours }}</td>
+          <td class="text-end fw-bold">{{ row.total_hours }}</td>
+          <td>
+            {% if row.is_billable %}
+              <span class="badge text-bg-success">Yes</span>
+            {% else %}
+              <span class="badge text-bg-secondary">No</span>
+            {% endif %}
+          </td>
+          <td>{{ row.description }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-muted">No time entries found for this timeframe.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

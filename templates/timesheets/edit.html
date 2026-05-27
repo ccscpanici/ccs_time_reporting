@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Edit week of {{ timesheet.week_start }}</h1>
+<form method="post" class="mb-5">
+  {% csrf_token %}
+  <div class="card shadow-sm border-0 rounded-4 mb-3">
+    <div class="card-body">
+      <label class="form-label" for="entries_per_day">Time entry rows per date</label>
+      <input class="form-control" style="max-width: 10rem" type="number" min="5" max="25" name="entries_per_day" id="entries_per_day" value="{{ timesheet.entries_per_day }}">
+      <div class="form-text">The Excel template supports 5 rows per date. More rows are allowed online and export as PDF.</div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="timesheetEditTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="time-tab" data-bs-toggle="tab" data-bs-target="#time-pane" type="button" role="tab" aria-controls="time-pane" aria-selected="true">Time</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="expenses-tab" data-bs-toggle="tab" data-bs-target="#expenses-pane" type="button" role="tab" aria-controls="expenses-pane" aria-selected="false">Expenses</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="parts-tab" data-bs-toggle="tab" data-bs-target="#parts-pane" type="button" role="tab" aria-controls="parts-pane" aria-selected="false">Parts</button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane fade show active" id="time-pane" role="tabpanel" aria-labelledby="time-tab" tabindex="0">
+      {% for day in grid %}
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
+          <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="overnight_{{ day.work_date|date:'Y-m-d' }}" id="overnight_{{ day.work_date|date:'Y-m-d' }}" {% if day.overnight_stay %}checked{% endif %}>
+            <label class="form-check-label" for="overnight_{{ day.work_date|date:'Y-m-d' }}">Hotel overnight stay</label>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
+            <thead>
+              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Job #</th><th style="min-width: 14rem">Work Code</th><th class="hours-col">Reg</th><th class="hours-col">OT</th><th class="hours-col">DT</th><th class="description-col">Description</th></tr>
+            </thead>
+            <tbody>
+              {% for row in day.rows %}
+              {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
+              <tr>
+                <td>{{ row.row_order }}</td>
+                <td><input class="form-control form-control-sm job-input" name="entry_{{ key }}_{{ row.row_order }}_job_number" value="{% if entry %}{{ entry.job_display }}{% endif %}" placeholder="Job #"></td>
+                <td>
+                  <select class="form-select form-select-sm" name="entry_{{ key }}_{{ row.row_order }}_work_code">
+                    <option value="">---</option>
+                    {% for code in work_codes %}<option value="{{ code.pk }}" {% if entry and entry.work_code_id == code.pk %}selected{% endif %}>{{ code }}</option>{% endfor %}
+                  </select>
+                </td>
+                <td><input class="form-control form-control-sm hours-input" type="number" step="0.25" name="entry_{{ key }}_{{ row.row_order }}_regular_hours" value="{% if entry %}{{ entry.regular_hours }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm hours-input" type="number" step="0.25" name="entry_{{ key }}_{{ row.row_order }}_overtime_hours" value="{% if entry %}{{ entry.overtime_hours }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm hours-input" type="number" step="0.25" name="entry_{{ key }}_{{ row.row_order }}_doubletime_hours" value="{% if entry %}{{ entry.doubletime_hours }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_description" value="{% if entry %}{{ entry.description }}{% endif %}"></td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="tab-pane fade" id="expenses-pane" role="tabpanel" aria-labelledby="expenses-tab" tabindex="0">
+      <div class="alert alert-info rounded-4">Expenses are tied one-to-one to the matching time row for the same date and row number. Mileage dollars are calculated from miles × the timesheet mileage rate (${{ timesheet.mileage_rate }}).</div>
+      {% for day in grid %}
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary rounded-top-4">
+          <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-expense-table">
+            <thead>
+              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Job #</th><th>Miles</th><th>Mileage</th><th>Per Diem Food</th><th>Air Fare</th><th>Hotel</th><th>Tolls/Parking</th><th>Rental Car/Fuel</th><th>Business Meals</th><th>Other</th><th class="description-col">Explanation</th></tr>
+            </thead>
+            <tbody>
+              {% for row in day.rows %}
+              {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
+              <tr>
+                <td>{{ row.row_order }}</td>
+                <td class="text-body-secondary small">{% if entry %}{{ entry.job_display }}{% endif %}</td>
+                <td><input class="form-control form-control-sm expense-number-input mileage-miles" data-rate="{{ timesheet.mileage_rate }}" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_miles" value="{% if entry.expense %}{{ entry.expense.miles }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input mileage-amount" type="text" value="{% if entry.expense %}${{ entry.expense.mileage.amount|floatformat:2 }}{% else %}$0.00{% endif %}" readonly tabindex="-1"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_per_diem_food" value="{% if entry.expense %}{{ entry.expense.per_diem_food.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_air_fare" value="{% if entry.expense %}{{ entry.expense.air_fare.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_hotel" value="{% if entry.expense %}{{ entry.expense.hotel.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_tolls_parking" value="{% if entry.expense %}{{ entry.expense.tolls_parking.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_rental_car_fuel" value="{% if entry.expense %}{{ entry.expense.rental_car_fuel.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_business_meals" value="{% if entry.expense %}{{ entry.expense.business_meals.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_other_expense" value="{% if entry.expense %}{{ entry.expense.other_expense.amount }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_expense_explanation_of_expenses" value="{% if entry.expense %}{{ entry.expense.explanation_of_expenses }}{% endif %}"></td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="tab-pane fade" id="parts-pane" role="tabpanel" aria-labelledby="parts-tab" tabindex="0">
+      <div class="alert alert-info rounded-4">Parts are tied one-to-one to the matching time row for the same date and row number.</div>
+      {% for day in grid %}
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary rounded-top-4">
+          <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-parts-table">
+            <thead>
+              <tr>
+                <th style="width: 3rem">#</th>
+                <th style="min-width: 10rem">EE Stock/Job #</th>
+                <th>Quantity</th>
+                <th style="min-width: 18rem">Part Description/Part Number</th>
+                <th class="description-col">Additional Notes For Customer</th>
+                <th>Re-Order Part</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in day.rows %}
+              {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
+              <tr>
+                <td>{{ row.row_order }}</td>
+                <td><input class="form-control form-control-sm part-job-input" name="entry_{{ key }}_{{ row.row_order }}_part_ee_stock_job_number" value="{% if entry.part_entry %}{{ entry.part_entry.ee_stock_job_number }}{% elif entry %}{{ entry.job_display }}{% endif %}" placeholder="EE Stock/Job #"></td>
+                <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_part_quantity" value="{% if entry.part_entry %}{{ entry.part_entry.quantity }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_part_description_part_number" value="{% if entry.part_entry %}{{ entry.part_entry.part_description_part_number }}{% endif %}"></td>
+                <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_part_additional_notes_for_customer" value="{% if entry.part_entry %}{{ entry.part_entry.additional_notes_for_customer }}{% endif %}"></td>
+                <td class="text-center"><input class="form-check-input" type="checkbox" name="entry_{{ key }}_{{ row.row_order }}_part_reorder_part" {% if entry.part_entry and entry.part_entry.reorder_part %}checked{% endif %}></td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <button class="btn btn-primary">Save draft</button>
+  <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">Cancel</a>
+</form>
+<script>
+document.addEventListener("input", function (event) {
+  if (!event.target.classList.contains("mileage-miles")) return;
+  const input = event.target;
+  const row = input.closest("tr");
+  const output = row ? row.querySelector(".mileage-amount") : null;
+  if (!output) return;
+  const miles = parseFloat(input.value || "0") || 0;
+  const rate = parseFloat(input.dataset.rate || "0") || 0;
+  output.value = "$" + (miles * rate).toFixed(2);
+});
+</script>
+{% endblock %}

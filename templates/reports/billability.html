@@ -1,0 +1,34 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Employee Billability</h1>
+    <p class="text-muted mb-0">Billability = hours with a job number / total hours worked. Management staff are excluded.</p>
+  </div>
+</div>
+<form method="get" class="card shadow-sm border-0 rounded-4 mb-3">
+  <div class="card-body row g-3 align-items-end">
+    <div class="col-md-3"><label class="form-label">Start date</label><input class="form-control" type="date" name="start" value="{{ start|default:'' }}"></div>
+    <div class="col-md-3"><label class="form-label">End date</label><input class="form-control" type="date" name="end" value="{{ end|default:'' }}"></div>
+    <div class="col-md-3"><label class="form-label">Timesheet status</label><select class="form-select" name="status"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="col-md-3"><button class="btn btn-primary">Run report</button></div>
+  </div>
+</form>
+<div class="card shadow-sm border-0 rounded-4"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+  <thead><tr><th>Employee</th><th class="text-end">Total Hours</th><th class="text-end">Billable Hours</th><th class="text-end">Non-Billable</th><th class="text-end">Billability</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ row.employee.get_full_name|default:row.employee.username }}</td>
+      <td class="text-end">{{ row.total_hours|floatformat:2 }}</td>
+      <td class="text-end">{{ row.billable_hours|floatformat:2 }}</td>
+      <td class="text-end">{{ row.non_billable_hours|floatformat:2 }}</td>
+      <td class="text-end fw-semibold">{{ row.billability|floatformat:1 }}%</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-center p-4">No employees found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

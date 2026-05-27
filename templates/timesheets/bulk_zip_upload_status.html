@@ -1,0 +1,78 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <h1 class="h3">Bulk Import Progress</h1>
+
+    <div class="progress mb-3" role="progressbar">
+      <div id="progress-bar" class="progress-bar" style="width: 0%">0%</div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-md-3"><strong>Status:</strong> <span id="status">{{ job.status }}</span></div>
+      <div class="col-md-3"><strong>Processed:</strong> <span id="processed">0</span>/<span id="total">0</span></div>
+      <div class="col-md-3"><strong>Imported:</strong> <span id="imported">0</span></div>
+      <div class="col-md-3"><strong>Failed:</strong> <span id="failed">0</span></div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Workbook</th>
+            <th>Status</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+
+    <a class="btn btn-outline-secondary mt-3" href="{% url 'timesheet_list' %}">Back to Timesheets</a>
+  </div>
+</div>
+
+<script>
+async function refreshStatus() {
+    const response = await fetch("{% url 'timesheet_bulk_zip_upload_status_api' job.pk %}");
+    const data = await response.json();
+
+    document.getElementById("status").textContent = data.status;
+    document.getElementById("processed").textContent = data.processed_files;
+    document.getElementById("total").textContent = data.total_files;
+    document.getElementById("imported").textContent = data.imported_files;
+    document.getElementById("failed").textContent = data.failed_files;
+
+    let percent = 0;
+    if (data.total_files > 0) {
+        percent = Math.round((data.processed_files / data.total_files) * 100);
+    }
+
+    const bar = document.getElementById("progress-bar");
+    bar.style.width = percent + "%";
+    bar.textContent = percent + "%";
+
+    const tbody = document.getElementById("results-body");
+    tbody.innerHTML = "";
+
+    data.results.forEach(row => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${row.filename || ""}</td>
+            <td>${row.status || ""}</td>
+            <td>${row.message || ""}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    if (!data.completed) {
+        setTimeout(refreshStatus, 1500);
+    }
+}
+
+refreshStatus();
+</script>
+{% endblock %}

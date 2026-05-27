@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body p-4">
+    <h1 class="h3">Create / open week</h1>
+    <p class="text-muted">Pick the Sunday that starts the timesheet week.</p>
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="col-12"><div class="alert alert-danger">{{ form.non_field_errors }}</div></div>{% endif %}
+      <div class="col-md-4">
+        {{ form.week_start.label_tag }}
+        {{ form.week_start }}
+        <div class="form-text">{{ form.week_start.help_text }}</div>
+        {% for error in form.week_start.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-3">
+        {{ form.entries_per_day.label_tag }}
+        {{ form.entries_per_day }}
+        <div class="form-text">{{ form.entries_per_day.help_text }}</div>
+        {% for error in form.entries_per_day.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary">Create / open week</button>
+        <a class="btn btn-outline-secondary" href="{% url 'timesheet_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

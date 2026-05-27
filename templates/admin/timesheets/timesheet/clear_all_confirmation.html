@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post">
+    {% csrf_token %}
+
+    <h1>Clear ALL Timesheets</h1>
+
+    <p>
+      This will permanently delete <strong>{{ timesheet_count }}</strong> timesheet record(s).
+    </p>
+
+    <p>
+      Related time entries, expenses, parts, receipts, and submission artifacts will also be deleted by cascade.
+    </p>
+
+    <p class="errornote">
+      This action cannot be undone.
+    </p>
+
+    <div class="submit-row">
+      <input type="submit" value="Yes, clear all timesheets" class="deletelink">
+      <a href="../" class="button cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Management Reports</h1>
+<div class="row g-3">
+  <div class="col-md-6 col-lg-4">
+    <div class="card shadow-sm border-0 rounded-4 h-100">
+      <div class="card-body">
+        <h2 class="h5">Employee Billability</h2>
+        <p class="text-muted">Shows billable hours divided by total hours worked. Management staff are excluded.</p>
+        <a class="btn btn-primary" href="{% url 'billability_report' %}">Open report</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card shadow-sm border-0 rounded-4 h-100">
+      <div class="card-body">
+        <h2 class="h5">Project Hours</h2>
+        <p class="text-muted">Look up total hours billed to a job number and see employee-level totals.</p>
+        <a class="btn btn-primary" href="{% url 'project_hours_report' %}">Open report</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card shadow-sm border-0 rounded-4 h-100">
+      <div class="card-body">
+        <h2 class="h5">My Billability</h2>
+        <p class="text-muted">View your own billable percentage for a selected timeframe.</p>
+        <a class="btn btn-primary" href="{% url 'my_billability_report' %}">Open report</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

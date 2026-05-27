@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body p-4">
+    <h1 class="h3">Preferences</h1>
+    <form method="post" class="row g-3">{% csrf_token %}
+      <div class="col-md-4">{{ form.color_scheme.label_tag }} {{ form.color_scheme }}</div>
+      <div class="col-md-4">{{ form.theme.label_tag }} {{ form.theme }}</div>
+      <div class="col-12"><button class="btn btn-primary">Save preferences</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

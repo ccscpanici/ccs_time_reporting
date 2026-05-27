@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1 class="h3 mb-0">My Timesheets</h1><p class="text-muted mb-0">Create, upload, edit, and submit weekly time.</p></div>
+  <div class="btn-group"><a class="btn btn-primary" href="{% url 'timesheet_create' %}">New week</a><a class="btn btn-outline-primary" href="{% url 'timesheet_upload' %}">Upload XLSX</a><a class="btn btn-outline-primary" href="{% url 'timesheet_bulk_zip_upload' %}">Bulk ZIP Import</a></div>
+</div>
+<div class="card shadow-sm border-0 rounded-4"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+<thead><tr><th>Week</th><th>Status</th><th>Submitted</th><th class="text-end">Actions</th></tr></thead>
+<tbody>{% for ts in timesheets %}<tr><td>{{ ts.week_start }}</td><td><span class="badge text-bg-secondary">{{ ts.get_status_display }}</span></td><td>{{ ts.submitted_at|default:'—' }}</td><td class="text-end"><div class="btn-group btn-group-sm"><a class="btn btn-outline-primary" href="{{ ts.get_absolute_url }}">Open</a>{% if ts.can_export_excel %}<a class="btn btn-outline-secondary" href="{% url 'timesheet_download' ts.pk %}?format=excel">Excel</a>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'timesheet_download' ts.pk %}?format=pdf">PDF</a></div></td></tr>{% empty %}<tr><td colspan="4" class="text-center p-4">No timesheets yet.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-3" aria-label="Timesheet pages">
+  <ul class="pagination justify-content-center">
+    {% if page_obj.has_previous %}
+      <li class="page-item"><a class="page-link" href="?page=1">First</a></li>
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">First</span></li>
+      <li class="page-item disabled"><span class="page-link">Previous</span></li>
+    {% endif %}
+
+    <li class="page-item disabled">
+      <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    </li>
+
+    {% if page_obj.has_next %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last</a></li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">Next</span></li>
+      <li class="page-item disabled"><span class="page-link">Last</span></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% endblock %}

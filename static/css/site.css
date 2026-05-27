@@ -1,0 +1,26 @@
+:root { --app-primary: #0d6efd; --app-primary-rgb: 13,110,253; }
+body.scheme-slate { --app-primary: #475569; --app-primary-rgb: 71,85,105; }
+body.scheme-forest { --app-primary: #198754; --app-primary-rgb: 25,135,84; }
+body.scheme-crimson { --app-primary: #b02a37; --app-primary-rgb: 176,42,55; }
+body.scheme-gold { --app-primary: #b58105; --app-primary-rgb: 181,129,5; }
+.app-navbar { background: linear-gradient(135deg, var(--app-primary), rgba(var(--app-primary-rgb), .72)); }
+.app-navbar .navbar-brand, .app-navbar .nav-link, .app-navbar .navbar-text { color: #fff; }
+.btn-primary { --bs-btn-bg: var(--app-primary); --bs-btn-border-color: var(--app-primary); --bs-btn-hover-bg: rgba(var(--app-primary-rgb), .88); --bs-btn-hover-border-color: rgba(var(--app-primary-rgb), .88); }
+.btn-outline-primary { --bs-btn-color: var(--app-primary); --bs-btn-border-color: var(--app-primary); --bs-btn-hover-bg: var(--app-primary); --bs-btn-hover-border-color: var(--app-primary); }
+.card { overflow: hidden; }
+.table thead th { white-space: nowrap; }
+
+
+.hours-col { width: 4.75rem; }
+.hours-input { width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem; text-align: right; }
+.description-col { min-width: 26rem; }
+.description-input { min-width: 26rem; }
+.job-input { min-width: 9rem; }
+
+.expense-number-input { width: 7rem; min-width: 7rem; max-width: 7rem; text-align: right; }
+.mileage-amount { background-color: var(--bs-secondary-bg); }
+.timesheet-entry-table td, .timesheet-expense-table td { vertical-align: middle; }
+.nav-tabs .nav-link { font-weight: 600; }
+
+.blank-timesheet-row td { height: 2.25rem; color: var(--bs-secondary-color); background-color: rgba(0,0,0,.015); }
+.blank-timesheet-row td:first-child { color: var(--bs-secondary-color); }

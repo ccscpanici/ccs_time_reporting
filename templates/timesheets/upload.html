@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm border-0 rounded-4"><div class="card-body p-4"><h1 class="h3">Upload Excel timesheet</h1><p class="text-muted">Uploading an existing week replaces that draft/rejected week.</p><form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Import workbook</button></form></div></div>
+{% endblock %}
