@@ -1,8 +1,9 @@
 
 {% extends "base.html" %}
 {% block content %}
-<h1 class="h3 mb-3">Management Reports</h1>
+<h1 class="h3 mb-3">Reports</h1>
 <div class="row g-3">
+  {% if is_management_staff %}
   <div class="col-md-6 col-lg-4">
     <div class="card shadow-sm border-0 rounded-4 h-100">
       <div class="card-body">
@@ -12,7 +13,9 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
+  {% if is_project_manager %}
   <div class="col-md-6 col-lg-4">
     <div class="card shadow-sm border-0 rounded-4 h-100">
       <div class="card-body">
@@ -22,6 +25,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <div class="col-md-6 col-lg-4">
     <div class="card shadow-sm border-0 rounded-4 h-100">

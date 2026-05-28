@@ -11,15 +11,20 @@ from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from .forms import TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetSubmitForm
+from django.db.models import DecimalField, ExpressionWrapper, F, Sum
+from django.db.models.functions import Coalesce
+from .forms import TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm
 from .models import BulkImportJob, Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
 from .services.importer import import_timesheet_upload
 from .services.submission import create_timesheet_artifact, submit_timesheet
-from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet
-from .permissions import is_management_staff
+from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
+from .services.exporter import TEMPLATE_PATH, _write_employee_header
+from openpyxl import load_workbook
+from io import BytesIO
+from .permissions import can_approve_timesheet, can_view_timesheet, is_management_staff, is_project_manager
 
 
 
@@ -206,18 +211,39 @@ def attachment_response(artifact):
 
 
 def get_timesheet_for_request_user(request, pk):
-    queryset = Timesheet.objects.filter(pk=pk, deleted_at__isnull=True)
-    if not is_management_staff(request.user):
-        queryset = queryset.filter(employee=request.user)
-    return get_object_or_404(queryset)
+    timesheet = get_object_or_404(
+        Timesheet.objects.select_related("employee", "employee__employee_profile"),
+        pk=pk,
+        deleted_at__isnull=True,
+    )
+    if not can_view_timesheet(request.user, timesheet):
+        raise Http404()
+    return timesheet
 
 
 @login_required
 def timesheet_list(request):
-    timesheet_qs = Timesheet.objects.filter(
-        employee=request.user,
-        deleted_at__isnull=True,
-    ).order_by("-week_start", "-created_at")
+    timesheet_qs = (
+        Timesheet.objects.filter(
+            employee=request.user,
+            deleted_at__isnull=True,
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(max_digits=8, decimal_places=2),
+                    )
+                ),
+                0,
+                output_field=DecimalField(max_digits=8, decimal_places=2),
+            )
+        )
+        .order_by("-week_start", "-created_at")
+    )
 
     paginator = Paginator(timesheet_qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -226,7 +252,6 @@ def timesheet_list(request):
         "timesheets": page_obj,
         "page_obj": page_obj,
     })
-
 
 @login_required
 def timesheet_create(request):
@@ -280,7 +305,125 @@ def timesheet_create(request):
 def timesheet_detail(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
-    return render(request, "timesheets/detail.html", {"timesheet": timesheet, "grid": grid})
+    return render(
+        request,
+        "timesheets/detail.html",
+        {
+            "timesheet": timesheet,
+            "grid": grid,
+            "can_approve_this_timesheet": can_approve_timesheet(request.user, timesheet),
+        },
+    )
+
+
+
+def _save_timesheet_day_from_post(request, timesheet, work_date):
+    """Save one date's time, expense, and parts rows from a posted timesheet form."""
+    day_key = work_date.isoformat()
+    overnight_stay = request.POST.get(f"overnight_{day_key}") == "on"
+
+    for row_order in range(1, timesheet.entries_per_day + 1):
+        prefix = f"entry_{day_key}_{row_order}"
+
+        row = {
+            "job_number": request.POST.get(f"{prefix}_job_number", "").strip(),
+            "work_code": request.POST.get(f"{prefix}_work_code"),
+            "regular_hours": request.POST.get(f"{prefix}_regular_hours"),
+            "overtime_hours": request.POST.get(f"{prefix}_overtime_hours"),
+            "doubletime_hours": request.POST.get(f"{prefix}_doubletime_hours"),
+            "description": request.POST.get(f"{prefix}_description", "").strip(),
+        }
+
+        expense_row = {
+            "miles": request.POST.get(f"{prefix}_expense_miles"),
+            "per_diem_food": request.POST.get(f"{prefix}_expense_per_diem_food"),
+            "air_fare": request.POST.get(f"{prefix}_expense_air_fare"),
+            "hotel": request.POST.get(f"{prefix}_expense_hotel"),
+            "tolls_parking": request.POST.get(f"{prefix}_expense_tolls_parking"),
+            "rental_car_fuel": request.POST.get(f"{prefix}_expense_rental_car_fuel"),
+            "business_meals": request.POST.get(f"{prefix}_expense_business_meals"),
+            "other_expense": request.POST.get(f"{prefix}_expense_other_expense"),
+            "explanation_of_expenses": request.POST.get(f"{prefix}_expense_explanation_of_expenses", "").strip(),
+        }
+
+        part_row = {
+            "ee_stock_job_number": request.POST.get(f"{prefix}_part_ee_stock_job_number", "").strip(),
+            "quantity": request.POST.get(f"{prefix}_part_quantity"),
+            "part_description_part_number": request.POST.get(f"{prefix}_part_description_part_number", "").strip(),
+            "additional_notes_for_customer": request.POST.get(f"{prefix}_part_additional_notes_for_customer", "").strip(),
+            "reorder_part": request.POST.get(f"{prefix}_part_reorder_part") == "on",
+        }
+
+        qs = TimeEntry.objects.filter(
+            timesheet=timesheet,
+            work_date=work_date,
+            row_order=row_order,
+        )
+
+        expense_is_blank = not any(expense_row.get(key) for key in expense_row)
+        part_is_blank = not any([
+            part_row["ee_stock_job_number"],
+            part_row["quantity"],
+            part_row["part_description_part_number"],
+            part_row["additional_notes_for_customer"],
+            part_row["reorder_part"],
+        ])
+
+        if is_blank_row(row) and expense_is_blank and part_is_blank:
+            qs.delete()
+            continue
+
+        job = Job.objects.filter(job_number__iexact=row["job_number"]).first() if row["job_number"] else None
+        work_code = WorkCode.objects.filter(pk=row["work_code"]).first() if row["work_code"] else None
+
+        entry, _created = TimeEntry.objects.update_or_create(
+            timesheet=timesheet,
+            work_date=work_date,
+            row_order=row_order,
+            defaults={
+                "job_number": row["job_number"],
+                "job": job,
+                "work_code": work_code,
+                "regular_hours": as_decimal(row["regular_hours"]),
+                "overtime_hours": as_decimal(row["overtime_hours"]),
+                "doubletime_hours": as_decimal(row["doubletime_hours"]),
+                "overnight_stay": overnight_stay,
+                "description": row["description"],
+            },
+        )
+
+        if expense_is_blank:
+            Expense.objects.filter(time_entry=entry).delete()
+        else:
+            Expense.objects.update_or_create(
+                time_entry=entry,
+                defaults={
+                    "miles": as_decimal(expense_row["miles"]),
+                    "per_diem_food": as_decimal(expense_row["per_diem_food"]),
+                    "air_fare": as_decimal(expense_row["air_fare"]),
+                    "hotel": as_decimal(expense_row["hotel"]),
+                    "tolls_parking": as_decimal(expense_row["tolls_parking"]),
+                    "rental_car_fuel": as_decimal(expense_row["rental_car_fuel"]),
+                    "business_meals": as_decimal(expense_row["business_meals"]),
+                    "other_expense": as_decimal(expense_row["other_expense"]),
+                    "explanation_of_expenses": expense_row["explanation_of_expenses"],
+                },
+            )
+
+        if part_is_blank:
+            PartEntry.objects.filter(time_entry=entry).delete()
+        else:
+            PartEntry.objects.update_or_create(
+                time_entry=entry,
+                defaults={
+                    "ee_stock_job_number": part_row["ee_stock_job_number"],
+                    "quantity": as_decimal(part_row["quantity"]),
+                    "part_description_part_number": part_row["part_description_part_number"],
+                    "additional_notes_for_customer": part_row["additional_notes_for_customer"],
+                    "reorder_part": part_row["reorder_part"],
+                },
+            )
+
 
 
 @login_required
@@ -298,99 +441,7 @@ def timesheet_edit(request, pk):
         timesheet.save(update_fields=["entries_per_day", "updated_at"])
 
         for work_date in timesheet.week_dates:
-            day_key = work_date.isoformat()
-            overnight_stay = request.POST.get(f"overnight_{day_key}") == "on"
-            for row_order in range(1, timesheet.entries_per_day + 1):
-                prefix = f"entry_{day_key}_{row_order}"
-                row = {
-                    "job_number": request.POST.get(f"{prefix}_job_number", "").strip(),
-                    "work_code": request.POST.get(f"{prefix}_work_code"),
-                    "regular_hours": request.POST.get(f"{prefix}_regular_hours"),
-                    "overtime_hours": request.POST.get(f"{prefix}_overtime_hours"),
-                    "doubletime_hours": request.POST.get(f"{prefix}_doubletime_hours"),
-                    "description": request.POST.get(f"{prefix}_description", "").strip(),
-                }
-                expense_row = {
-                    "miles": request.POST.get(f"{prefix}_expense_miles"),
-                    "per_diem_food": request.POST.get(f"{prefix}_expense_per_diem_food"),
-                    "air_fare": request.POST.get(f"{prefix}_expense_air_fare"),
-                    "hotel": request.POST.get(f"{prefix}_expense_hotel"),
-                    "tolls_parking": request.POST.get(f"{prefix}_expense_tolls_parking"),
-                    "rental_car_fuel": request.POST.get(f"{prefix}_expense_rental_car_fuel"),
-                    "business_meals": request.POST.get(f"{prefix}_expense_business_meals"),
-                    "other_expense": request.POST.get(f"{prefix}_expense_other_expense"),
-                    "explanation_of_expenses": request.POST.get(f"{prefix}_expense_explanation_of_expenses", "").strip(),
-                }
-                part_row = {
-                    "ee_stock_job_number": request.POST.get(f"{prefix}_part_ee_stock_job_number", "").strip(),
-                    "quantity": request.POST.get(f"{prefix}_part_quantity"),
-                    "part_description_part_number": request.POST.get(f"{prefix}_part_description_part_number", "").strip(),
-                    "additional_notes_for_customer": request.POST.get(f"{prefix}_part_additional_notes_for_customer", "").strip(),
-                    "reorder_part": request.POST.get(f"{prefix}_part_reorder_part") == "on",
-                }
-
-                qs = TimeEntry.objects.filter(timesheet=timesheet, work_date=work_date, row_order=row_order)
-                expense_is_blank = not any(expense_row.get(key) for key in expense_row)
-                part_is_blank = not any([
-                    part_row["ee_stock_job_number"],
-                    part_row["quantity"],
-                    part_row["part_description_part_number"],
-                    part_row["additional_notes_for_customer"],
-                    part_row["reorder_part"],
-                ])
-                if is_blank_row(row) and expense_is_blank and part_is_blank:
-                    qs.delete()
-                    continue
-
-                job = Job.objects.filter(job_number__iexact=row["job_number"]).first() if row["job_number"] else None
-                work_code = WorkCode.objects.filter(pk=row["work_code"]).first() if row["work_code"] else None
-                entry, _created = TimeEntry.objects.update_or_create(
-                    timesheet=timesheet,
-                    work_date=work_date,
-                    row_order=row_order,
-                    defaults={
-                        "job_number": row["job_number"],
-                        "job": job,
-                        "work_code": work_code,
-                        "regular_hours": as_decimal(row["regular_hours"]),
-                        "overtime_hours": as_decimal(row["overtime_hours"]),
-                        "doubletime_hours": as_decimal(row["doubletime_hours"]),
-                        "overnight_stay": overnight_stay,
-                        "description": row["description"],
-                    },
-                )
-
-                if expense_is_blank:
-                    Expense.objects.filter(time_entry=entry).delete()
-                else:
-                    Expense.objects.update_or_create(
-                        time_entry=entry,
-                        defaults={
-                            "miles": as_decimal(expense_row["miles"]),
-                            "per_diem_food": as_decimal(expense_row["per_diem_food"]),
-                            "air_fare": as_decimal(expense_row["air_fare"]),
-                            "hotel": as_decimal(expense_row["hotel"]),
-                            "tolls_parking": as_decimal(expense_row["tolls_parking"]),
-                            "rental_car_fuel": as_decimal(expense_row["rental_car_fuel"]),
-                            "business_meals": as_decimal(expense_row["business_meals"]),
-                            "other_expense": as_decimal(expense_row["other_expense"]),
-                            "explanation_of_expenses": expense_row["explanation_of_expenses"],
-                        },
-                    )
-
-                if part_is_blank:
-                    PartEntry.objects.filter(time_entry=entry).delete()
-                else:
-                    PartEntry.objects.update_or_create(
-                        time_entry=entry,
-                        defaults={
-                            "ee_stock_job_number": part_row["ee_stock_job_number"],
-                            "quantity": as_decimal(part_row["quantity"]),
-                            "part_description_part_number": part_row["part_description_part_number"],
-                            "additional_notes_for_customer": part_row["additional_notes_for_customer"],
-                            "reorder_part": part_row["reorder_part"],
-                        },
-                    )
+            _save_timesheet_day_from_post(request, timesheet, work_date)
 
         messages.success(request, "Timesheet saved.")
         return redirect(timesheet)
@@ -398,6 +449,102 @@ def timesheet_edit(request, pk):
     grid = build_timesheet_grid(timesheet)
     return render(request, "timesheets/edit.html", {"timesheet": timesheet, "grid": grid, "work_codes": work_codes})
 
+
+
+
+
+
+@login_required
+def timesheet_template_download(request):
+    if not TEMPLATE_PATH.exists():
+        raise Http404("Template workbook not found.")
+
+    wb = load_workbook(TEMPLATE_PATH)
+    ws = wb[wb.sheetnames[0]]
+
+    class TempTS:
+        pass
+
+    temp = TempTS()
+    temp.week_start = sunday_for(timezone.localdate())
+
+    _write_employee_header(ws, request.user, temp)
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    # gets the full name of the user
+    full_name = request.user.get_full_name().strip()
+
+    if full_name:
+        initials = "".join(part[0].upper() for part in full_name.split() if part)
+    else:
+        initials = request.user.username[:2].upper()
+
+    filename = f"{initials}_{temp.week_start:%Y%m%d}.xlsx"
+
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def timesheet_today(request):
+    """Create/open the current week's timesheet and edit only today's rows."""
+    today = timezone.localdate()
+    week_start = sunday_for(today)
+
+    timesheet, created = Timesheet.objects.get_or_create(
+        employee=request.user,
+        week_start=week_start,
+        defaults={
+            "entries_per_day": 5,
+            "template_entries_per_day": 5,
+            "mileage_rate": MileageRate.rate_for_date(week_start),
+            "status": Timesheet.Status.DRAFT,
+        },
+    )
+
+    if timesheet.deleted_at is not None:
+        timesheet.deleted_at = None
+        timesheet.deleted_by = None
+        timesheet.delete_reason = ""
+        timesheet.status = Timesheet.Status.DRAFT
+        timesheet.save(update_fields=["deleted_at", "deleted_by", "delete_reason", "status", "updated_at"])
+
+    if not timesheet.can_edit:
+        messages.error(request, "Today's entries cannot be edited because the current timesheet is locked.")
+        return redirect(timesheet)
+
+    work_codes = WorkCode.objects.filter(active=True).order_by("display_order", "code")
+
+    if request.method == "POST":
+        entries_per_day = int(request.POST.get("entries_per_day") or timesheet.entries_per_day or 5)
+        timesheet.entries_per_day = max(5, min(entries_per_day, 25))
+        timesheet.save(update_fields=["entries_per_day", "updated_at"])
+
+        _save_timesheet_day_from_post(request, timesheet, today)
+
+        messages.success(request, "Today's entries were saved.")
+        return redirect("timesheet_today")
+
+    grid = build_timesheet_grid(timesheet)
+    today_grid = next((day for day in grid if day["work_date"] == today), None)
+
+    return render(
+        request,
+        "timesheets/today.html",
+        {
+            "timesheet": timesheet,
+            "day": today_grid,
+            "today": today,
+            "work_codes": work_codes,
+        },
+    )
 
 
 
@@ -430,10 +577,186 @@ def timesheet_bulk_zip_upload(request):
     return render(request, "timesheets/bulk_zip_upload.html", {"form": form})
 
 
+
+
+@login_required
+def timesheet_template_download(request):
+    if not TEMPLATE_PATH.exists():
+        raise Http404("Template workbook not found.")
+
+    wb = load_workbook(TEMPLATE_PATH)
+    ws = wb[wb.sheetnames[0]]
+
+    class TempTS:
+        pass
+
+    temp = TempTS()
+    temp.week_start = sunday_for(timezone.localdate())
+
+    _write_employee_header(ws, request.user, temp)
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    filename = f"Timesheet_Template_{temp.week_start:%Y%m%d}.xlsx"
+
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def timesheet_today(request):
+    """Create/open the current week's timesheet and edit only today's rows."""
+    today = timezone.localdate()
+    week_start = sunday_for(today)
+
+    timesheet, created = Timesheet.objects.get_or_create(
+        employee=request.user,
+        week_start=week_start,
+        defaults={
+            "entries_per_day": 5,
+            "template_entries_per_day": 5,
+            "mileage_rate": MileageRate.rate_for_date(week_start),
+            "status": Timesheet.Status.DRAFT,
+        },
+    )
+
+    if timesheet.deleted_at is not None:
+        timesheet.deleted_at = None
+        timesheet.deleted_by = None
+        timesheet.delete_reason = ""
+        timesheet.status = Timesheet.Status.DRAFT
+        timesheet.save(update_fields=["deleted_at", "deleted_by", "delete_reason", "status", "updated_at"])
+
+    if not timesheet.can_edit:
+        messages.error(request, "Today's entries cannot be edited because the current timesheet is locked.")
+        return redirect(timesheet)
+
+    work_codes = WorkCode.objects.filter(active=True).order_by("display_order", "code")
+
+    if request.method == "POST":
+        entries_per_day = int(request.POST.get("entries_per_day") or timesheet.entries_per_day or 5)
+        timesheet.entries_per_day = max(5, min(entries_per_day, 25))
+        timesheet.save(update_fields=["entries_per_day", "updated_at"])
+
+        _save_timesheet_day_from_post(request, timesheet, today)
+
+        messages.success(request, "Today's entries were saved.")
+        return redirect("timesheet_today")
+
+    grid = build_timesheet_grid(timesheet)
+    today_grid = next((day for day in grid if day["work_date"] == today), None)
+
+    return render(
+        request,
+        "timesheets/today.html",
+        {
+            "timesheet": timesheet,
+            "day": today_grid,
+            "today": today,
+            "work_codes": work_codes,
+        },
+    )
+
+
+
 @login_required
 def timesheet_bulk_zip_upload_status(request, job_pk):
     job = get_object_or_404(BulkImportJob, pk=job_pk, employee=request.user)
     return render(request, "timesheets/bulk_zip_upload_status.html", {"job": job})
+
+
+
+
+@login_required
+def timesheet_template_download(request):
+    if not TEMPLATE_PATH.exists():
+        raise Http404("Template workbook not found.")
+
+    wb = load_workbook(TEMPLATE_PATH)
+    ws = wb[wb.sheetnames[0]]
+
+    class TempTS:
+        pass
+
+    temp = TempTS()
+    temp.week_start = sunday_for(timezone.localdate())
+
+    _write_employee_header(ws, request.user, temp)
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    filename = f"Timesheet_Template_{temp.week_start:%Y%m%d}.xlsx"
+
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def timesheet_today(request):
+    """Create/open the current week's timesheet and edit only today's rows."""
+    today = timezone.localdate()
+    week_start = sunday_for(today)
+
+    timesheet, created = Timesheet.objects.get_or_create(
+        employee=request.user,
+        week_start=week_start,
+        defaults={
+            "entries_per_day": 5,
+            "template_entries_per_day": 5,
+            "mileage_rate": MileageRate.rate_for_date(week_start),
+            "status": Timesheet.Status.DRAFT,
+        },
+    )
+
+    if timesheet.deleted_at is not None:
+        timesheet.deleted_at = None
+        timesheet.deleted_by = None
+        timesheet.delete_reason = ""
+        timesheet.status = Timesheet.Status.DRAFT
+        timesheet.save(update_fields=["deleted_at", "deleted_by", "delete_reason", "status", "updated_at"])
+
+    if not timesheet.can_edit:
+        messages.error(request, "Today's entries cannot be edited because the current timesheet is locked.")
+        return redirect(timesheet)
+
+    work_codes = WorkCode.objects.filter(active=True).order_by("display_order", "code")
+
+    if request.method == "POST":
+        entries_per_day = int(request.POST.get("entries_per_day") or timesheet.entries_per_day or 5)
+        timesheet.entries_per_day = max(5, min(entries_per_day, 25))
+        timesheet.save(update_fields=["entries_per_day", "updated_at"])
+
+        _save_timesheet_day_from_post(request, timesheet, today)
+
+        messages.success(request, "Today's entries were saved.")
+        return redirect("timesheet_today")
+
+    grid = build_timesheet_grid(timesheet)
+    today_grid = next((day for day in grid if day["work_date"] == today), None)
+
+    return render(
+        request,
+        "timesheets/today.html",
+        {
+            "timesheet": timesheet,
+            "day": today_grid,
+            "today": today,
+            "work_codes": work_codes,
+        },
+    )
+
 
 
 @login_required
@@ -500,7 +823,7 @@ def timesheet_download(request, pk):
         messages.error(request, f"Download failed: {exc}")
         return redirect(timesheet)
 
-    return redirect("timesheet_submitted_download", artifact_pk=artifact.pk)
+    return redirect("timesheet_download_ready", artifact_pk=artifact.pk)
 
 
 @login_required
@@ -530,6 +853,29 @@ def timesheet_submit(request, pk):
 
     form = TimesheetSubmitForm(timesheet=timesheet)
     return render(request, "timesheets/submit.html", {"timesheet": timesheet, "form": form})
+
+
+
+@login_required
+def timesheet_download_ready(request, artifact_pk):
+    """Intermediate page that starts a normal download then redirects."""
+    artifact = get_object_or_404(
+        TimesheetSubmissionArtifact.objects.select_related("timesheet", "timesheet__employee"),
+        pk=artifact_pk,
+    )
+
+    if artifact.timesheet.employee_id != request.user.id and not is_management_staff(request.user):
+        raise Http404()
+
+    return render(
+        request,
+        "timesheets/download_ready.html",
+        {
+            "artifact": artifact,
+            "timesheet": artifact.timesheet,
+            "redirect_url": artifact.timesheet.get_absolute_url(),
+        },
+    )
 
 
 @login_required
@@ -646,6 +992,29 @@ def timesheet_receipt_delete(request, receipt_pk):
     return redirect(timesheet)
 
 
+
+@login_required
+def timesheet_approvals(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can view timesheet approvals.")
+        return redirect("timesheet_list")
+
+    timesheets = Timesheet.objects.filter(
+        status=Timesheet.Status.SUBMITTED,
+        deleted_at__isnull=True,
+    ).select_related("employee", "employee__employee_profile").order_by(
+        "employee__last_name",
+        "employee__first_name",
+        "-week_start",
+    )
+
+    if not is_management_staff(request.user):
+        timesheets = timesheets.filter(employee__employee_profile__supervisor=request.user)
+
+    return render(request, "timesheets/approvals.html", {"timesheets": timesheets})
+
+
+
 @login_required
 def timesheet_reopen(request, pk):
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
@@ -670,10 +1039,10 @@ def timesheet_reopen(request, pk):
 
 @login_required
 def timesheet_approve(request, pk):
-    if not is_management_staff(request.user):
-        messages.error(request, "Only management staff can approve timesheets.")
-        return redirect("timesheet_list")
     timesheet = get_timesheet_for_request_user(request, pk)
+    if not can_approve_timesheet(request.user, timesheet):
+        messages.error(request, "You do not have permission to approve this timesheet.")
+        return redirect("timesheet_approvals")
     if request.method != "POST":
         return redirect(timesheet)
     try:
@@ -682,7 +1051,33 @@ def timesheet_approve(request, pk):
         messages.error(request, f"Approve failed: {exc}")
     else:
         messages.success(request, "Timesheet approved.")
-    return redirect(timesheet)
+    return redirect("timesheet_approvals")
+
+
+@login_required
+def timesheet_reject(request, pk):
+    timesheet = get_timesheet_for_request_user(request, pk)
+    if not can_approve_timesheet(request.user, timesheet):
+        messages.error(request, "You do not have permission to reject this timesheet.")
+        return redirect("timesheet_approvals")
+    if timesheet.status != Timesheet.Status.SUBMITTED:
+        messages.error(request, "Only submitted timesheets can be rejected.")
+        return redirect(timesheet)
+
+    if request.method == "POST":
+        form = TimesheetRejectForm(request.POST)
+        if form.is_valid():
+            try:
+                reject_timesheet(timesheet, request.user, form.cleaned_data["reason"])
+            except Exception as exc:
+                messages.error(request, f"Reject failed: {exc}")
+                return redirect(timesheet)
+            messages.success(request, "Timesheet rejected and returned to the employee for correction.")
+            return redirect("timesheet_approvals")
+    else:
+        form = TimesheetRejectForm()
+
+    return render(request, "timesheets/reject.html", {"timesheet": timesheet, "form": form})
 
 
 @login_required

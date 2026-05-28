@@ -10,6 +10,7 @@
 <div class="card shadow-sm border-0 rounded-4 mb-4">
   <div class="card-body">
     <form method="get" class="row g-3 align-items-end">
+      <input type="hidden" name="run" value="1">
       <div class="col-md-4">
         <label class="form-label" for="job_number">Job Number</label>
         <input class="form-control" id="job_number" name="job_number" value="{{ job_number }}" placeholder="Example: 25038S-161" required>
@@ -38,7 +39,7 @@
   </div>
 </div>
 
-{% if job_number and summary %}
+{% if report_ran and job_number and summary %}
 <div class="row g-3 mb-4">
   <div class="col-md-3">
     <div class="card shadow-sm border-0 rounded-4">
@@ -129,7 +130,7 @@
         <tr>
           <td>{{ row.work_date|date:"m/d/Y" }}</td>
           <td>{{ row.employee_name }}</td>
-          <td>{% if row.work_code %}{{ row.work_code }}{% endif %}</td>
+          <td>{% if row.work_code %}{{ row.work_code.code }}{% endif %}</td>
           <td class="text-end">{{ row.regular_hours }}</td>
           <td class="text-end">{{ row.overtime_hours }}</td>
           <td class="text-end">{{ row.doubletime_hours }}</td>
@@ -143,7 +144,9 @@
     </table>
   </div>
 </div>
-{% elif job_number %}
+{% elif report_ran and job_number %}
 <div class="alert alert-warning rounded-4">No entries were found for job number <strong>{{ job_number }}</strong>.</div>
+{% elif not report_ran %}
+<div class="alert alert-info rounded-4">Enter a job number, choose filters, and click <strong>Run Report</strong>.</div>
 {% endif %}
 {% endblock %}

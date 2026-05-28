@@ -23,11 +23,12 @@
     {% if timesheet.can_reopen and timesheet.employee_id == request.user.id %}
       <a class="btn btn-warning" href="{% url 'timesheet_reopen' timesheet.pk %}">Reopen for Corrections</a>
     {% endif %}
-    {% if is_management_staff and timesheet.status == timesheet.Status.SUBMITTED %}
+    {% if can_approve_this_timesheet and timesheet.status == timesheet.Status.SUBMITTED %}
       <form method="post" action="{% url 'timesheet_approve' timesheet.pk %}" class="d-inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-success">Approve</button>
       </form>
+      <a class="btn btn-outline-danger" href="{% url 'timesheet_reject' timesheet.pk %}">Reject</a>
     {% endif %}
     {% if is_management_staff and timesheet.status == timesheet.Status.APPROVED %}
       <form method="post" action="{% url 'timesheet_mark_invoiced' timesheet.pk %}" class="d-inline">
@@ -40,6 +41,31 @@
     {% endif %}
   </div>
 </div>
+{% if timesheet.rejection_reason %}
+<div class="alert alert-danger rounded-4 mb-4">
+  <h2 class="h6 mb-2">Supervisor Rejection Notes</h2>
+
+  {% if timesheet.rejected_by %}
+    <div>
+      <strong>Rejected By:</strong>
+      {{ timesheet.rejected_by.get_full_name|default:timesheet.rejected_by.username }}
+    </div>
+  {% endif %}
+
+  {% if timesheet.rejected_at %}
+    <div>
+      <strong>Rejected At:</strong>
+      {{ timesheet.rejected_at|date:"m/d/Y g:i A" }}
+    </div>
+  {% endif %}
+
+  <div class="mt-3">
+    <strong>Notes:</strong><br>
+    {{ timesheet.rejection_reason|linebreaksbr }}
+  </div>
+</div>
+{% endif %}
+
 {% if not timesheet.can_export_excel %}
 <div class="alert alert-warning rounded-4">This timesheet has more than 5 entries on at least one date, so Excel export is unavailable. PDF submission is supported.</div>
 {% endif %}
@@ -87,8 +113,8 @@
           <thead>
             <tr>
               <th style="width: 3rem">#</th>
-              <th style="min-width: 10rem">Job #</th>
-              <th style="min-width: 14rem">Work Code</th>
+              <th style="min-width: 6rem">Job #</th>
+              <th style="min-width: 6rem">Work Code</th>
               <th class="hours-col text-end">Reg</th>
               <th class="hours-col text-end">OT</th>
               <th class="hours-col text-end">DT</th>
@@ -101,7 +127,7 @@
             <tr class="{% if not entry %}blank-timesheet-row{% endif %}">
               <td>{{ row.row_order }}</td>
               <td>{% if entry %}{{ entry.job_display }}{% else %}&nbsp;{% endif %}</td>
-              <td>{% if entry and entry.work_code %}{{ entry.work_code }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry and entry.work_code %}{{ entry.work_code.code }}{% else %}&nbsp;{% endif %}</td>
               <td class="text-end">{% if entry %}{{ entry.regular_hours }}{% else %}&nbsp;{% endif %}</td>
               <td class="text-end">{% if entry %}{{ entry.overtime_hours }}{% else %}&nbsp;{% endif %}</td>
               <td class="text-end">{% if entry %}{{ entry.doubletime_hours }}{% else %}&nbsp;{% endif %}</td>

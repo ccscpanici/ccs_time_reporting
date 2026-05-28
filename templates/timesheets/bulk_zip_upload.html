@@ -7,6 +7,10 @@
       Upload a ZIP file containing Excel timesheets. Each .xlsx workbook will be imported as the current logged-in user.
       Excel temporary files named <code>~$*.xlsx</code> are skipped.
     </p>
+    <div class="alert alert-warning rounded-4">
+      <strong>100MB limit:</strong> Bulk ZIP uploads through the web page should be 100MB or smaller.
+      For larger historical imports, copy the ZIP to the server and use the management command import.
+    </div>
 
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}

@@ -116,6 +116,16 @@ class Timesheet(models.Model):
         related_name="approved_timesheets",
     )
 
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rejected_timesheets",
+    )
+    rejection_reason = models.TextField(blank=True)
+
     invoiced_at = models.DateTimeField(null=True, blank=True)
     invoiced_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

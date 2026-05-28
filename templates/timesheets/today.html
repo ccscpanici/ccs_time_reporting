@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Today&apos;s Timesheet</h1>
+    <p class="text-muted mb-0">
+      {{ today|date:"l m/d/Y" }} &middot;
+      Week of {{ timesheet.week_start }} &middot;
+      Status: {{ timesheet.get_status_display }}
+    </p>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
+      Full Timesheet
+    </a>
+    <a class="btn btn-outline-secondary" href="{% url 'timesheet_list' %}">
+      My Timesheets
+    </a>
+  </div>
+</div>
+
+<form method="post" class="mb-5">
+  {% csrf_token %}
+
+  <div class="card shadow-sm border-0 rounded-4 mb-3">
+    <div class="card-body">
+      <label class="form-label" for="entries_per_day">
+        Rows for today
+      </label>
+      <input
+        class="form-control"
+        style="max-width: 10rem"
+        type="number"
+        min="5"
+        max="25"
+        name="entries_per_day"
+        id="entries_per_day"
+        value="{{ timesheet.entries_per_day }}"
+      >
+      <div class="form-text">
+        The Excel template supports 5 rows per date. More rows are allowed online and export as PDF.
+      </div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" id="todayTimesheetTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link active"
+        id="time-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#time-pane"
+        type="button"
+        role="tab"
+        aria-controls="time-pane"
+        aria-selected="true"
+      >
+        Time
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link"
+        id="expenses-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#expenses-pane"
+        type="button"
+        role="tab"
+        aria-controls="expenses-pane"
+        aria-selected="false"
+      >
+        Expenses
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link"
+        id="parts-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#parts-pane"
+        type="button"
+        role="tab"
+        aria-controls="parts-pane"
+        aria-selected="false"
+      >
+        Parts
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div
+      class="tab-pane fade show active"
+      id="time-pane"
+      role="tabpanel"
+      aria-labelledby="time-tab"
+      tabindex="0"
+    >
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
+          <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+
+          <div class="form-check form-switch">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              name="overnight_{{ day.work_date|date:'Y-m-d' }}"
+              id="overnight_{{ day.work_date|date:'Y-m-d' }}"
+              {% if day.overnight_stay %}checked{% endif %}
+            >
+            <label class="form-check-label" for="overnight_{{ day.work_date|date:'Y-m-d' }}">
+              Hotel overnight stay
+            </label>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
+            <thead>
+              <tr>
+                <th style="width: 3rem">#</th>
+                <th style="min-width: 6rem">Job #</th>
+                <th style="min-width: 6rem">Work Code</th>
+                <th class="hours-col text-end">Reg</th>
+                <th class="hours-col text-end">OT</th>
+                <th class="hours-col text-end">DT</th>
+                <th class="description-col">Description</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for row in day.rows %}
+                {% with entry=row.entry %}
+                <tr>
+                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_job_number"
+                      value="{% if entry %}{{ entry.job_display }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <select
+                      class="form-select form-select-sm work-code-select-compact"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_work_code"
+                    >
+                      <option value=""></option>
+                      {% for work_code in work_codes %}
+                        <option
+                          value="{{ work_code.pk }}"
+                          {% if entry and entry.work_code_id == work_code.pk %}selected{% endif %}
+                          data-code="{{ work_code.code }}"
+                          data-label="{{ work_code }}"
+                        >
+                          {{ work_code }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_regular_hours"
+                      value="{% if entry %}{{ entry.regular_hours }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_overtime_hours"
+                      value="{% if entry %}{{ entry.overtime_hours }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_doubletime_hours"
+                      value="{% if entry %}{{ entry.doubletime_hours }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_description"
+                      value="{% if entry %}{{ entry.description }}{% endif %}"
+                    >
+                  </td>
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="tab-pane fade"
+      id="expenses-pane"
+      role="tabpanel"
+      aria-labelledby="expenses-tab"
+      tabindex="0"
+    >
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary rounded-top-4">
+          <strong>Expenses for {{ day.work_date|date:"l m/d/Y" }}</strong>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-expense-table">
+            <thead>
+              <tr>
+                <th style="width: 3rem">#</th>
+                <th class="text-end">Miles</th>
+                <th class="text-end">Per Diem Food</th>
+                <th class="text-end">Air Fare</th>
+                <th class="text-end">Hotel</th>
+                <th class="text-end">Tolls/Parking</th>
+                <th class="text-end">Rental Car/Fuel</th>
+                <th class="text-end">Business Meals</th>
+                <th class="text-end">Other</th>
+                <th class="description-col">Explanation</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for row in day.rows %}
+                {% with entry=row.entry expense=row.entry.expense %}
+                <tr>
+                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_miles"
+                      value="{% if expense %}{{ expense.miles }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_per_diem_food"
+                      value="{% if expense %}{{ expense.per_diem_food.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_air_fare"
+                      value="{% if expense %}{{ expense.air_fare.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_hotel"
+                      value="{% if expense %}{{ expense.hotel.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_tolls_parking"
+                      value="{% if expense %}{{ expense.tolls_parking.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_rental_car_fuel"
+                      value="{% if expense %}{{ expense.rental_car_fuel.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_business_meals"
+                      value="{% if expense %}{{ expense.business_meals.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_other_expense"
+                      value="{% if expense %}{{ expense.other_expense.amount }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_explanation_of_expenses"
+                      value="{% if expense %}{{ expense.explanation_of_expenses }}{% endif %}"
+                    >
+                  </td>
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="tab-pane fade"
+      id="parts-pane"
+      role="tabpanel"
+      aria-labelledby="parts-tab"
+      tabindex="0"
+    >
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary rounded-top-4">
+          <strong>Parts for {{ day.work_date|date:"l m/d/Y" }}</strong>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0 timesheet-parts-table">
+            <thead>
+              <tr>
+                <th style="width: 3rem">#</th>
+                <th style="min-width: 10rem">EE Stock/Job #</th>
+                <th class="text-end">Quantity</th>
+                <th style="min-width: 18rem">Part Description/Part Number</th>
+                <th class="description-col">Additional Notes For Customer</th>
+                <th>Re-Order Part</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for row in day.rows %}
+                {% with entry=row.entry part=row.entry.part_entry %}
+                <tr>
+                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_part_ee_stock_job_number"
+                      value="{% if part %}{{ part.ee_stock_job_number }}{% elif entry %}{{ entry.job_display }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm text-end"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_part_quantity"
+                      value="{% if part %}{{ part.quantity }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_part_description_part_number"
+                      value="{% if part %}{{ part.part_description_part_number }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_part_additional_notes_for_customer"
+                      value="{% if part %}{{ part.additional_notes_for_customer }}{% endif %}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_part_reorder_part"
+                      {% if part and part.reorder_part %}checked{% endif %}
+                    >
+                  </td>
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary" type="submit">
+      Save Today
+    </button>
+    <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
+      Cancel
+    </a>
+  </div>
+</form>
+<script>
+(function compactWorkCodeSelects() {
+  function showCodesOnly(select) {
+    Array.from(select.options).forEach(function(option) {
+      if (option.dataset.code) {
+        option.textContent = option.dataset.code;
+      }
+    });
+  }
+
+  function showDescriptions(select) {
+    Array.from(select.options).forEach(function(option) {
+      if (option.dataset.label) {
+        option.textContent = option.dataset.label;
+      }
+    });
+  }
+
+  document.querySelectorAll(".work-code-select-compact").forEach(function(select) {
+    showCodesOnly(select);
+
+    select.addEventListener("focus", function() {
+      showDescriptions(select);
+    });
+
+    select.addEventListener("mousedown", function() {
+      showDescriptions(select);
+    });
+
+    select.addEventListener("change", function() {
+      window.setTimeout(function() {
+        showCodesOnly(select);
+      }, 100);
+    });
+
+    select.addEventListener("blur", function() {
+      showCodesOnly(select);
+    });
+  });
+})();
+</script>
+{% endblock %}

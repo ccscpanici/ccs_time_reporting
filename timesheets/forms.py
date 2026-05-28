@@ -40,7 +40,7 @@ class TimesheetBulkZipImportForm(forms.Form):
     zip_file = forms.FileField(
         label="ZIP file",
         widget=forms.FileInput(attrs={"class": "form-control", "accept": ".zip"}),
-        help_text="Upload a ZIP file containing one or more .xlsx timesheets. Files named ~$*.xlsx are skipped.",
+        help_text="Upload a ZIP file containing one or more .xlsx timesheets. Files named ~$*.xlsx are skipped. Browser uploads are limited to 100MB; use the server import command for larger ZIP files.",
     )
     mark_submitted = forms.BooleanField(
         required=False,
@@ -98,5 +98,17 @@ class TimesheetReopenForm(forms.Form):
             "class": "form-control",
             "rows": 4,
             "placeholder": "Example: Need to correct Thursday overtime hours.",
+        }),
+    )
+
+
+class TimesheetRejectForm(forms.Form):
+    reason = forms.CharField(
+        required=True,
+        label="Rejection notes",
+        widget=forms.Textarea(attrs={
+            "class": "form-control",
+            "rows": 4,
+            "placeholder": "Explain what needs to be corrected before this timesheet can be approved.",
         }),
     )

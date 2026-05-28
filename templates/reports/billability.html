@@ -8,6 +8,7 @@
   </div>
 </div>
 <form method="get" class="card shadow-sm border-0 rounded-4 mb-3">
+  <input type="hidden" name="run" value="1">
   <div class="card-body row g-3 align-items-end">
     <div class="col-md-3"><label class="form-label">Start date</label><input class="form-control" type="date" name="start" value="{{ start|default:'' }}"></div>
     <div class="col-md-3"><label class="form-label">End date</label><input class="form-control" type="date" name="end" value="{{ end|default:'' }}"></div>
@@ -15,6 +16,7 @@
     <div class="col-md-3"><button class="btn btn-primary">Run report</button></div>
   </div>
 </form>
+{% if report_ran %}
 <div class="card shadow-sm border-0 rounded-4"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
   <thead><tr><th>Employee</th><th class="text-end">Total Hours</th><th class="text-end">Billable Hours</th><th class="text-end">Non-Billable</th><th class="text-end">Billability</th></tr></thead>
   <tbody>
@@ -31,4 +33,7 @@
   {% endfor %}
   </tbody>
 </table></div></div>
+{% else %}
+<div class="alert alert-info rounded-4">Choose filters and click <strong>Run report</strong>.</div>
+{% endif %}
 {% endblock %}

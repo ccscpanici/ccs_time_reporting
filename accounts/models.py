@@ -39,6 +39,15 @@ class EmployeeProfile(models.Model):
         blank=True,
         help_text="Company office this employee is assigned to.",
     )
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="direct_reports",
+        limit_choices_to={"groups__name": "ProjectManagers"},
+        help_text="Project manager responsible for approving this employee's timesheets.",
+    )
 
     # Employee home address used for timesheet export header fields.
     address_1 = models.CharField(max_length=255, blank=True)

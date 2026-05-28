@@ -37,7 +37,7 @@
         <div class="table-responsive">
           <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
             <thead>
-              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Job #</th><th style="min-width: 14rem">Work Code</th><th class="hours-col">Reg</th><th class="hours-col">OT</th><th class="hours-col">DT</th><th class="description-col">Description</th></tr>
+              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Job #</th><th style="min-width: 6rem">Work Code</th><th class="hours-col">Reg</th><th class="hours-col">OT</th><th class="hours-col">DT</th><th class="description-col">Description</th></tr>
             </thead>
             <tbody>
               {% for row in day.rows %}
@@ -46,9 +46,18 @@
                 <td>{{ row.row_order }}</td>
                 <td><input class="form-control form-control-sm job-input" name="entry_{{ key }}_{{ row.row_order }}_job_number" value="{% if entry %}{{ entry.job_display }}{% endif %}" placeholder="Job #"></td>
                 <td>
-                  <select class="form-select form-select-sm" name="entry_{{ key }}_{{ row.row_order }}_work_code">
+                  <select class="form-select form-select-sm work-code-select-compact" name="entry_{{ key }}_{{ row.row_order }}_work_code">
                     <option value="">---</option>
-                    {% for code in work_codes %}<option value="{{ code.pk }}" {% if entry and entry.work_code_id == code.pk %}selected{% endif %}>{{ code }}</option>{% endfor %}
+                    {% for code in work_codes %}
+                      <option
+                        value="{{ code.pk }}"
+                        data-code="{{ code.code }}"
+                        data-label="{{ code }}"
+                        {% if entry and entry.work_code_id == code.pk %}selected{% endif %}
+                      >
+                        {{ code }}
+                      </option>
+                    {% endfor %}
                   </select>
                 </td>
                 <td><input class="form-control form-control-sm hours-input" type="number" step="0.25" name="entry_{{ key }}_{{ row.row_order }}_regular_hours" value="{% if entry %}{{ entry.regular_hours }}{% endif %}"></td>
@@ -157,5 +166,46 @@ document.addEventListener("input", function (event) {
   const rate = parseFloat(input.dataset.rate || "0") || 0;
   output.value = "$" + (miles * rate).toFixed(2);
 });
+</script>
+<script>
+(function compactWorkCodeSelects() {
+  function showCodesOnly(select) {
+    Array.from(select.options).forEach(function(option) {
+      if (option.dataset.code) {
+        option.textContent = option.dataset.code;
+      }
+    });
+  }
+
+  function showDescriptions(select) {
+    Array.from(select.options).forEach(function(option) {
+      if (option.dataset.label) {
+        option.textContent = option.dataset.label;
+      }
+    });
+  }
+
+  document.querySelectorAll(".work-code-select-compact").forEach(function(select) {
+    showCodesOnly(select);
+
+    select.addEventListener("focus", function() {
+      showDescriptions(select);
+    });
+
+    select.addEventListener("mousedown", function() {
+      showDescriptions(select);
+    });
+
+    select.addEventListener("change", function() {
+      window.setTimeout(function() {
+        showCodesOnly(select);
+      }, 100);
+    });
+
+    select.addEventListener("blur", function() {
+      showCodesOnly(select);
+    });
+  });
+})();
 </script>
 {% endblock %}

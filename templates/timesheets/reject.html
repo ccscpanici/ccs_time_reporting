@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Reject Timesheet</h1>
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <p>
+      You are rejecting the timesheet for
+      <strong>{{ timesheet.employee.get_full_name|default:timesheet.employee.username }}</strong>,
+      week of <strong>{{ timesheet.week_start }}</strong>.
+    </p>
+    <p class="text-muted">Rejection notes are required so the employee knows what needs to be corrected.</p>
+
+    <form method="post" action="{% url 'timesheet_reject' timesheet.pk %}">
+      {% csrf_token %}
+      <div class="mb-3">
+        {{ form.reason.label_tag }}
+        {{ form.reason }}
+        {% if form.reason.errors %}<div class="text-danger small">{{ form.reason.errors }}</div>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-danger">Reject Timesheet</button>
+      <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

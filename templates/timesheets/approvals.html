@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Timesheet Approvals</h1>
+    <p class="text-muted mb-0">Submitted timesheets waiting for your approval.</p>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Week</th>
+          <th>Submitted</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for timesheet in timesheets %}
+        <tr>
+          <td>{{ timesheet.employee.get_full_name|default:timesheet.employee.username }}</td>
+          <td>{{ timesheet.week_start }}</td>
+          <td>{{ timesheet.submitted_at|default:"—" }}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a class="btn btn-outline-primary" href="{{ timesheet.get_absolute_url }}">View</a>
+              <form method="post" action="{% url 'timesheet_approve' timesheet.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button class="btn btn-outline-success" type="submit">Approve</button>
+              </form>
+              <a class="btn btn-outline-danger" href="{% url 'timesheet_reject' timesheet.pk %}">Reject</a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="text-center p-4 text-muted">No submitted timesheets are waiting for your approval.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
