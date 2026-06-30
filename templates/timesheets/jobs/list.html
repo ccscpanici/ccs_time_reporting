@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  .job-year-chip {
+    min-width: 4.5rem;
+  }
+
+  /* One sticky toolbar: year chips + filters. Keep the table header normal. */
+  .job-filter-card {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    background: var(--bs-body-bg);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0.35rem 0.75rem rgba(0, 0, 0, 0.18);
+  }
+
+  .job-filter-card .card-body {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .job-filter-search {
+    width: min(360px, 100%);
+  }
+
+  .jobs-table {
+    table-layout: auto;
+  }
+
+  .jobs-table th,
+  .jobs-table td {
+    white-space: nowrap;
+  }
+
+  .jobs-table .job-description,
+  .jobs-table .job-customer {
+    white-space: normal;
+  }
+
+  .jobs-table .job-description {
+    min-width: 240px;
+  }
+
+  .jobs-table thead th {
+    background: var(--bs-body-bg);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .jobs-table thead th a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .jobs-table thead th a:hover {
+    text-decoration: underline;
+  }
+
+  .jobs-table .job-actions-col {
+    position: sticky;
+    right: 0;
+    z-index: 5;
+    background: var(--bs-body-bg);
+    box-shadow: -0.35rem 0 0.6rem rgba(0, 0, 0, 0.12);
+  }
+
+  .jobs-table thead .job-actions-col {
+    z-index: 6;
+  }
+</style>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Jobs{% if year_filter and year_filter != "all" %} - {{ year_filter }}{% endif %}</h1>
+    <p class="text-muted mb-0">
+      View, add, and edit valid job numbers. Jobs cannot be deleted from this screen.
+    </p>
+  </div>
+
+  <div class="d-flex gap-2">
+    {% if is_management_staff %}
+      <a class="btn btn-outline-warning" href="{% url 'invalid_job_cleanup' %}">
+        Invalid Job Cleanup
+      </a>
+    {% endif %}
+    <a class="btn btn-outline-primary" href="{% url 'job_import' %}">
+      Import Job List
+    </a>
+    <a class="btn btn-primary" href="{% url 'job_create' %}">
+      Add Job
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-3 job-filter-card">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2 mb-2" aria-label="Year filters">
+      <a
+        class="btn btn-sm job-year-chip {% if year_filter == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+        href="?year=all{% if year_chip_query %}&{{ year_chip_query }}{% endif %}"
+      >
+        All
+      </a>
+      {% for option in available_years %}
+        <a
+          class="btn btn-sm job-year-chip {% if year_filter == option|stringformat:'s' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+          href="?year={{ option }}{% if year_chip_query %}&{{ year_chip_query }}{% endif %}"
+        >
+          {{ option }}
+        </a>
+      {% endfor %}
+    </div>
+
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="year" value="{{ year_filter }}">
+
+      <div class="col-auto job-filter-search">
+        <label class="form-label" for="job-search">Search</label>
+        <input
+          id="job-search"
+          class="form-control"
+          type="search"
+          name="q"
+          value="{{ query }}"
+          placeholder="Job #, description, customer, PO"
+        >
+      </div>
+
+      <div class="col-auto">
+        <label class="form-label" for="job-status">Status</label>
+        <select id="job-status" class="form-select" name="status">
+          <option value="">All Statuses</option>
+          {% for option in statuses %}
+            <option value="{{ option }}" {% if option == status %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-auto">
+        <label class="form-label" for="job-active">Available</label>
+        <select id="job-active" class="form-select" name="active">
+          <option value="" {% if not active_filter %}selected{% endif %}>All</option>
+          <option value="active" {% if active_filter == "active" %}selected{% endif %}>Available</option>
+          <option value="inactive" {% if active_filter == "inactive" %}selected{% endif %}>Unavailable</option>
+        </select>
+      </div>
+
+      <div class="col-auto d-flex gap-2">
+        <button class="btn btn-outline-primary" type="submit">Filter</button>
+        <a class="btn btn-outline-secondary" href="{% url 'job_list' %}">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 jobs-table-card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 jobs-table">
+      <thead>
+        <tr>
+          <th><a href="?{{ sort_links.job.url }}">Job # {{ sort_links.job.indicator }}</a></th>
+          <th><a href="?{{ sort_links.description.url }}">Description {{ sort_links.description.indicator }}</a></th>
+          <th><a href="?{{ sort_links.customer.url }}">Customer {{ sort_links.customer.indicator }}</a></th>
+          <th><a href="?{{ sort_links.status.url }}">Status {{ sort_links.status.indicator }}</a></th>
+          <th><a href="?{{ sort_links.invoice.url }}">Invoice {{ sort_links.invoice.indicator }}</a></th>
+          <th><a href="?{{ sort_links.type.url }}">Type {{ sort_links.type.indicator }}</a></th>
+          <th title="Available for Time Entry"><a href="?{{ sort_links.available.url }}">Available {{ sort_links.available.indicator }}</a></th>
+          <th class="text-end job-actions-col">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for job in page_obj %}
+          <tr>
+            <td class="fw-semibold">{{ job.job_number }}</td>
+            <td class="job-description">{{ job.description }}</td>
+            <td class="job-customer">{% if job.customer %}{{ job.customer.name }}{% endif %}</td>
+            <td>
+              {% if job.requires_time_entry_warning %}
+                <span class="badge text-bg-warning">{{ job.job_status }}</span>
+              {% else %}
+                <span class="badge text-bg-success">{{ job.job_status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ job.invoice_status }}</td>
+            <td>{{ job.work_type }}</td>
+            <td>
+              {% if job.active %}
+                <span class="badge text-bg-success">Yes</span>
+              {% else %}
+                <span class="badge text-bg-secondary">No</span>
+              {% endif %}
+            </td>
+            <td class="text-end job-actions-col">
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'job_edit' job.pk %}">
+                Edit
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="text-center p-4 text-muted">
+              No jobs found.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+  <nav class="mt-3" aria-label="Job pagination">
+    <ul class="pagination">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ page_query }}{% if page_query %}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+        </li>
+      {% endif %}
+
+      <li class="page-item disabled">
+        <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      </li>
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ page_query }}{% if page_query %}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+{% endif %}
+
+{% endblock %}

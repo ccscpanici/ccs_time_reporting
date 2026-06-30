@@ -3,15 +3,22 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h1 class="h3 mb-0">Today&apos;s Timesheet</h1>
+    <h1 class="h3 mb-0">{{ page_title }}</h1>
     <p class="text-muted mb-0">
       {{ today|date:"l m/d/Y" }} &middot;
       Week of {{ timesheet.week_start }} &middot;
       Status: {{ timesheet.get_status_display }}
     </p>
+
   </div>
 
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap justify-content-end">
+    <a class="btn btn-outline-primary" href="{% url 'timesheet_today' %}">
+      Today
+    </a>
+    <a class="btn btn-outline-primary" href="{% url 'timesheet_yesterday' %}">
+      Yesterday
+    </a>
     <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
       Full Timesheet
     </a>
@@ -21,8 +28,23 @@
   </div>
 </div>
 
+<form
+  id="today-receipt-upload-form"
+  method="post"
+  enctype="multipart/form-data"
+  action="{% url 'timesheet_receipt_upload' timesheet.pk %}"
+  class="d-none"
+>
+  {% csrf_token %}
+</form>
+
 <form method="post" class="mb-5">
   {% csrf_token %}
+  <datalist id="job-options">
+    {% for job in job_options %}
+      <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>
+    {% endfor %}
+  </datalist>
 
   <div class="card shadow-sm border-0 rounded-4 mb-3">
     <div class="card-body">
@@ -41,6 +63,44 @@
       >
       <div class="form-text">
         The Excel template supports 5 rows per date. More rows are allowed online and export as PDF.
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body py-3">
+          <div class="text-muted small">Regular</div>
+          <div class="h4 mb-0">{{ day.total_regular|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body py-3">
+          <div class="text-muted small">OT</div>
+          <div class="h4 mb-0">{{ day.total_overtime|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body py-3">
+          <div class="text-muted small">DT</div>
+          <div class="h4 mb-0">{{ day.total_doubletime|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body py-3">
+          <div class="text-muted small">Today's Totals</div>
+          <div class="h4 mb-0">{{ day.total_hours|floatformat:2 }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -90,6 +150,21 @@
         Parts
       </button>
     </li>
+
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link"
+        id="receipts-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#receipts-pane"
+        type="button"
+        role="tab"
+        aria-controls="receipts-pane"
+        aria-selected="false"
+      >
+        Receipts
+      </button>
+    </li>
   </ul>
 
   <div class="tab-content">
@@ -123,7 +198,7 @@
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
-                <th style="min-width: 6rem">Job #</th>
+                <th style="min-width: 6rem">Project / Job</th>
                 <th style="min-width: 6rem">Work Code</th>
                 <th class="hours-col text-end">Reg</th>
                 <th class="hours-col text-end">OT</th>
@@ -140,10 +215,13 @@
 
                   <td>
                     <input
-                      class="form-control form-control-sm"
+                      class="form-control form-control-sm job-input"
+                      list="job-options"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_job_number"
                       value="{% if entry %}{{ entry.job_display }}{% endif %}"
+                      placeholder="Blank for internal"
                     >
+                    <div class="form-text text-warning small job-warning d-none"></div>
                   </td>
 
                   <td>
@@ -222,6 +300,7 @@
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
+                <th style="min-width: 6rem">Time Entry Job #</th>
                 <th class="text-end">Miles</th>
                 <th class="text-end">Per Diem Food</th>
                 <th class="text-end">Air Fare</th>
@@ -239,6 +318,14 @@
                 {% with entry=row.entry expense=row.entry.expense %}
                 <tr>
                   <td>{{ row.row_order }}</td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      value="{% if entry %}{{ entry.job_display }}{% endif %}"
+                      readonly
+                    >
+                  </td>
 
                   <td>
                     <input
@@ -337,6 +424,7 @@
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
+                <th style="min-width: 6rem">Time Entry Job #</th>
                 <th style="min-width: 10rem">EE Stock/Job #</th>
                 <th class="text-end">Quantity</th>
                 <th style="min-width: 18rem">Part Description/Part Number</th>
@@ -350,6 +438,14 @@
                 {% with entry=row.entry part=row.entry.part_entry %}
                 <tr>
                   <td>{{ row.row_order }}</td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      value="{% if entry %}{{ entry.job_display }}{% endif %}"
+                      readonly
+                    >
+                  </td>
 
                   <td>
                     <input
@@ -399,11 +495,135 @@
         </div>
       </div>
     </div>
+    <div
+      class="tab-pane fade"
+      id="receipts-pane"
+      role="tabpanel"
+      aria-labelledby="receipts-tab"
+      tabindex="0"
+    >
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-header bg-body-tertiary rounded-top-4">
+          <strong>Receipt Files</strong>
+        </div>
+
+        <div class="card-body">
+          <p class="text-muted">
+            Upload receipts for the current week&apos;s timesheet.
+          </p>
+
+          <div class="row g-3 align-items-end mb-4">
+            <div class="col-md-5">
+              <label class="form-label" for="receipt_files">
+                Receipt files
+              </label>
+              <input
+                class="form-control"
+                type="file"
+                id="receipt_files"
+                name="receipt_files"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif"
+                form="today-receipt-upload-form"
+              >
+              <div class="form-text">
+                You can upload multiple PDFs or images.
+              </div>
+            </div>
+
+            <div class="col-md-5">
+              <label class="form-label" for="receipt_description">
+                Description
+              </label>
+              <input
+                class="form-control"
+                id="receipt_description"
+                name="receipt_description"
+                placeholder="Optional note for these receipt(s)"
+                form="today-receipt-upload-form"
+              >
+            </div>
+
+            <div class="col-md-2">
+              <button
+                class="btn btn-primary w-100"
+                type="submit"
+                form="today-receipt-upload-form"
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Description</th>
+                  <th>Uploaded By</th>
+                  <th>Uploaded At</th>
+                  <th style="width: 12rem"></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for receipt in timesheet.receipts.all %}
+                  <tr>
+                    <td>{{ receipt.filename }}</td>
+                    <td>{{ receipt.description }}</td>
+                    <td>
+                      {% if receipt.uploaded_by %}
+                        {{ receipt.uploaded_by.get_full_name|default:receipt.uploaded_by.username }}
+                      {% endif %}
+                    </td>
+                    <td>{{ receipt.uploaded_at }}</td>
+                    <td class="text-end">
+                      <a
+                        class="btn btn-sm btn-outline-primary"
+                        href="{% url 'timesheet_receipt_download' receipt.pk %}"
+                        target="_blank"
+                      >
+                        View
+                      </a>
+
+                      {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
+                        <form
+                          method="post"
+                          action="{% url 'timesheet_receipt_delete' receipt.pk %}"
+                          class="d-inline"
+                        >
+                          {% csrf_token %}
+                          <button
+                            class="btn btn-sm btn-outline-danger"
+                            type="submit"
+                            onclick="return confirm('Delete this receipt?')"
+                          >
+                            Delete
+                          </button>
+                        </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="5" class="text-muted">
+                      No receipts have been uploaded for this timesheet.
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="d-flex gap-2">
     <button class="btn btn-primary" type="submit">
-      Save Today
+      {{ save_button_label|default:"Save Today" }}
     </button>
     <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
       Cancel
@@ -448,6 +668,42 @@
     select.addEventListener("blur", function() {
       showCodesOnly(select);
     });
+  });
+})();
+</script>
+
+<script>
+(function projectJobWarnings() {
+  const optionList = Array.from(document.querySelectorAll('#job-options option'));
+
+  function findJob(value) {
+    const normalized = (value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return optionList.find(function(option) {
+      return (option.value || '').trim().toLowerCase() === normalized;
+    }) || null;
+  }
+
+  function updateWarning(input) {
+    const cell = input.closest('td');
+    const warning = cell ? cell.querySelector('.job-warning') : null;
+    if (!warning) return;
+
+    const option = findJob(input.value);
+    if (option && option.dataset.warning === '1') {
+      const status = option.dataset.status || 'Unknown Status';
+      warning.textContent = 'Warning: this job is currently marked as "' + status + '". Please verify time should be charged to this project.';
+      warning.classList.remove('d-none');
+    } else {
+      warning.textContent = '';
+      warning.classList.add('d-none');
+    }
+  }
+
+  document.querySelectorAll('.job-input').forEach(updateWarning);
+  document.addEventListener('input', function(event) {
+    if (!event.target.classList.contains('job-input')) return;
+    updateWarning(event.target);
   });
 })();
 </script>

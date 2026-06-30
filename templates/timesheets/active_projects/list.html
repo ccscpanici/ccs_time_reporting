@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Active Projects</h1>
+    <p class="text-muted mb-0">
+      Track budgeted hours against hours billed from timesheet entries.
+    </p>
+  </div>
+
+  <a class="btn btn-primary" href="{% url 'active_project_create' %}">
+    Add Project
+  </a>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Job Number</th>
+          <th class="text-end">Hours Billed</th>
+          <th class="text-end">Hours Budgeted</th>
+          <th class="text-end">Remaining</th>
+          <th class="text-end">% Used</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="fw-semibold">{{ row.project.job_number }}</td>
+            <td class="text-end">{{ row.billed_hours|floatformat:2 }}</td>
+            <td class="text-end">{{ row.project.budgeted_hours|floatformat:2 }}</td>
+            <td class="text-end {% if row.remaining_hours < 0 %}text-danger fw-semibold{% endif %}">
+              {{ row.remaining_hours|floatformat:2 }}
+            </td>
+            <td class="text-end">{{ row.percent_used|floatformat:1 }}%</td>
+            <td>
+              {% if row.project.active %}
+                <span class="badge text-bg-success">Active</span>
+              {% else %}
+                <span class="badge text-bg-secondary">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <a class="btn btn-outline-primary" href="{% url 'active_project_edit' row.project.pk %}">
+                  Edit
+                </a>
+                <a class="btn btn-outline-success" href="{% url 'active_project_detail' row.project.pk %}">
+                  Details
+                </a>
+                {% if row.project.active %}
+                  <form method="post" action="{% url 'active_project_remove' row.project.pk %}" class="d-inline" onsubmit="return confirm('Remove {{ row.project.job_number }} from active projects? Historical time entries will remain available.');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-danger" type="submit">Remove</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="text-center p-4 text-muted">
+              No active projects have been entered yet.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

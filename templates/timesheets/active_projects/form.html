@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">
+      {% if project %}Edit Active Project{% else %}Add Active Project{% endif %}
+    </h1>
+    <p class="text-muted mb-0">
+      Enter a job number and budgeted hours. Billed hours are calculated from timesheet entries.
+    </p>
+  </div>
+
+  <a class="btn btn-outline-secondary" href="{% url 'active_project_list' %}">
+    Back to Active Projects
+  </a>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <datalist id="active-project-job-options">
+        {% for job in job_options %}
+          <option value="{{ job.job_number }}" label="{{ job.label }}">{{ job.label }}</option>
+        {% endfor %}
+      </datalist>
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.job_number.id_for_label }}">
+          Job Number
+        </label>
+        {{ form.job_number }}
+        {% if form.job_number.help_text %}
+          <div class="form-text">{{ form.job_number.help_text }}</div>
+        {% endif %}
+        {% if form.job_number.errors %}
+          <div class="text-danger small">{{ form.job_number.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.budgeted_hours.id_for_label }}">
+          Hours Budgeted
+        </label>
+        {{ form.budgeted_hours }}
+        {% if form.budgeted_hours.errors %}
+          <div class="text-danger small">{{ form.budgeted_hours.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="form-check mb-3">
+        {{ form.active }}
+        <label class="form-check-label" for="{{ form.active.id_for_label }}">
+          Active
+        </label>
+        {% if form.active.errors %}
+          <div class="text-danger small">{{ form.active.errors }}</div>
+        {% endif %}
+      </div>
+
+      <button class="btn btn-primary" type="submit">
+        Save Project
+      </button>
+      <a class="btn btn-outline-secondary" href="{% url 'active_project_list' %}">
+        Cancel
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if original and show_send_test_email %}
+    <li>
+      <a href="{% url 'admin:timesheets_emailconfiguration_send_test_email' original.pk %}">
+        Send Test Email
+      </a>
+    </li>
+  {% endif %}
+{% endblock %}

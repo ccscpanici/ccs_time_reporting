@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+  .timesheet-action-btn {
+    min-width: 62px;
+  }
+</style>
 <div class="card shadow-sm border-0 rounded-4 mb-4">
   <div class="card-body">
     <h2 class="h5 mb-2">Company Resources</h2>
@@ -66,13 +71,13 @@
             <td class="text-end">{{ ts.total_hours|floatformat:2 }}</td>
             <td class="text-end">
               <div class="btn-group btn-group-sm">
-                <a class="btn btn-outline-primary" href="{{ ts.get_absolute_url }}">
+                <a class="btn btn-outline-primary timesheet-action-btn" href="{{ ts.get_absolute_url }}">
                   Open
                 </a>
 
                 {% if ts.can_export_excel %}
                   <a
-                    class="btn btn-outline-secondary"
+                    class="btn btn-outline-secondary timesheet-action-btn"
                     href="{% url 'timesheet_download' ts.pk %}?format=excel"
                   >
                     Excel
@@ -80,11 +85,29 @@
                 {% endif %}
 
                 <a
-                  class="btn btn-outline-secondary"
+                  class="btn btn-outline-secondary timesheet-action-btn"
                   href="{% url 'timesheet_download' ts.pk %}?format=pdf"
                 >
                   PDF
                 </a>
+
+                {% if ts.can_export_excel %}
+                  <a
+                    class="btn btn-primary timesheet-action-btn"
+                    href="{% url 'timesheet_package_download' ts.pk %}"
+                  >
+                    ZIP
+                  </a>
+                {% else %}
+                  <button
+                    class="btn btn-primary timesheet-action-btn"
+                    type="button"
+                    disabled
+                    title="Package download requires Excel export, which only works when each date has 5 or fewer time entries."
+                  >
+                    ZIP
+                  </button>
+                {% endif %}
               </div>
             </td>
           </tr>

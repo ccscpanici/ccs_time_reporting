@@ -35,12 +35,12 @@ def create_timesheet_artifact(timesheet, created_by, export_format, *, submitted
 
 
 @transaction.atomic
-def submit_timesheet(timesheet, submitted_by, export_format):
-    """Mark a timesheet submitted, generate the selected file, and store it as an artifact.
+def submit_timesheet(timesheet, submitted_by):
+    """Mark a timesheet submitted without forcing an immediate download.
 
-    Email automation will be added later. For now the view returns the saved
-    artifact file to the browser as a download. Storing the artifact gives us a
-    historical copy of exactly what was submitted.
+    The post-submit page now offers explicit buttons for Excel, PDF, and the
+    combined package download. This keeps the submit action focused on workflow
+    state and avoids browser issues with redirects plus automatic downloads.
     """
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
     if timesheet.deleted_at:
@@ -49,21 +49,11 @@ def submit_timesheet(timesheet, submitted_by, export_format):
         raise ValueError("Only draft, rejected, or reopened timesheets can be submitted.")
     if not timesheet.entries.exists():
         raise ValueError("Cannot submit an empty timesheet.")
-    if export_format == Timesheet.ExportFormat.EXCEL and not timesheet.can_export_excel:
-        raise ValueError("Excel export only works when each date has 5 or fewer time entries. Use PDF Report instead.")
-
-    # Generate before changing state so export failures do not leave the sheet submitted.
-    artifact = create_timesheet_artifact(
-        timesheet=timesheet,
-        created_by=submitted_by,
-        export_format=export_format,
-        submitted=True,
-    )
 
     timesheet.status = Timesheet.Status.SUBMITTED
     timesheet.submitted_at = timezone.now()
     timesheet.submitted_by = submitted_by
-    timesheet.submission_export_format = export_format
+    timesheet.submission_export_format = ""
     # Keep the reopen audit trail, but clear approval/invoicing fields on resubmission.
     timesheet.approved_at = None
     timesheet.approved_by = None
@@ -81,4 +71,4 @@ def submit_timesheet(timesheet, submitted_by, export_format):
         "updated_at",
     ])
 
-    return artifact
+    return timesheet

@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="h3 mb-3">Edit week of {{ timesheet.week_start }}</h1>
-<form method="post" class="mb-5">
+<form method="post" class="mb-5" id="weekly-timesheet-edit-form">
   {% csrf_token %}
+  <datalist id="job-options">
+    {% for job in job_options %}
+      <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>
+    {% endfor %}
+  </datalist>
   <div class="card shadow-sm border-0 rounded-4 mb-3">
     <div class="card-body">
       <label class="form-label" for="entries_per_day">Time entry rows per date</label>
@@ -37,14 +42,14 @@
         <div class="table-responsive">
           <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
             <thead>
-              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Job #</th><th style="min-width: 6rem">Work Code</th><th class="hours-col">Reg</th><th class="hours-col">OT</th><th class="hours-col">DT</th><th class="description-col">Description</th></tr>
+              <tr><th style="width: 3rem">#</th><th style="min-width: 10rem">Project / Job</th><th style="min-width: 6rem">Work Code</th><th class="hours-col">Reg</th><th class="hours-col">OT</th><th class="hours-col">DT</th><th class="description-col">Description</th></tr>
             </thead>
             <tbody>
               {% for row in day.rows %}
               {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
               <tr>
                 <td>{{ row.row_order }}</td>
-                <td><input class="form-control form-control-sm job-input" name="entry_{{ key }}_{{ row.row_order }}_job_number" value="{% if entry %}{{ entry.job_display }}{% endif %}" placeholder="Job #"></td>
+                <td><input class="form-control form-control-sm job-input" list="job-options" name="entry_{{ key }}_{{ row.row_order }}_job_number" value="{% if entry %}{{ entry.job_display }}{% endif %}" placeholder="Blank for internal"><div class="form-text text-warning small job-warning d-none"></div></td>
                 <td>
                   <select class="form-select form-select-sm work-code-select-compact" name="entry_{{ key }}_{{ row.row_order }}_work_code">
                     <option value="">---</option>
@@ -152,9 +157,89 @@
     </div>
   </div>
 
-  <button class="btn btn-primary">Save draft</button>
+  <button class="btn btn-primary" type="submit">Save draft</button>
   <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">Cancel</a>
 </form>
+<script>
+(function weeklyEditKeyboardBehavior() {
+  const form = document.querySelector('form[method="post"]');
+  if (!form) return;
+
+  let isDirty = false;
+  let isSubmitting = false;
+
+  function editableControls() {
+    return Array.from(form.querySelectorAll('input, select, textarea, button'))
+      .filter(function(control) {
+        if (control.disabled) return false;
+        if (control.type === 'hidden') return false;
+        if (control.type === 'submit') return false;
+        if (control.type === 'button') return false;
+        if (control.type === 'checkbox') return false;
+        if (control.readOnly) return false;
+        return control.offsetParent !== null;
+      });
+  }
+
+  function moveToNextControl(current) {
+    const controls = editableControls();
+    const index = controls.indexOf(current);
+    if (index === -1) return;
+
+    const next = controls[index + 1];
+    if (next) {
+      next.focus();
+      if (typeof next.select === 'function') {
+        next.select();
+      }
+    } else {
+      current.blur();
+    }
+  }
+
+  form.addEventListener('keydown', function(event) {
+    if (event.key !== 'Enter') return;
+
+    const target = event.target;
+    if (!target || target.tagName === 'TEXTAREA') return;
+    if (!target.matches('input, select')) return;
+
+    event.preventDefault();
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    moveToNextControl(target);
+  });
+
+  form.addEventListener('input', function() {
+    isDirty = true;
+  });
+
+  form.addEventListener('change', function() {
+    isDirty = true;
+  });
+
+  form.addEventListener('submit', function() {
+    isSubmitting = true;
+    isDirty = false;
+  });
+
+  window.addEventListener('beforeunload', function(event) {
+    if (!isDirty || isSubmitting) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  document.addEventListener('click', function(event) {
+    const link = event.target.closest('a[href]');
+    if (!link || !form.contains(link)) return;
+    if (!isDirty || isSubmitting) return;
+
+    const okToLeave = window.confirm('You have unsaved changes. Leave this page without saving?');
+    if (!okToLeave) {
+      event.preventDefault();
+    }
+  });
+})();
+</script>
 <script>
 document.addEventListener("input", function (event) {
   if (!event.target.classList.contains("mileage-miles")) return;
@@ -205,6 +290,142 @@ document.addEventListener("input", function (event) {
     select.addEventListener("blur", function() {
       showCodesOnly(select);
     });
+  });
+})();
+</script>
+
+<script>
+(function projectJobWarnings() {
+  const optionList = Array.from(document.querySelectorAll('#job-options option'));
+
+  function findJob(value) {
+    const normalized = (value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return optionList.find(function(option) {
+      return (option.value || '').trim().toLowerCase() === normalized;
+    }) || null;
+  }
+
+  function updateWarning(input) {
+    const cell = input.closest('td');
+    const warning = cell ? cell.querySelector('.job-warning') : null;
+    if (!warning) return;
+
+    const option = findJob(input.value);
+    if (option && option.dataset.warning === '1') {
+      const status = option.dataset.status || 'Unknown Status';
+      warning.textContent = 'Warning: this job is currently marked as "' + status + '". Please verify time should be charged to this project.';
+      warning.classList.remove('d-none');
+    } else {
+      warning.textContent = '';
+      warning.classList.add('d-none');
+    }
+  }
+
+  document.querySelectorAll('.job-input').forEach(updateWarning);
+  document.addEventListener('input', function(event) {
+    if (!event.target.classList.contains('job-input')) return;
+    updateWarning(event.target);
+  });
+})();
+</script>
+
+<script>
+(function weeklyEditSaveBehavior() {
+  const form = document.getElementById('weekly-timesheet-edit-form');
+  if (!form) return;
+
+  let isDirty = false;
+  let isSaving = false;
+
+  function getCsrfToken() {
+    const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    return csrfInput ? csrfInput.value : '';
+  }
+
+  function showSaveMessage(message, level) {
+    const existing = document.getElementById('weekly-save-message');
+    if (existing) existing.remove();
+
+    const alert = document.createElement('div');
+    alert.id = 'weekly-save-message';
+    alert.className = 'alert alert-' + level + ' mb-3';
+    alert.setAttribute('role', 'alert');
+    alert.textContent = message;
+
+    form.parentNode.insertBefore(alert, form);
+  }
+
+  function setSaveButtonsDisabled(disabled) {
+    form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (button) {
+      button.disabled = disabled;
+    });
+  }
+
+  async function saveWeeklyForm() {
+    if (isSaving) return;
+
+    isSaving = true;
+    setSaveButtonsDisabled(true);
+
+    try {
+      const response = await fetch(form.action || window.location.href, {
+        method: 'POST',
+        body: new FormData(form),
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Save failed with HTTP status ' + response.status);
+      }
+
+      isDirty = false;
+      showSaveMessage('Timesheet saved.', 'success');
+    } catch (error) {
+      showSaveMessage('The timesheet could not be saved. Please try again.', 'danger');
+    } finally {
+      isSaving = false;
+      setSaveButtonsDisabled(false);
+    }
+  }
+
+  form.addEventListener('input', function () {
+    isDirty = true;
+  });
+
+  form.addEventListener('change', function () {
+    isDirty = true;
+  });
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    saveWeeklyForm();
+  });
+
+  form.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+
+    const target = event.target;
+    if (!target) return;
+
+    const tagName = (target.tagName || '').toLowerCase();
+    const type = (target.getAttribute('type') || '').toLowerCase();
+
+    if (tagName === 'textarea') return;
+    if (type === 'button' || type === 'submit' || type === 'reset') return;
+
+    event.preventDefault();
+    saveWeeklyForm();
+  });
+
+  window.addEventListener('beforeunload', function (event) {
+    if (!isDirty || isSaving) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
 })();
 </script>

@@ -13,4 +13,5 @@ urlpatterns = [
     path('', include('accounts.urls')),
     path('timesheets/', include('timesheets.urls')),
     path('reports/', include('reports.urls')), 
+    path('jobgrid/', include('jobgrid.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

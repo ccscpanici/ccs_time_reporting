@@ -1,0 +1,16 @@
+--- timesheets/admin.py	2026-06-09 21:41:28.000000000 +0000
++++ ccs_time_reporting/timesheets/admin.py	2026-06-24 16:06:57.473574700 +0000
+@@ -162,9 +162,10 @@
+ 
+ @admin.register(Job)
+ class JobAdmin(admin.ModelAdmin):
+-    list_display = ("job_number", "description", "customer", "active")
+-    list_filter = ("active", "customer")
+-    search_fields = ("job_number", "description", "customer__name")
++    list_display = ("job_number", "description", "customer", "job_status", "invoice_status", "work_type", "active", "last_imported_at")
++    list_filter = ("active", "job_status", "invoice_status", "work_type", "customer")
++    search_fields = ("job_number", "description", "customer__name", "customer_po", "quote_number", "location")
++    readonly_fields = ("created_at", "updated_at", "last_imported_at")
+ 
+ 
+ admin.site.register(Customer)

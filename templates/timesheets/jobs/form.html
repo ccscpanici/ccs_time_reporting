@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">
+      {% if job %}Edit Job {{ job.job_number }}{% else %}Add Job{% endif %}
+    </h1>
+    <p class="text-muted mb-0">
+      Job numbers are used for timesheet validation. Existing jobs should be edited, not deleted.
+    </p>
+  </div>
+
+  <a class="btn btn-outline-secondary" href="{% url 'job_list' %}">
+    Back to Jobs
+  </a>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.job_number.id_for_label }}">Job Number</label>
+          {{ form.job_number }}
+          {% if form.job_number.errors %}<div class="text-danger small">{{ form.job_number.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-8">
+          <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+          {{ form.description }}
+          {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.customer_name.id_for_label }}">Customer</label>
+          {{ form.customer_name }}
+          {% if form.customer_name.help_text %}<div class="form-text">{{ form.customer_name.help_text }}</div>{% endif %}
+          {% if form.customer_name.errors %}<div class="text-danger small">{{ form.customer_name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label" for="{{ form.year.id_for_label }}">Year</label>
+          {{ form.year }}
+          {% if form.year.help_text %}<div class="form-text">{{ form.year.help_text }}</div>{% endif %}
+          {% if form.year.errors %}<div class="text-danger small">{{ form.year.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label" for="{{ form.job_month.id_for_label }}">Month</label>
+          {{ form.job_month }}
+          {% if form.job_month.help_text %}<div class="form-text">{{ form.job_month.help_text }}</div>{% endif %}
+          {% if form.job_month.errors %}<div class="text-danger small">{{ form.job_month.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.job_status.id_for_label }}">Job Status</label>
+          {{ form.job_status }}
+          {% if form.job_status.help_text %}<div class="form-text">{{ form.job_status.help_text }}</div>{% endif %}
+          {% if form.job_status.errors %}<div class="text-danger small">{{ form.job_status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.invoice_status.id_for_label }}">Invoice Status</label>
+          {{ form.invoice_status }}
+          {% if form.invoice_status.errors %}<div class="text-danger small">{{ form.invoice_status.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.work_type.id_for_label }}">Work Type</label>
+          {{ form.work_type }}
+          {% if form.work_type.errors %}<div class="text-danger small">{{ form.work_type.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.location.id_for_label }}">Location</label>
+          {{ form.location }}
+          {% if form.location.errors %}<div class="text-danger small">{{ form.location.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.customer_contact.id_for_label }}">Customer Contact</label>
+          {{ form.customer_contact }}
+          {% if form.customer_contact.errors %}<div class="text-danger small">{{ form.customer_contact.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.customer_po.id_for_label }}">Customer PO</label>
+          {{ form.customer_po }}
+          {% if form.customer_po.errors %}<div class="text-danger small">{{ form.customer_po.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.lead.id_for_label }}">Lead Name</label>
+          {{ form.lead }}
+          {% if form.lead.errors %}<div class="text-danger small">{{ form.lead.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.lead_user.id_for_label }}">Linked Lead User</label>
+          {{ form.lead_user }}
+          {% if form.lead_user.errors %}<div class="text-danger small">{{ form.lead_user.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.quote_number.id_for_label }}">Quote Number</label>
+          {{ form.quote_number }}
+          {% if form.quote_number.errors %}<div class="text-danger small">{{ form.quote_number.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label" for="{{ form.comments.id_for_label }}">Comments</label>
+          {{ form.comments }}
+          {% if form.comments.errors %}<div class="text-danger small">{{ form.comments.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-12">
+          <h2 class="h5 mt-3">Engineers</h2>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_01.id_for_label }}">Engineer 01 Name</label>
+          {{ form.engineer_01 }}
+          {% if form.engineer_01.errors %}<div class="text-danger small">{{ form.engineer_01.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_01_user.id_for_label }}">Linked Engineer 01 User</label>
+          {{ form.engineer_01_user }}
+          {% if form.engineer_01_user.errors %}<div class="text-danger small">{{ form.engineer_01_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_02.id_for_label }}">Engineer 02 Name</label>
+          {{ form.engineer_02 }}
+          {% if form.engineer_02.errors %}<div class="text-danger small">{{ form.engineer_02.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_02_user.id_for_label }}">Linked Engineer 02 User</label>
+          {{ form.engineer_02_user }}
+          {% if form.engineer_02_user.errors %}<div class="text-danger small">{{ form.engineer_02_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_03.id_for_label }}">Engineer 03 Name</label>
+          {{ form.engineer_03 }}
+          {% if form.engineer_03.errors %}<div class="text-danger small">{{ form.engineer_03.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_03_user.id_for_label }}">Linked Engineer 03 User</label>
+          {{ form.engineer_03_user }}
+          {% if form.engineer_03_user.errors %}<div class="text-danger small">{{ form.engineer_03_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_04.id_for_label }}">Engineer 04 Name</label>
+          {{ form.engineer_04 }}
+          {% if form.engineer_04.errors %}<div class="text-danger small">{{ form.engineer_04.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_04_user.id_for_label }}">Linked Engineer 04 User</label>
+          {{ form.engineer_04_user }}
+          {% if form.engineer_04_user.errors %}<div class="text-danger small">{{ form.engineer_04_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_05.id_for_label }}">Engineer 05 Name</label>
+          {{ form.engineer_05 }}
+          {% if form.engineer_05.errors %}<div class="text-danger small">{{ form.engineer_05.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_05_user.id_for_label }}">Linked Engineer 05 User</label>
+          {{ form.engineer_05_user }}
+          {% if form.engineer_05_user.errors %}<div class="text-danger small">{{ form.engineer_05_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_06.id_for_label }}">Engineer 06 Name</label>
+          {{ form.engineer_06 }}
+          {% if form.engineer_06.errors %}<div class="text-danger small">{{ form.engineer_06.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_06_user.id_for_label }}">Linked Engineer 06 User</label>
+          {{ form.engineer_06_user }}
+          {% if form.engineer_06_user.errors %}<div class="text-danger small">{{ form.engineer_06_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_07.id_for_label }}">Engineer 07 Name</label>
+          {{ form.engineer_07 }}
+          {% if form.engineer_07.errors %}<div class="text-danger small">{{ form.engineer_07.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_07_user.id_for_label }}">Linked Engineer 07 User</label>
+          {{ form.engineer_07_user }}
+          {% if form.engineer_07_user.errors %}<div class="text-danger small">{{ form.engineer_07_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_08.id_for_label }}">Engineer 08 Name</label>
+          {{ form.engineer_08 }}
+          {% if form.engineer_08.errors %}<div class="text-danger small">{{ form.engineer_08.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_08_user.id_for_label }}">Linked Engineer 08 User</label>
+          {{ form.engineer_08_user }}
+          {% if form.engineer_08_user.errors %}<div class="text-danger small">{{ form.engineer_08_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_09.id_for_label }}">Engineer 09 Name</label>
+          {{ form.engineer_09 }}
+          {% if form.engineer_09.errors %}<div class="text-danger small">{{ form.engineer_09.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_09_user.id_for_label }}">Linked Engineer 09 User</label>
+          {{ form.engineer_09_user }}
+          {% if form.engineer_09_user.errors %}<div class="text-danger small">{{ form.engineer_09_user.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_10.id_for_label }}">Engineer 10 Name</label>
+          {{ form.engineer_10 }}
+          {% if form.engineer_10.errors %}<div class="text-danger small">{{ form.engineer_10.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.engineer_10_user.id_for_label }}">Linked Engineer 10 User</label>
+          {{ form.engineer_10_user }}
+          {% if form.engineer_10_user.errors %}<div class="text-danger small">{{ form.engineer_10_user.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.active }}
+            <label class="form-check-label" for="{{ form.active.id_for_label }}">{{ form.active.label }}</label>
+          </div>
+          {% if form.active.help_text %}<div class="form-text">{{ form.active.help_text }}</div>{% endif %}
+          {% if form.active.errors %}<div class="text-danger small">{{ form.active.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save Job</button>
+        <a class="btn btn-outline-secondary" href="{% url 'job_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

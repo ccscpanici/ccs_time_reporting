@@ -22,41 +22,78 @@
         </a>
 
         <div class="collapse navbar-collapse show">
-          <ul class="navbar-nav me-auto">
+          <ul class="navbar-nav me-auto nav-divider">
             {% if request.user.is_authenticated %}
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'timesheet_list' %}">
+              <li class="nav-item dropdown px-3" style="border-right: 1px solid rgba(255,255,255,.65);">
+                <a
+                  class="nav-link dropdown-toggle"
+                  href="#"
+                  role="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
                   Timesheets
                 </a>
-              </li>
+                <ul class="dropdown-menu">
+                  <li>
+                    <a class="dropdown-item" href="{% url 'timesheet_list' %}">
+                      List
+                    </a>
+                  </li>
 
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'timesheet_today' %}">
-                  Today
-                </a>
-              </li>
+                  <li>
+                    <a class="dropdown-item" href="{% url 'timesheet_today' %}">
+                      Today
+                    </a>
+                  </li>
 
+                  <li>
+                    <a class="dropdown-item" href="{% url 'timesheet_yesterday' %}">
+                      Yesterday
+                    </a>
+                  </li>
+	 	  {% if is_project_manager %}
+		  <li>
+		    <a class="dropdown-item" href="{% url 'timesheet_approvals' %}">
+		      Approvals
+		    </a>
+		  </li>
+		  {% endif %}
+                </ul>
+              </li>
               <li class="nav-item">
-                <a class="nav-link" href="{% url 'reports_dashboard' %}">
+                <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'reports_dashboard' %}">
                   Reports
                 </a>
               </li>
-
               {% if is_project_manager %}
                 <li class="nav-item">
-                  <a class="nav-link" href="{% url 'timesheet_approvals' %}">
-                    Approvals
+                  <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'active_project_list' %}">
+                    Active Projects
                   </a>
                 </li>
               {% endif %}
 
               <li class="nav-item">
-                <a class="nav-link" href="{% url 'profile' %}">
-                  Profile
+                <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'job_list' %}">
+                  Jobs
                 </a>
               </li>
 
+              {% if is_project_manager %}
+                <li class="nav-item">
+                  <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'jobgrid:grid' %}">
+                    Job Grid
+                  </a>
+                </li>
+              {% endif %}
+
               <li class="nav-item">
+                <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'profile' %}">
+                  Profile
+                </a>
+              </li>
+              <li class="nav-item px-3">
                 <a class="nav-link" href="{% url 'preferences' %}">
                   Preferences
                 </a>

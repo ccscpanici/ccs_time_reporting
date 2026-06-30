@@ -3,7 +3,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h1 class="h3 mb-0">Week of {{ timesheet.week_start }}</h1>
-    <p class="mb-0 text-muted">Status: {{ timesheet.get_status_display }} · Rows/date: {{ timesheet.entries_per_day }}</p>
+    <p class="mb-0 text-muted">
+      Status: {{ timesheet.get_status_display }} ·
+      Rows/date: {{ timesheet.entries_per_day }} ·
+      Weekly Total: {{ weekly_total_hours|floatformat:2 }}
+    </p>
   </div>
   <div class="d-flex gap-2 flex-wrap justify-content-end">
     {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
@@ -16,9 +20,14 @@
         <button class="btn btn-outline-secondary" type="button" disabled title="Excel export only works when each date has 5 or fewer time entries.">Download Excel</button>
       {% endif %}
       <a class="btn btn-outline-secondary" href="{% url 'timesheet_download' timesheet.pk %}?format=pdf">Download PDF</a>
+      {% if timesheet.can_export_excel %}
+        <a class="btn btn-primary" href="{% url 'timesheet_package_download' timesheet.pk %}">Download ZIP</a>
+      {% else %}
+        <button class="btn btn-primary" type="button" disabled title="Package download requires Excel export availability.">Download ZIP</button>
+      {% endif %}
     </div>
     {% if timesheet.can_submit and timesheet.employee_id == request.user.id %}
-      <a class="btn btn-success" href="{% url 'timesheet_submit' timesheet.pk %}">Submit and Download</a>
+      <a class="btn btn-success" href="{% url 'timesheet_submit' timesheet.pk %}">Submit</a>
     {% endif %}
     {% if timesheet.can_reopen and timesheet.employee_id == request.user.id %}
       <a class="btn btn-warning" href="{% url 'timesheet_reopen' timesheet.pk %}">Reopen for Corrections</a>
@@ -106,7 +115,18 @@
     <div class="card shadow-sm border-0 rounded-4 mb-4">
       <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
         <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
-        <span class="badge {% if day.overnight_stay %}text-bg-info{% else %}text-bg-secondary{% endif %}">Hotel overnight stay: {{ day.overnight_stay|yesno:"Yes,No" }}</span>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          <span class="badge text-bg-light">
+            Daily Totals:
+            Reg {{ day.total_regular|floatformat:2 }} |
+            OT {{ day.total_overtime|floatformat:2 }} |
+            DT {{ day.total_doubletime|floatformat:2 }} |
+            Total {{ day.total_hours|floatformat:2 }}
+          </span>
+          <span class="badge {% if day.overnight_stay %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+            Hotel overnight stay: {{ day.overnight_stay|yesno:"Yes,No" }}
+          </span>
+        </div>
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
@@ -234,8 +254,14 @@
 
   <div class="tab-pane fade" id="receipts-pane" role="tabpanel" aria-labelledby="receipts-tab" tabindex="0">
     <div class="card shadow-sm border-0 rounded-4 mb-4">
-      <div class="card-header bg-body-tertiary rounded-top-4">
+      <div class="card-header bg-body-tertiary rounded-top-4 d-flex justify-content-between align-items-center">
         <strong>Receipt Files</strong>
+        <a
+          class="btn btn-sm btn-outline-secondary"
+          href="{% url 'timesheet_receipts_pdf' timesheet.pk %}"
+        >
+          Download Receipts PDF
+        </a>
       </div>
       <div class="card-body">
         {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}

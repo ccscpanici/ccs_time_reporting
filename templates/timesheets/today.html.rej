@@ -1,0 +1,79 @@
+--- templates/timesheets/today.html	2026-06-09 21:41:28.000000000 +0000
++++ ccs_time_reporting/templates/timesheets/today.html	2026-06-24 16:07:59.987118743 +0000
+@@ -40,6 +40,11 @@
+ 
+ <form method="post" class="mb-5">
+   {% csrf_token %}
++  <datalist id="job-options">
++    {% for job in job_options %}
++      <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>
++    {% endfor %}
++  </datalist>
+ 
+   <div class="card shadow-sm border-0 rounded-4 mb-3">
+     <div class="card-body">
+@@ -193,7 +198,7 @@
+             <thead>
+               <tr>
+                 <th style="width: 3rem">#</th>
+-                <th style="min-width: 6rem">Job #</th>
++                <th style="min-width: 6rem">Project / Job</th>
+                 <th style="min-width: 6rem">Work Code</th>
+                 <th class="hours-col text-end">Reg</th>
+                 <th class="hours-col text-end">OT</th>
+@@ -210,10 +215,13 @@
+ 
+                   <td>
+                     <input
+-                      class="form-control form-control-sm"
++                      class="form-control form-control-sm job-input"
++                      list="job-options"
+                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_job_number"
+                       value="{% if entry %}{{ entry.job_display }}{% endif %}"
++                      placeholder="Blank for internal"
+                     >
++                    <div class="form-text text-warning small job-warning d-none"></div>
+                   </td>
+ 
+                   <td>
+@@ -663,4 +671,40 @@
+   });
+ })();
+ </script>
++
++<script>
++(function projectJobWarnings() {
++  const optionList = Array.from(document.querySelectorAll('#job-options option'));
++
++  function findJob(value) {
++    const normalized = (value || '').trim().toLowerCase();
++    if (!normalized) return null;
++    return optionList.find(function(option) {
++      return (option.value || '').trim().toLowerCase() === normalized;
++    }) || null;
++  }
++
++  function updateWarning(input) {
++    const cell = input.closest('td');
++    const warning = cell ? cell.querySelector('.job-warning') : null;
++    if (!warning) return;
++
++    const option = findJob(input.value);
++    if (option && option.dataset.warning === '1') {
++      const status = option.dataset.status || 'Unknown Status';
++      warning.textContent = 'Warning: this job is currently marked as "' + status + '". Please verify time should be charged to this project.';
++      warning.classList.remove('d-none');
++    } else {
++      warning.textContent = '';
++      warning.classList.add('d-none');
++    }
++  }
++
++  document.querySelectorAll('.job-input').forEach(updateWarning);
++  document.addEventListener('input', function(event) {
++    if (!event.target.classList.contains('job-input')) return;
++    updateWarning(event.target);
++  });
++})();
++</script>
+ {% endblock %}

@@ -257,8 +257,68 @@ def parse_week_start(path):
     return _week_start(entries[0].work_date)
 
 
+
+def valid_time_entry_job_qs():
+    """Jobs users may select/charge time to during imports and entry forms."""
+    return Job.objects.filter(active=True).exclude(description="")
+
+
+def find_invalid_time_entry_job_numbers(path):
+    """Return invalid workbook job numbers grouped with sample entry descriptions.
+
+    A blank job number is valid internal work. A nonblank job number is valid only
+    when it exists in the Job table, has a description, and is marked available for
+    time entry.
+    """
+    invalid = {}
+    valid_numbers = {
+        (value or "").strip().lower()
+        for value in valid_time_entry_job_qs().values_list("job_number", flat=True)
+    }
+
+    for item in parse_time_entries(path):
+        job_number = (item.job_number or "").strip()
+        if not job_number:
+            continue
+        if job_number.lower() in valid_numbers:
+            continue
+
+        row = invalid.setdefault(job_number, {"count": 0, "descriptions": []})
+        row["count"] += 1
+        description = (item.description or "").strip()
+        if description and description not in row["descriptions"] and len(row["descriptions"]) < 5:
+            row["descriptions"].append(description)
+
+    return invalid
+
+
+def _resolve_import_job(job_number, job_corrections=None):
+    """Resolve a workbook job number to a valid Job or None.
+
+    job_corrections maps original workbook job numbers to either a replacement
+    job number or an empty string for internal/no-job work.
+    """
+    job_number = (job_number or "").strip()
+    if not job_number:
+        return "", None
+
+    corrections = job_corrections or {}
+    if job_number in corrections:
+        replacement = (corrections[job_number] or "").strip()
+        if not replacement:
+            return "", None
+        job_number = replacement
+
+    job = valid_time_entry_job_qs().filter(job_number__iexact=job_number).first()
+    if job is None:
+        raise ValueError(
+            f"Job '{job_number}' is not available for time entry. "
+            "Import stopped so the job number can be corrected."
+        )
+    return job.job_number, job
+
 @transaction.atomic
-def import_timesheet_upload(upload):
+def import_timesheet_upload(upload, job_corrections=None):
     path = upload.uploaded_file.path
     week_start = parse_week_start(path)
     timesheet, _ = Timesheet.objects.get_or_create(
@@ -275,9 +335,7 @@ def import_timesheet_upload(upload):
 
     entries_by_date_row = {}
     for item in parse_time_entries(path):
-        job = None
-        if item.job_number:
-            job, _ = Job.objects.get_or_create(job_number=item.job_number, defaults={"description": ""})
+        job_number, job = _resolve_import_job(item.job_number, job_corrections)
         work_code = None
         if item.work_code:
             work_code, _ = WorkCode.objects.get_or_create(code=item.work_code, defaults={"description": item.work_code})
@@ -285,7 +343,7 @@ def import_timesheet_upload(upload):
             timesheet=timesheet,
             work_date=item.work_date,
             row_order=item.row_order,
-            job_number=item.job_number,
+            job_number=job_number,
             job=job,
             work_code=work_code,
             regular_hours=item.regular_hours,
@@ -333,11 +391,13 @@ def import_timesheet_upload(upload):
         entry = entries_by_date_row.get((item.work_date, item.row_order))
         if entry is None:
             # Preserve parts entered on a row without time data.
+            part_job_number, part_job = _resolve_import_job(item.ee_stock_job_number, job_corrections)
             entry = TimeEntry.objects.create(
                 timesheet=timesheet,
                 work_date=item.work_date,
                 row_order=item.row_order,
-                job_number=item.ee_stock_job_number,
+                job_number=part_job_number,
+                job=part_job,
                 regular_hours=Decimal("0"),
                 overtime_hours=Decimal("0"),
                 doubletime_hours=Decimal("0"),

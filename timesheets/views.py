@@ -2,6 +2,7 @@ import threading
 import tempfile
 import zipfile
 import shutil
+import re
 from datetime import date, timedelta
 from pathlib import Path
 from django.contrib import messages
@@ -11,20 +12,140 @@ from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.db.models import DecimalField, ExpressionWrapper, F, Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
-from .forms import TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm
-from .models import BulkImportJob, Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport
+from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm
+from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
-from .services.importer import import_timesheet_upload
+from .services.importer import find_invalid_time_entry_job_numbers, import_timesheet_upload, valid_time_entry_job_qs
+from .services.job_importer import apply_job_import, preview_job_import
+from .services.notifications import send_employee_timesheet_approved_email, send_employee_timesheet_rejected_email, send_timesheet_approved_email, send_timesheet_reopened_email, send_timesheet_submitted_supervisor_email
+from .services.receipts_pdf import build_receipts_pdf_bytes, receipts_pdf_filename
 from .services.submission import create_timesheet_artifact, submit_timesheet
 from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
 from .services.exporter import TEMPLATE_PATH, _write_employee_header
 from openpyxl import load_workbook
 from io import BytesIO
+from pypdf import PdfReader, PdfWriter
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 from .permissions import can_approve_timesheet, can_view_timesheet, is_management_staff, is_project_manager
+
+
+
+
+def _job_number_sort_key(job):
+    """Return a numeric-aware sort key for CCS job numbers.
+
+    Examples:
+    26003S-162 sorts near other 26003 jobs, above 26002 jobs.
+    SCL2603 sorts inside 2026 because Job.year is already inferred as 2026,
+    and its numeric portion is used for ordering within the year.
+    """
+    raw = (job.job_number or "").upper().strip()
+    numbers = [int(value) for value in re.findall(r"\d+", raw)]
+    primary = numbers[0] if numbers else -1
+    suffix = numbers[-1] if len(numbers) > 1 else -1
+    return (job.year or 0, primary, suffix, raw)
+
+
+def _hours_for_job_number(job_number):
+    """Return total non-voided timesheet hours matching a job number."""
+    job_number = (job_number or "").strip()
+    if not job_number:
+        return 0
+
+    result = TimeEntry.objects.filter(
+        Q(job_number__iexact=job_number) | Q(job__job_number__iexact=job_number),
+        timesheet__deleted_at__isnull=True,
+    ).exclude(
+        timesheet__status=Timesheet.Status.VOID,
+    ).aggregate(
+        total_hours=Coalesce(
+            Sum(
+                ExpressionWrapper(
+                    F("regular_hours") + F("overtime_hours") + F("doubletime_hours"),
+                    output_field=DecimalField(max_digits=10, decimal_places=2),
+                )
+            ),
+            0,
+            output_field=DecimalField(max_digits=10, decimal_places=2),
+        )
+    )
+
+    return result["total_hours"] or 0
+
+
+def _user_initials(user):
+    full_name = user.get_full_name().strip()
+    if full_name:
+        return "".join(part[0].upper() for part in full_name.split() if part)
+    return user.username[:2].upper()
+
+
+def _add_text_page(pdf_writer, title, message):
+    stream = BytesIO()
+    page = canvas.Canvas(stream, pagesize=letter)
+    width, height = letter
+
+    page.setFont("Helvetica-Bold", 14)
+    page.drawString(72, height - 72, title)
+
+    page.setFont("Helvetica", 10)
+    text = page.beginText(72, height - 100)
+    for line in message.splitlines():
+        text.textLine(line)
+    page.drawText(text)
+
+    page.showPage()
+    page.save()
+    stream.seek(0)
+
+    pdf_writer.add_page(PdfReader(stream).pages[0])
+
+
+def _add_image_receipt_page(pdf_writer, receipt, receipt_bytes):
+    stream = BytesIO()
+    page = canvas.Canvas(stream, pagesize=letter)
+    width, height = letter
+
+    page.setFont("Helvetica-Bold", 12)
+    page.drawString(36, height - 36, receipt.filename())
+
+    if receipt.description:
+        page.setFont("Helvetica", 9)
+        page.drawString(36, height - 52, receipt.description[:120])
+
+    image = ImageReader(BytesIO(receipt_bytes))
+    image_width, image_height = image.getSize()
+
+    max_width = width - 72
+    max_height = height - 100
+    scale = min(max_width / image_width, max_height / image_height)
+
+    draw_width = image_width * scale
+    draw_height = image_height * scale
+    x = (width - draw_width) / 2
+    y = 36
+
+    page.drawImage(
+        image,
+        x,
+        y,
+        width=draw_width,
+        height=draw_height,
+        preserveAspectRatio=True,
+        anchor="c",
+    )
+
+    page.showPage()
+    page.save()
+    stream.seek(0)
+
+    pdf_writer.add_page(PdfReader(stream).pages[0])
 
 
 
@@ -163,12 +284,9 @@ def sunday_for(d):
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
-def attachment_response(artifact):
-    """Return a saved submission artifact as a real browser download."""
 
-    timesheet = artifact.timesheet
+def _timesheet_download_initials(timesheet):
     user = timesheet.employee
-
     initials = (
         f"{(user.first_name or '')[:1]}"
         f"{(user.last_name or '')[:1]}"
@@ -177,8 +295,18 @@ def attachment_response(artifact):
     if not initials.strip():
         initials = user.get_username()[:2].upper()
 
+    return initials
+
+
+def _timesheet_download_base_filename(timesheet):
+    return f"{timesheet.week_start:%Y%m%d}_{_timesheet_download_initials(timesheet)}"
+
+def attachment_response(artifact):
+    """Return a saved submission artifact as a real browser download."""
+
+    timesheet = artifact.timesheet
     suffix = Path(artifact.file.name).suffix.lower()
-    filename = f"{timesheet.week_start:%Y%m%d}_{initials}{suffix}"
+    filename = f"{_timesheet_download_base_filename(timesheet)}{suffix}"
 
     if suffix == ".pdf":
         content_type = "application/pdf"
@@ -305,6 +433,7 @@ def timesheet_create(request):
 def timesheet_detail(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
+    weekly_total_hours = sum(day["total_hours"] for day in grid)
     return render(
         request,
         "timesheets/detail.html",
@@ -312,8 +441,54 @@ def timesheet_detail(request, pk):
             "timesheet": timesheet,
             "grid": grid,
             "can_approve_this_timesheet": can_approve_timesheet(request.user, timesheet),
+	    "weekly_total_hours": weekly_total_hours,
         },
     )
+
+
+
+def _job_options_for_timesheet_forms():
+    jobs = valid_time_entry_job_qs().order_by("job_number")
+    return [
+        {
+            "job_number": job.job_number,
+            "label": job.search_display,
+            "status": job.job_status or Job.STATUS_UNKNOWN,
+            "warning": job.requires_time_entry_warning,
+        }
+        for job in jobs
+    ]
+
+
+def _posted_time_rows(request, timesheet, work_date):
+    day_key = work_date.isoformat()
+    rows = []
+    for row_order in range(1, timesheet.entries_per_day + 1):
+        prefix = f"entry_{day_key}_{row_order}"
+        rows.append((row_order, prefix, {
+            "job_number": request.POST.get(f"{prefix}_job_number", "").strip(),
+            "work_code": request.POST.get(f"{prefix}_work_code"),
+            "regular_hours": request.POST.get(f"{prefix}_regular_hours"),
+            "overtime_hours": request.POST.get(f"{prefix}_overtime_hours"),
+            "doubletime_hours": request.POST.get(f"{prefix}_doubletime_hours"),
+            "description": request.POST.get(f"{prefix}_description", "").strip(),
+        }))
+    return rows
+
+
+def _validate_timesheet_jobs_from_post(request, timesheet, work_dates):
+    errors = []
+    for work_date in work_dates:
+        for row_order, _prefix, row in _posted_time_rows(request, timesheet, work_date):
+            job_number = row["job_number"]
+            if not job_number:
+                continue
+            if not valid_time_entry_job_qs().filter(job_number__iexact=job_number).exists():
+                errors.append(
+                    f"{work_date:%m/%d/%Y} row {row_order}: Job '{job_number}' is not available for time entry. Leave Project / Job blank for internal work, or select an available job."
+                )
+    return errors
+
 
 
 
@@ -373,7 +548,7 @@ def _save_timesheet_day_from_post(request, timesheet, work_date):
             qs.delete()
             continue
 
-        job = Job.objects.filter(job_number__iexact=row["job_number"]).first() if row["job_number"] else None
+        job = valid_time_entry_job_qs().filter(job_number__iexact=row["job_number"]).first() if row["job_number"] else None
         work_code = WorkCode.objects.filter(pk=row["work_code"]).first() if row["work_code"] else None
 
         entry, _created = TimeEntry.objects.update_or_create(
@@ -440,14 +615,31 @@ def timesheet_edit(request, pk):
         timesheet.entries_per_day = max(5, min(entries_per_day, 25))
         timesheet.save(update_fields=["entries_per_day", "updated_at"])
 
+        job_errors = _validate_timesheet_jobs_from_post(request, timesheet, timesheet.week_dates)
+        if job_errors:
+            for error in job_errors:
+                messages.error(request, error)
+            grid = build_timesheet_grid(timesheet)
+            return render(request, "timesheets/edit.html", {
+                "timesheet": timesheet,
+                "grid": grid,
+                "work_codes": work_codes,
+                "job_options": _job_options_for_timesheet_forms(),
+            })
+
         for work_date in timesheet.week_dates:
             _save_timesheet_day_from_post(request, timesheet, work_date)
 
         messages.success(request, "Timesheet saved.")
-        return redirect(timesheet)
+        return redirect("timesheet_edit", pk=timesheet.pk)
 
     grid = build_timesheet_grid(timesheet)
-    return render(request, "timesheets/edit.html", {"timesheet": timesheet, "grid": grid, "work_codes": work_codes})
+    return render(request, "timesheets/edit.html", {
+        "timesheet": timesheet,
+        "grid": grid,
+        "work_codes": work_codes,
+        "job_options": _job_options_for_timesheet_forms(),
+    })
 
 
 
@@ -492,11 +684,9 @@ def timesheet_template_download(request):
     return response
 
 
-@login_required
-def timesheet_today(request):
-    """Create/open the current week's timesheet and edit only today's rows."""
-    today = timezone.localdate()
-    week_start = sunday_for(today)
+def _timesheet_day_entry(request, target_date, page_title):
+    """Create/open a week timesheet and edit one target date."""
+    week_start = sunday_for(target_date)
 
     timesheet, created = Timesheet.objects.get_or_create(
         employee=request.user,
@@ -517,7 +707,7 @@ def timesheet_today(request):
         timesheet.save(update_fields=["deleted_at", "deleted_by", "delete_reason", "status", "updated_at"])
 
     if not timesheet.can_edit:
-        messages.error(request, "Today's entries cannot be edited because the current timesheet is locked.")
+        messages.error(request, "This day's entries cannot be edited because the timesheet is locked.")
         return redirect(timesheet)
 
     work_codes = WorkCode.objects.filter(active=True).order_by("display_order", "code")
@@ -527,25 +717,61 @@ def timesheet_today(request):
         timesheet.entries_per_day = max(5, min(entries_per_day, 25))
         timesheet.save(update_fields=["entries_per_day", "updated_at"])
 
-        _save_timesheet_day_from_post(request, timesheet, today)
+        job_errors = _validate_timesheet_jobs_from_post(request, timesheet, [target_date])
+        if job_errors:
+            for error in job_errors:
+                messages.error(request, error)
+            grid = build_timesheet_grid(timesheet)
+            day_grid = next((day for day in grid if day["work_date"] == target_date), None)
+            return render(
+                request,
+                "timesheets/today.html",
+                {
+                    "timesheet": timesheet,
+                    "day": day_grid,
+                    "today": target_date,
+                    "page_title": page_title,
+                    "save_button_label": "Save Yesterday" if "Yesterday" in page_title else "Save Today",
+                    "work_codes": work_codes,
+                    "job_options": _job_options_for_timesheet_forms(),
+                },
+            )
 
-        messages.success(request, "Today's entries were saved.")
-        return redirect("timesheet_today")
+        _save_timesheet_day_from_post(request, timesheet, target_date)
+
+        messages.success(request, f"{page_title} entries were saved.")
+        return redirect(request.resolver_match.url_name)
 
     grid = build_timesheet_grid(timesheet)
-    today_grid = next((day for day in grid if day["work_date"] == today), None)
+    day_grid = next((day for day in grid if day["work_date"] == target_date), None)
 
     return render(
         request,
         "timesheets/today.html",
         {
             "timesheet": timesheet,
-            "day": today_grid,
-            "today": today,
+            "day": day_grid,
+            "today": target_date,
+            "page_title": page_title,
+            "save_button_label": "Save Yesterday" if "Yesterday" in page_title else "Save Today",
             "work_codes": work_codes,
+            "job_options": _job_options_for_timesheet_forms(),
         },
     )
 
+
+@login_required
+def timesheet_today(request):
+    return _timesheet_day_entry(request, timezone.localdate(), "Today's Timesheet")
+
+
+@login_required
+def timesheet_yesterday(request):
+    return _timesheet_day_entry(
+        request,
+        timezone.localdate() - timedelta(days=1),
+        "Yesterday's Timesheet",
+    )
 
 
 @login_required
@@ -666,6 +892,402 @@ def timesheet_today(request):
 
 
 @login_required
+def job_list(request):
+    query = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    active_filter = (request.GET.get("active") or "").strip()
+    year_filter = (request.GET.get("year") or "").strip()
+
+    current_year = timezone.localdate().year
+    if not year_filter:
+        year_filter = str(current_year)
+
+    jobs = Job.objects.select_related("customer").all()
+
+    if year_filter and year_filter != "all":
+        try:
+            jobs = jobs.filter(year=int(year_filter))
+        except ValueError:
+            year_filter = "all"
+
+    if query:
+        jobs = jobs.filter(
+            Q(job_number__icontains=query)
+            | Q(description__icontains=query)
+            | Q(customer__name__icontains=query)
+            | Q(customer_po__icontains=query)
+            | Q(location__icontains=query)
+            | Q(quote_number__icontains=query)
+        )
+
+    if status:
+        jobs = jobs.filter(job_status=status)
+
+    if active_filter == "active":
+        jobs = jobs.filter(active=True)
+    elif active_filter == "inactive":
+        jobs = jobs.filter(active=False)
+
+    sort_field = (request.GET.get("sort") or "job").strip()
+    sort_dir = (request.GET.get("dir") or "desc").strip().lower()
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
+
+    sort_key_map = {
+        "year": lambda job: (job.year or 0, _job_number_sort_key(job)),
+        "month": lambda job: (job.job_month or 0, _job_number_sort_key(job)),
+        "job": lambda job: _job_number_sort_key(job),
+        "description": lambda job: ((job.description or "").lower(), _job_number_sort_key(job)),
+        "customer": lambda job: (((job.customer.name if job.customer else "") or "").lower(), _job_number_sort_key(job)),
+        "status": lambda job: ((job.job_status or "").lower(), _job_number_sort_key(job)),
+        "invoice": lambda job: ((job.invoice_status or "").lower(), _job_number_sort_key(job)),
+        "type": lambda job: ((job.work_type or "").lower(), _job_number_sort_key(job)),
+        "available": lambda job: (job.active, _job_number_sort_key(job)),
+    }
+    if sort_field not in sort_key_map:
+        sort_field = "job"
+
+    jobs = sorted(jobs, key=sort_key_map[sort_field], reverse=(sort_dir == "desc"))
+
+    def make_sort_link(field):
+        params = request.GET.copy()
+        params.pop("page", None)
+        params["sort"] = field
+        params["dir"] = "asc" if sort_field != field or sort_dir == "desc" else "desc"
+        return params.urlencode()
+
+    sort_links = {
+        field: {
+            "url": make_sort_link(field),
+            "active": sort_field == field,
+            "indicator": "▼" if sort_field == field and sort_dir == "desc" else ("▲" if sort_field == field else ""),
+        }
+        for field in sort_key_map
+    }
+
+    year_chip_params = request.GET.copy()
+    year_chip_params.pop("year", None)
+    year_chip_params.pop("page", None)
+    year_chip_query = year_chip_params.urlencode()
+
+    paginator = Paginator(jobs, 50)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    statuses = (
+        Job.objects.exclude(job_status="")
+        .order_by("job_status")
+        .values_list("job_status", flat=True)
+        .distinct()
+    )
+    available_years = (
+        Job.objects.exclude(year__isnull=True)
+        .order_by("-year")
+        .values_list("year", flat=True)
+        .distinct()
+    )
+
+    base_query = request.GET.copy()
+    base_query.pop("page", None)
+    page_query = base_query.urlencode()
+
+    return render(
+        request,
+        "timesheets/jobs/list.html",
+        {
+            "page_obj": page_obj,
+            "query": query,
+            "status": status,
+            "active_filter": active_filter,
+            "year_filter": year_filter,
+            "current_year": current_year,
+            "available_years": available_years,
+            "statuses": statuses,
+            "page_query": page_query,
+        },
+    )
+
+
+@login_required
+def job_import(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can import jobs.")
+        return redirect("job_list")
+
+    if request.method == "POST":
+        form = JobListImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            import_record = form.save(commit=False)
+            import_record.created_by = request.user
+            import_record.original_filename = form.cleaned_data["uploaded_file"].name
+            import_record.status = JobListImport.STATUS_PREVIEWED
+            import_record.save()
+            result = preview_job_import(import_record.uploaded_file.path)
+            import_record.record_result(result)
+            import_record.status = JobListImport.STATUS_FAILED if result.errors else JobListImport.STATUS_PREVIEWED
+            import_record.save()
+            return redirect("job_import_preview", pk=import_record.pk)
+    else:
+        form = JobListImportForm()
+
+    imports = JobListImport.objects.select_related("created_by")[:10]
+    return render(request, "timesheets/jobs/import.html", {"form": form, "imports": imports})
+
+
+@login_required
+def job_import_preview(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can import jobs.")
+        return redirect("job_list")
+
+    import_record = get_object_or_404(JobListImport, pk=pk)
+    unknown_leads = [line for line in import_record.unknown_leads.splitlines() if line]
+    unknown_engineers = [line for line in import_record.unknown_engineers.splitlines() if line]
+    errors = [line for line in import_record.error_message.splitlines() if line]
+
+    return render(
+        request,
+        "timesheets/jobs/import_preview.html",
+        {
+            "import_record": import_record,
+            "unknown_leads": unknown_leads,
+            "unknown_engineers": unknown_engineers,
+            "errors": errors,
+        },
+    )
+
+
+@login_required
+def job_import_apply(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can import jobs.")
+        return redirect("job_list")
+    if request.method != "POST":
+        return redirect("job_import_preview", pk=pk)
+
+    import_record = get_object_or_404(JobListImport, pk=pk)
+    result = apply_job_import(
+        import_record.uploaded_file.path,
+        user=request.user,
+        source_name=import_record.original_filename,
+    )
+    import_record.record_result(result)
+    import_record.status = JobListImport.STATUS_FAILED if result.errors else JobListImport.STATUS_APPLIED
+    if not result.errors:
+        import_record.applied_at = timezone.now()
+    import_record.save()
+
+    if result.errors:
+        messages.error(request, "Job import failed. Review the errors below.")
+        return redirect("job_import_preview", pk=import_record.pk)
+
+    messages.success(request, f"Job import applied. Added {result.added}, updated {result.updated}, unchanged {result.unchanged}.")
+    return redirect("job_list")
+
+
+@login_required
+def job_create(request):
+    if request.method == "POST":
+        form = JobForm(request.POST)
+        if form.is_valid():
+            job = form.save()
+            messages.success(request, f"Job {job.job_number} created.")
+            return redirect("job_list")
+    else:
+        form = JobForm(initial={"job_status": Job.STATUS_UNKNOWN, "active": True})
+
+    return render(request, "timesheets/jobs/form.html", {"form": form, "job": None})
+
+
+@login_required
+def job_edit(request, pk):
+    job = get_object_or_404(Job, pk=pk)
+
+    if request.method == "POST":
+        form = JobForm(request.POST, instance=job)
+        if form.is_valid():
+            job = form.save()
+            messages.success(request, f"Job {job.job_number} updated.")
+            return redirect("job_list")
+    else:
+        form = JobForm(instance=job)
+
+    return render(request, "timesheets/jobs/form.html", {"form": form, "job": job})
+
+
+
+@login_required
+def active_project_list(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can view active projects.")
+        return redirect("timesheet_list")
+
+    projects = ActiveProject.objects.filter(active=True).order_by("job_number")
+    rows = []
+
+    for project in projects:
+        billed_hours = _hours_for_job_number(project.job_number)
+        remaining_hours = project.budgeted_hours - billed_hours
+        percent_used = 0
+
+        if project.budgeted_hours:
+            percent_used = billed_hours / project.budgeted_hours * 100
+
+        rows.append({
+            "project": project,
+            "billed_hours": billed_hours,
+            "remaining_hours": remaining_hours,
+            "percent_used": percent_used,
+        })
+
+    return render(request, "timesheets/active_projects/list.html", {"rows": rows})
+
+
+
+@login_required
+def active_project_detail(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can view project statistics.")
+        return redirect("timesheet_list")
+
+    project = get_object_or_404(ActiveProject, pk=pk)
+
+    entries = (
+        TimeEntry.objects.filter(
+            Q(job_number__iexact=project.job_number) | Q(job__job_number__iexact=project.job_number),
+            timesheet__deleted_at__isnull=True,
+        )
+        .exclude(timesheet__status=Timesheet.Status.VOID)
+        .select_related("timesheet", "timesheet__employee", "work_code")
+        .order_by("work_date", "timesheet__employee__last_name", "timesheet__employee__first_name", "row_order")
+    )
+
+    employee_totals = {}
+    detail_rows = []
+    total_regular = 0
+    total_overtime = 0
+    total_doubletime = 0
+    total_billed = 0
+
+    for entry in entries:
+        regular = entry.regular_hours or 0
+        overtime = entry.overtime_hours or 0
+        doubletime = entry.doubletime_hours or 0
+        total = regular + overtime + doubletime
+
+        total_regular += regular
+        total_overtime += overtime
+        total_doubletime += doubletime
+        total_billed += total
+
+        employee = entry.timesheet.employee
+        employee_name = employee.get_full_name() or employee.get_username()
+
+        if employee_name not in employee_totals:
+            employee_totals[employee_name] = {
+                "employee_name": employee_name,
+                "regular_hours": 0,
+                "overtime_hours": 0,
+                "doubletime_hours": 0,
+                "total_hours": 0,
+            }
+
+        employee_totals[employee_name]["regular_hours"] += regular
+        employee_totals[employee_name]["overtime_hours"] += overtime
+        employee_totals[employee_name]["doubletime_hours"] += doubletime
+        employee_totals[employee_name]["total_hours"] += total
+
+        detail_rows.append({
+            "work_date": entry.work_date,
+            "employee_name": employee_name,
+            "regular_hours": regular,
+            "overtime_hours": overtime,
+            "doubletime_hours": doubletime,
+            "total_hours": total,
+            "work_code": entry.work_code,
+            "description": entry.description,
+            "timesheet": entry.timesheet,
+        })
+
+    employee_rows = sorted(
+        employee_totals.values(),
+        key=lambda row: (-row["total_hours"], row["employee_name"]),
+    )
+
+    remaining_hours = project.budgeted_hours - total_billed
+    percent_used = (total_billed / project.budgeted_hours * 100) if project.budgeted_hours else 0
+
+    return render(
+        request,
+        "timesheets/active_projects/detail.html",
+        {
+            "project": project,
+            "total_regular": total_regular,
+            "total_overtime": total_overtime,
+            "total_doubletime": total_doubletime,
+            "total_billed": total_billed,
+            "remaining_hours": remaining_hours,
+            "percent_used": percent_used,
+            "employee_rows": employee_rows,
+            "detail_rows": detail_rows,
+        },
+    )
+
+
+@login_required
+def active_project_create(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can create active projects.")
+        return redirect("timesheet_list")
+
+    if request.method == "POST":
+        form = ActiveProjectForm(request.POST)
+
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.created_by = request.user
+            project.updated_by = request.user
+            project.save()
+            messages.success(request, "Active project saved.")
+            return redirect("active_project_list")
+    else:
+        form = ActiveProjectForm(initial={"active": True})
+
+    return render(
+        request,
+        "timesheets/active_projects/form.html",
+        {"form": form, "project": None, "job_options": _job_options_for_timesheet_forms()},
+    )
+
+
+@login_required
+def active_project_edit(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can edit active projects.")
+        return redirect("timesheet_list")
+
+    project = get_object_or_404(ActiveProject, pk=pk)
+
+    if request.method == "POST":
+        form = ActiveProjectForm(request.POST, instance=project)
+
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.updated_by = request.user
+            project.save()
+            messages.success(request, "Active project updated.")
+            return redirect("active_project_list")
+    else:
+        form = ActiveProjectForm(instance=project)
+
+    return render(
+        request,
+        "timesheets/active_projects/form.html",
+        {"form": form, "project": project, "job_options": _job_options_for_timesheet_forms()},
+    )
+
+
+
+@login_required
 def timesheet_bulk_zip_upload_status(request, job_pk):
     job = get_object_or_404(BulkImportJob, pk=job_pk, employee=request.user)
     return render(request, "timesheets/bulk_zip_upload_status.html", {"job": job})
@@ -705,58 +1327,357 @@ def timesheet_template_download(request):
 
 @login_required
 def timesheet_today(request):
-    """Create/open the current week's timesheet and edit only today's rows."""
-    today = timezone.localdate()
-    week_start = sunday_for(today)
+    return _timesheet_day_entry(request, timezone.localdate(), "Today's Timesheet")
 
-    timesheet, created = Timesheet.objects.get_or_create(
-        employee=request.user,
-        week_start=week_start,
-        defaults={
-            "entries_per_day": 5,
-            "template_entries_per_day": 5,
-            "mileage_rate": MileageRate.rate_for_date(week_start),
-            "status": Timesheet.Status.DRAFT,
-        },
+
+@login_required
+def timesheet_yesterday(request):
+    return _timesheet_day_entry(
+        request,
+        timezone.localdate() - timedelta(days=1),
+        "Yesterday's Timesheet",
     )
 
-    if timesheet.deleted_at is not None:
-        timesheet.deleted_at = None
-        timesheet.deleted_by = None
-        timesheet.delete_reason = ""
-        timesheet.status = Timesheet.Status.DRAFT
-        timesheet.save(update_fields=["deleted_at", "deleted_by", "delete_reason", "status", "updated_at"])
 
-    if not timesheet.can_edit:
-        messages.error(request, "Today's entries cannot be edited because the current timesheet is locked.")
-        return redirect(timesheet)
+@login_required
+def job_list(request):
+    query = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    active_filter = (request.GET.get("active") or "").strip()
+    year_filter = (request.GET.get("year") or "").strip()
 
-    work_codes = WorkCode.objects.filter(active=True).order_by("display_order", "code")
+    current_year = timezone.localdate().year
+    if not year_filter:
+        year_filter = str(current_year)
 
-    if request.method == "POST":
-        entries_per_day = int(request.POST.get("entries_per_day") or timesheet.entries_per_day or 5)
-        timesheet.entries_per_day = max(5, min(entries_per_day, 25))
-        timesheet.save(update_fields=["entries_per_day", "updated_at"])
+    jobs = Job.objects.select_related("customer").all()
 
-        _save_timesheet_day_from_post(request, timesheet, today)
+    if year_filter and year_filter != "all":
+        try:
+            jobs = jobs.filter(year=int(year_filter))
+        except ValueError:
+            year_filter = "all"
 
-        messages.success(request, "Today's entries were saved.")
-        return redirect("timesheet_today")
+    if query:
+        jobs = jobs.filter(
+            Q(job_number__icontains=query)
+            | Q(description__icontains=query)
+            | Q(customer__name__icontains=query)
+            | Q(customer_po__icontains=query)
+            | Q(location__icontains=query)
+            | Q(quote_number__icontains=query)
+        )
 
-    grid = build_timesheet_grid(timesheet)
-    today_grid = next((day for day in grid if day["work_date"] == today), None)
+    if status:
+        jobs = jobs.filter(job_status=status)
+
+    if active_filter == "active":
+        jobs = jobs.filter(active=True)
+    elif active_filter == "inactive":
+        jobs = jobs.filter(active=False)
+
+    sort_field = (request.GET.get("sort") or "job").strip()
+    sort_dir = (request.GET.get("dir") or "desc").strip().lower()
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
+
+    sort_key_map = {
+        "year": lambda job: (job.year or 0, _job_number_sort_key(job)),
+        "month": lambda job: (job.job_month or 0, _job_number_sort_key(job)),
+        "job": lambda job: _job_number_sort_key(job),
+        "description": lambda job: ((job.description or "").lower(), _job_number_sort_key(job)),
+        "customer": lambda job: (((job.customer.name if job.customer else "") or "").lower(), _job_number_sort_key(job)),
+        "status": lambda job: ((job.job_status or "").lower(), _job_number_sort_key(job)),
+        "invoice": lambda job: ((job.invoice_status or "").lower(), _job_number_sort_key(job)),
+        "type": lambda job: ((job.work_type or "").lower(), _job_number_sort_key(job)),
+        "available": lambda job: (job.active, _job_number_sort_key(job)),
+    }
+    if sort_field not in sort_key_map:
+        sort_field = "job"
+
+    jobs = sorted(jobs, key=sort_key_map[sort_field], reverse=(sort_dir == "desc"))
+
+    def make_sort_link(field):
+        params = request.GET.copy()
+        params.pop("page", None)
+        params["sort"] = field
+        params["dir"] = "asc" if sort_field != field or sort_dir == "desc" else "desc"
+        return params.urlencode()
+
+    sort_links = {
+        field: {
+            "url": make_sort_link(field),
+            "active": sort_field == field,
+            "indicator": "▼" if sort_field == field and sort_dir == "desc" else ("▲" if sort_field == field else ""),
+        }
+        for field in sort_key_map
+    }
+
+    year_chip_params = request.GET.copy()
+    year_chip_params.pop("year", None)
+    year_chip_params.pop("page", None)
+    year_chip_query = year_chip_params.urlencode()
+
+    paginator = Paginator(jobs, 50)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    statuses = (
+        Job.objects.exclude(job_status="")
+        .order_by("job_status")
+        .values_list("job_status", flat=True)
+        .distinct()
+    )
+    available_years = (
+        Job.objects.exclude(year__isnull=True)
+        .order_by("-year")
+        .values_list("year", flat=True)
+        .distinct()
+    )
+
+    base_query = request.GET.copy()
+    base_query.pop("page", None)
+    page_query = base_query.urlencode()
 
     return render(
         request,
-        "timesheets/today.html",
+        "timesheets/jobs/list.html",
         {
-            "timesheet": timesheet,
-            "day": today_grid,
-            "today": today,
-            "work_codes": work_codes,
+            "page_obj": page_obj,
+            "query": query,
+            "status": status,
+            "active_filter": active_filter,
+            "year_filter": year_filter,
+            "current_year": current_year,
+            "available_years": available_years,
+            "statuses": statuses,
+            "page_query": page_query,
+            "sort_links": sort_links,
+            "sort_field": sort_field,
+            "sort_dir": sort_dir,
+            "year_chip_query": year_chip_query,
         },
     )
 
+
+@login_required
+def job_create(request):
+    if request.method == "POST":
+        form = JobForm(request.POST)
+        if form.is_valid():
+            job = form.save()
+            messages.success(request, f"Job {job.job_number} created.")
+            return redirect("job_list")
+    else:
+        form = JobForm(initial={"job_status": Job.STATUS_UNKNOWN, "active": True})
+
+    return render(request, "timesheets/jobs/form.html", {"form": form, "job": None})
+
+
+@login_required
+def job_edit(request, pk):
+    job = get_object_or_404(Job, pk=pk)
+
+    if request.method == "POST":
+        form = JobForm(request.POST, instance=job)
+        if form.is_valid():
+            job = form.save()
+            messages.success(request, f"Job {job.job_number} updated.")
+            return redirect("job_list")
+    else:
+        form = JobForm(instance=job)
+
+    return render(request, "timesheets/jobs/form.html", {"form": form, "job": job})
+
+
+
+@login_required
+def active_project_list(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can view active projects.")
+        return redirect("timesheet_list")
+
+    projects = ActiveProject.objects.filter(active=True).order_by("job_number")
+    rows = []
+
+    for project in projects:
+        billed_hours = _hours_for_job_number(project.job_number)
+        remaining_hours = project.budgeted_hours - billed_hours
+        percent_used = 0
+
+        if project.budgeted_hours:
+            percent_used = billed_hours / project.budgeted_hours * 100
+
+        rows.append({
+            "project": project,
+            "billed_hours": billed_hours,
+            "remaining_hours": remaining_hours,
+            "percent_used": percent_used,
+        })
+
+    return render(request, "timesheets/active_projects/list.html", {"rows": rows})
+
+
+
+@login_required
+def active_project_detail(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can view project statistics.")
+        return redirect("timesheet_list")
+
+    project = get_object_or_404(ActiveProject, pk=pk)
+
+    entries = (
+        TimeEntry.objects.filter(
+            Q(job_number__iexact=project.job_number) | Q(job__job_number__iexact=project.job_number),
+            timesheet__deleted_at__isnull=True,
+        )
+        .exclude(timesheet__status=Timesheet.Status.VOID)
+        .select_related("timesheet", "timesheet__employee", "work_code")
+        .order_by("work_date", "timesheet__employee__last_name", "timesheet__employee__first_name", "row_order")
+    )
+
+    employee_totals = {}
+    detail_rows = []
+    total_regular = 0
+    total_overtime = 0
+    total_doubletime = 0
+    total_billed = 0
+
+    for entry in entries:
+        regular = entry.regular_hours or 0
+        overtime = entry.overtime_hours or 0
+        doubletime = entry.doubletime_hours or 0
+        total = regular + overtime + doubletime
+
+        total_regular += regular
+        total_overtime += overtime
+        total_doubletime += doubletime
+        total_billed += total
+
+        employee = entry.timesheet.employee
+        employee_name = employee.get_full_name() or employee.get_username()
+
+        if employee_name not in employee_totals:
+            employee_totals[employee_name] = {
+                "employee_name": employee_name,
+                "regular_hours": 0,
+                "overtime_hours": 0,
+                "doubletime_hours": 0,
+                "total_hours": 0,
+            }
+
+        employee_totals[employee_name]["regular_hours"] += regular
+        employee_totals[employee_name]["overtime_hours"] += overtime
+        employee_totals[employee_name]["doubletime_hours"] += doubletime
+        employee_totals[employee_name]["total_hours"] += total
+
+        detail_rows.append({
+            "work_date": entry.work_date,
+            "employee_name": employee_name,
+            "regular_hours": regular,
+            "overtime_hours": overtime,
+            "doubletime_hours": doubletime,
+            "total_hours": total,
+            "work_code": entry.work_code,
+            "description": entry.description,
+            "timesheet": entry.timesheet,
+        })
+
+    employee_rows = sorted(
+        employee_totals.values(),
+        key=lambda row: (-row["total_hours"], row["employee_name"]),
+    )
+
+    remaining_hours = project.budgeted_hours - total_billed
+    percent_used = (total_billed / project.budgeted_hours * 100) if project.budgeted_hours else 0
+
+    return render(
+        request,
+        "timesheets/active_projects/detail.html",
+        {
+            "project": project,
+            "total_regular": total_regular,
+            "total_overtime": total_overtime,
+            "total_doubletime": total_doubletime,
+            "total_billed": total_billed,
+            "remaining_hours": remaining_hours,
+            "percent_used": percent_used,
+            "employee_rows": employee_rows,
+            "detail_rows": detail_rows,
+        },
+    )
+
+
+@login_required
+def active_project_create(request):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can create active projects.")
+        return redirect("timesheet_list")
+
+    if request.method == "POST":
+        form = ActiveProjectForm(request.POST)
+
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.created_by = request.user
+            project.updated_by = request.user
+            project.save()
+            messages.success(request, "Active project saved.")
+            return redirect("active_project_list")
+    else:
+        form = ActiveProjectForm(initial={"active": True})
+
+    return render(
+        request,
+        "timesheets/active_projects/form.html",
+        {"form": form, "project": None, "job_options": _job_options_for_timesheet_forms()},
+    )
+
+
+@login_required
+def active_project_edit(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can edit active projects.")
+        return redirect("timesheet_list")
+
+    project = get_object_or_404(ActiveProject, pk=pk)
+
+    if request.method == "POST":
+        form = ActiveProjectForm(request.POST, instance=project)
+
+        if form.is_valid():
+            project = form.save(commit=False)
+            project.updated_by = request.user
+            project.save()
+            messages.success(request, "Active project updated.")
+            return redirect("active_project_list")
+    else:
+        form = ActiveProjectForm(instance=project)
+
+    return render(
+        request,
+        "timesheets/active_projects/form.html",
+        {"form": form, "project": project, "job_options": _job_options_for_timesheet_forms()},
+    )
+
+
+
+@login_required
+def active_project_remove(request, pk):
+    if not is_project_manager(request.user):
+        messages.error(request, "Only project managers can remove active projects.")
+        return redirect("timesheet_list")
+
+    project = get_object_or_404(ActiveProject, pk=pk)
+
+    if request.method != "POST":
+        messages.error(request, "Use the Remove button to remove an active project.")
+        return redirect("active_project_list")
+
+    job_number = project.job_number
+    project.delete()
+    messages.success(request, f"{job_number} was removed from your active project list.")
+    return redirect("active_project_list")
 
 
 @login_required
@@ -775,6 +1696,75 @@ def timesheet_bulk_zip_upload_status_api(request, job_pk):
 
 
 
+
+@login_required
+def invalid_job_cleanup(request):
+    if not is_management_staff(request.user):
+        messages.error(request, "Only management staff can clean up invalid jobs.")
+        return redirect("job_list")
+
+    invalid_jobs = []
+    jobs = Job.objects.filter(description="").order_by("job_number")
+    for job in jobs:
+        entries = TimeEntry.objects.filter(Q(job=job) | Q(job_number__iexact=job.job_number))
+        invalid_jobs.append({
+            "job": job,
+            "entry_count": entries.count(),
+            "first_date": entries.order_by("work_date").values_list("work_date", flat=True).first(),
+            "last_date": entries.order_by("-work_date").values_list("work_date", flat=True).first(),
+        })
+
+    valid_jobs = valid_time_entry_job_qs().order_by("job_number")
+
+    return render(
+        request,
+        "timesheets/jobs/invalid_cleanup.html",
+        {
+            "invalid_jobs": invalid_jobs,
+            "valid_jobs": valid_jobs,
+        },
+    )
+
+
+@login_required
+def invalid_job_cleanup_apply(request, pk):
+    if not is_management_staff(request.user):
+        messages.error(request, "Only management staff can clean up invalid jobs.")
+        return redirect("job_list")
+    if request.method != "POST":
+        return redirect("invalid_job_cleanup")
+
+    invalid_job = get_object_or_404(Job, pk=pk, description="")
+    action = (request.POST.get("action") or "").strip()
+    replacement_number = (request.POST.get("replacement_job_number") or "").strip()
+
+    entries = TimeEntry.objects.filter(Q(job=invalid_job) | Q(job_number__iexact=invalid_job.job_number))
+    entry_count = entries.count()
+
+    if action == "clear":
+        entries.update(job=None, job_number="")
+        invalid_job.delete()
+        messages.success(request, f"Cleared job {invalid_job.job_number} from {entry_count} time entries and deleted the invalid job record.")
+        return redirect("invalid_job_cleanup")
+
+    if action == "reassign":
+        replacement = valid_time_entry_job_qs().filter(job_number__iexact=replacement_number).first()
+        if replacement is None:
+            messages.error(request, "Choose a valid replacement job that is available for time entry.")
+            return redirect("invalid_job_cleanup")
+        if replacement.pk == invalid_job.pk:
+            messages.error(request, "Replacement job cannot be the same invalid job.")
+            return redirect("invalid_job_cleanup")
+        entries.update(job=replacement, job_number=replacement.job_number)
+        old_number = invalid_job.job_number
+        invalid_job.delete()
+        messages.success(request, f"Reassigned {entry_count} time entries from {old_number} to {replacement.job_number} and deleted the invalid job record.")
+        return redirect("invalid_job_cleanup")
+
+    messages.error(request, "Choose whether to reassign or clear this invalid job.")
+    return redirect("invalid_job_cleanup")
+
+
 @login_required
 def timesheet_upload(request):
     if request.method == "POST":
@@ -783,6 +1773,15 @@ def timesheet_upload(request):
             upload = form.save(commit=False)
             upload.employee = request.user
             upload.save()
+
+            invalid_jobs = find_invalid_time_entry_job_numbers(upload.uploaded_file.path)
+            if invalid_jobs:
+                upload.status = "pending"
+                upload.message = "Import needs job number corrections."
+                upload.save(update_fields=["status", "message"])
+                messages.warning(request, "Please correct invalid job numbers before the timesheet is imported.")
+                return redirect("timesheet_upload_job_corrections", upload_pk=upload.pk)
+
             try:
                 timesheet = import_timesheet_upload(upload)
             except Exception as exc:
@@ -797,6 +1796,76 @@ def timesheet_upload(request):
         form = TimesheetImportForm()
     return render(request, "timesheets/upload.html", {"form": form})
 
+
+@login_required
+def timesheet_upload_job_corrections(request, upload_pk):
+    upload = get_object_or_404(TimesheetImport, pk=upload_pk, employee=request.user)
+    invalid_jobs = find_invalid_time_entry_job_numbers(upload.uploaded_file.path)
+
+    if not invalid_jobs:
+        messages.info(request, "No invalid job numbers were found. Continuing import.")
+        try:
+            timesheet = import_timesheet_upload(upload)
+        except Exception as exc:
+            upload.status = "failed"
+            upload.message = str(exc)
+            upload.save(update_fields=["status", "message"])
+            messages.error(request, f"Import failed: {exc}")
+            return redirect("timesheet_upload")
+        messages.success(request, upload.message)
+        return redirect(timesheet)
+
+    valid_jobs = valid_time_entry_job_qs().order_by("job_number")
+    invalid_items = [
+        {
+            "index": index,
+            "job_number": job_number,
+            "count": data["count"],
+            "descriptions": data["descriptions"],
+        }
+        for index, (job_number, data) in enumerate(sorted(invalid_jobs.items()), start=1)
+    ]
+
+    if request.method == "POST":
+        corrections = {}
+        has_errors = False
+        for item in invalid_items:
+            field_name = f"correction_{item['index']}"
+            correction = (request.POST.get(field_name) or "").strip()
+            if not correction:
+                messages.error(request, f"Choose a correction for job {item['job_number']}.")
+                has_errors = True
+                continue
+            if correction == "__CLEAR__":
+                corrections[item["job_number"]] = ""
+                continue
+            if not valid_jobs.filter(job_number__iexact=correction).exists():
+                messages.error(request, f"Replacement job {correction} is not available for time entry.")
+                has_errors = True
+                continue
+            corrections[item["job_number"]] = correction
+
+        if not has_errors:
+            try:
+                timesheet = import_timesheet_upload(upload, job_corrections=corrections)
+            except Exception as exc:
+                upload.status = "failed"
+                upload.message = str(exc)
+                upload.save(update_fields=["status", "message"])
+                messages.error(request, f"Import failed: {exc}")
+                return redirect("timesheet_upload")
+            messages.success(request, upload.message)
+            return redirect(timesheet)
+
+    return render(
+        request,
+        "timesheets/upload_job_corrections.html",
+        {
+            "upload": upload,
+            "invalid_items": invalid_items,
+            "valid_jobs": valid_jobs,
+        },
+    )
 
 @login_required
 def timesheet_download(request, pk):
@@ -832,27 +1901,42 @@ def timesheet_submit(request, pk):
     if not timesheet.can_submit:
         messages.error(request, "Only draft, rejected, or reopened timesheets can be submitted.")
         return redirect(timesheet)
-    if request.method == "POST":
-        form = TimesheetSubmitForm(request.POST, timesheet=timesheet)
-        if form.is_valid():
-            requested_format = form.cleaned_data["export_format"]
-        else:
-            # Be defensive: if the browser did not send a selected radio value,
-            # choose the safest valid export instead of returning the HTML form.
-            requested_format = Timesheet.ExportFormat.PDF if not timesheet.can_export_excel else Timesheet.ExportFormat.EXCEL
 
+    if request.method == "POST":
         try:
-            artifact = submit_timesheet(timesheet, request.user, requested_format)
+            submitted_timesheet = submit_timesheet(timesheet, request.user)
         except Exception as exc:
             messages.error(request, f"Submit failed: {exc}")
             return redirect(timesheet)
-        # end try
 
-        return redirect("timesheet_submitted_download", artifact_pk=artifact.pk)
-    # end if
+        try:
+            send_timesheet_submitted_supervisor_email(submitted_timesheet, request.user)
+        except Exception as exc:
+            messages.warning(
+                request,
+                f"Timesheet submitted, but the supervisor notification email could not be sent: {exc}",
+            )
 
-    form = TimesheetSubmitForm(timesheet=timesheet)
-    return render(request, "timesheets/submit.html", {"timesheet": timesheet, "form": form})
+        messages.success(request, "Timesheet submitted successfully. Your supervisor has been notified.")
+        return redirect("timesheet_submitted", pk=submitted_timesheet.pk)
+
+    return render(request, "timesheets/submit.html", {"timesheet": timesheet})
+
+
+@login_required
+def timesheet_submitted(request, pk):
+    timesheet = get_timesheet_for_request_user(request, pk)
+    if timesheet.status == Timesheet.Status.DRAFT:
+        return redirect(timesheet)
+
+    return render(
+        request,
+        "timesheets/submitted_download.html",
+        {
+            "timesheet": timesheet,
+            "redirect_url": timesheet.get_absolute_url(),
+        },
+    )
 
 
 
@@ -917,6 +2001,53 @@ def timesheet_artifact_download(request, artifact_pk):
 
 
 @login_required
+def timesheet_package_download(request, pk):
+    timesheet = get_timesheet_for_request_user(request, pk)
+
+    if not timesheet.can_export_excel:
+        messages.error(
+            request,
+            "Package download requires Excel export, but this timesheet has more than 5 entries on at least one date. Please download the PDF instead.",
+        )
+        return redirect("timesheet_submitted", pk=timesheet.pk)
+
+    try:
+        excel_artifact = create_timesheet_artifact(
+            timesheet=timesheet,
+            created_by=request.user,
+            export_format=Timesheet.ExportFormat.EXCEL,
+            submitted=False,
+        )
+        pdf_artifact = create_timesheet_artifact(
+            timesheet=timesheet,
+            created_by=request.user,
+            export_format=Timesheet.ExportFormat.PDF,
+            submitted=False,
+        )
+        receipts_pdf_bytes = build_receipts_pdf_bytes(timesheet)
+    except Exception as exc:
+        messages.error(request, f"Package download failed: {exc}")
+        return redirect("timesheet_submitted", pk=timesheet.pk)
+
+    base_filename = _timesheet_download_base_filename(timesheet)
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        with excel_artifact.file.open("rb") as excel_file:
+            zip_file.writestr(f"{base_filename}.xlsx", excel_file.read())
+        with pdf_artifact.file.open("rb") as pdf_file:
+            zip_file.writestr(f"{base_filename}.pdf", pdf_file.read())
+        zip_file.writestr(f"{base_filename}_Receipts.pdf", receipts_pdf_bytes)
+
+    zip_bytes = zip_buffer.getvalue()
+    response = HttpResponse(zip_bytes, content_type="application/zip")
+    response["Content-Length"] = str(len(zip_bytes))
+    response["Content-Disposition"] = f'attachment; filename="{base_filename}.zip"'
+    response["Cache-Control"] = "no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@login_required
 def timesheet_receipt_upload(request, pk):
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
 
@@ -962,6 +2093,27 @@ def timesheet_receipt_download(request, receipt_pk):
         as_attachment=False,
         filename=receipt.filename(),
     )
+    response["Cache-Control"] = "no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@login_required
+def timesheet_receipts_pdf(request, pk):
+    timesheet = get_object_or_404(
+        Timesheet.objects.select_related("employee"),
+        pk=pk,
+        deleted_at__isnull=True,
+    )
+
+    if not can_view_timesheet(request.user, timesheet):
+        raise Http404()
+
+    pdf_bytes = build_receipts_pdf_bytes(timesheet)
+    filename = receipts_pdf_filename(timesheet)
+
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
     response["Cache-Control"] = "no-store"
     response["X-Content-Type-Options"] = "nosniff"
     return response
@@ -1026,11 +2178,21 @@ def timesheet_reopen(request, pk):
         form = TimesheetReopenForm(request.POST)
         if form.is_valid():
             try:
-                reopen_timesheet(timesheet, request.user, form.cleaned_data["reason"])
+                reopened_timesheet = reopen_timesheet(timesheet, request.user, form.cleaned_data["reason"])
             except Exception as exc:
                 messages.error(request, f"Reopen failed: {exc}")
                 return redirect(timesheet)
-            messages.success(request, "Timesheet reopened. You can now make corrections and resubmit it.")
+
+            try:
+                send_timesheet_reopened_email(reopened_timesheet, request.user)
+            except Exception as exc:
+                messages.warning(
+                    request,
+                    f"Timesheet reopened, but the admin notification email could not be sent: {exc}",
+                )
+            else:
+                messages.success(request, "Timesheet reopened and admin team notified.")
+
             return redirect("timesheet_edit", pk=timesheet.pk)
     else:
         form = TimesheetReopenForm()
@@ -1046,11 +2208,37 @@ def timesheet_approve(request, pk):
     if request.method != "POST":
         return redirect(timesheet)
     try:
-        approve_timesheet(timesheet, request.user)
+        approved_timesheet = approve_timesheet(timesheet, request.user)
     except Exception as exc:
         messages.error(request, f"Approve failed: {exc}")
     else:
-        messages.success(request, "Timesheet approved.")
+        admin_email_sent = True
+        employee_email_sent = True
+
+        try:
+            send_timesheet_approved_email(approved_timesheet, request.user)
+        except Exception:
+            admin_email_sent = False
+            messages.warning(
+                request,
+                "Timesheet approved, but the approval email could not be sent. "
+                "Please download the Excel timesheet file and any receipts and manually email them to the admin team.",
+            )
+
+        try:
+            send_employee_timesheet_approved_email(approved_timesheet, request.user)
+        except Exception as exc:
+            employee_email_sent = False
+            messages.warning(
+                request,
+                f"Timesheet approved, but the employee approval email could not be sent: {exc}",
+            )
+
+        if admin_email_sent and employee_email_sent:
+            messages.success(request, "Timesheet approved and notification emails sent.")
+        elif admin_email_sent:
+            messages.success(request, "Timesheet approved and admin notification email sent.")
+
     return redirect("timesheet_approvals")
 
 
@@ -1072,7 +2260,20 @@ def timesheet_reject(request, pk):
             except Exception as exc:
                 messages.error(request, f"Reject failed: {exc}")
                 return redirect(timesheet)
-            messages.success(request, "Timesheet rejected and returned to the employee for correction.")
+            try:
+                send_employee_timesheet_rejected_email(
+                    timesheet,
+                    request.user,
+                    form.cleaned_data["reason"],
+                )
+            except Exception as exc:
+                messages.warning(
+                    request,
+                    f"Timesheet rejected, but the employee rejection email could not be sent: {exc}",
+                )
+            else:
+                messages.success(request, "Timesheet rejected and employee notification email sent.")
+
             return redirect("timesheet_approvals")
     else:
         form = TimesheetRejectForm()

@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Week of {{ timesheet.week_start }}</h1>
+    <p class="mb-0 text-muted">
+      Status: {{ timesheet.get_status_display }} ·
+      Rows/date: {{ timesheet.entries_per_day }} ·
+      Weekly Total: {{ weekly_total_hours|floatformat:2 }}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap justify-content-end">
+    {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
+      <a class="btn btn-primary" href="{% url 'timesheet_edit' timesheet.pk %}">Edit</a>
+    {% endif %}
+    <div class="btn-group" role="group" aria-label="Download timesheet">
+      {% if timesheet.can_export_excel %}
+        <a class="btn btn-outline-secondary" href="{% url 'timesheet_download' timesheet.pk %}?format=excel">Download Excel</a>
+      {% else %}
+        <button class="btn btn-outline-secondary" type="button" disabled title="Excel export only works when each date has 5 or fewer time entries.">Download Excel</button>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{% url 'timesheet_download' timesheet.pk %}?format=pdf">Download PDF</a>
+    </div>
+    {% if timesheet.can_submit and timesheet.employee_id == request.user.id %}
+      <a class="btn btn-success" href="{% url 'timesheet_submit' timesheet.pk %}">Submit</a>
+    {% endif %}
+    {% if timesheet.can_reopen and timesheet.employee_id == request.user.id %}
+      <a class="btn btn-warning" href="{% url 'timesheet_reopen' timesheet.pk %}">Reopen for Corrections</a>
+    {% endif %}
+    {% if can_approve_this_timesheet and timesheet.status == timesheet.Status.SUBMITTED %}
+      <form method="post" action="{% url 'timesheet_approve' timesheet.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-success">Approve</button>
+      </form>
+      <a class="btn btn-outline-danger" href="{% url 'timesheet_reject' timesheet.pk %}">Reject</a>
+    {% endif %}
+    {% if is_management_staff and timesheet.status == timesheet.Status.APPROVED %}
+      <form method="post" action="{% url 'timesheet_mark_invoiced' timesheet.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-info">Mark Invoiced</button>
+      </form>
+    {% endif %}
+    {% if timesheet.status != timesheet.Status.INVOICED %}
+      <a class="btn btn-outline-danger" href="{% url 'timesheet_delete' timesheet.pk %}">Delete</a>
+    {% endif %}
+  </div>
+</div>
+{% if timesheet.rejection_reason %}
+<div class="alert alert-danger rounded-4 mb-4">
+  <h2 class="h6 mb-2">Supervisor Rejection Notes</h2>
+
+  {% if timesheet.rejected_by %}
+    <div>
+      <strong>Rejected By:</strong>
+      {{ timesheet.rejected_by.get_full_name|default:timesheet.rejected_by.username }}
+    </div>
+  {% endif %}
+
+  {% if timesheet.rejected_at %}
+    <div>
+      <strong>Rejected At:</strong>
+      {{ timesheet.rejected_at|date:"m/d/Y g:i A" }}
+    </div>
+  {% endif %}
+
+  <div class="mt-3">
+    <strong>Notes:</strong><br>
+    {{ timesheet.rejection_reason|linebreaksbr }}
+  </div>
+</div>
+{% endif %}
+
+{% if not timesheet.can_export_excel %}
+<div class="alert alert-warning rounded-4">This timesheet has more than 5 entries on at least one date, so Excel export is unavailable. PDF submission is supported.</div>
+{% endif %}
+
+{% if timesheet.reopen_reason %}
+<div class="alert alert-info rounded-4">
+  <strong>Reopen reason:</strong> {{ timesheet.reopen_reason }}
+  {% if timesheet.reopened_at %}<br><span class="small text-muted">Reopened {{ timesheet.reopened_at }} by {{ timesheet.reopened_by }}</span>{% endif %}
+</div>
+{% endif %}
+{% if timesheet.approved_at or timesheet.invoiced_at %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-body py-3">
+    {% if timesheet.approved_at %}<div><strong>Approved:</strong> {{ timesheet.approved_at }}{% if timesheet.approved_by %} by {{ timesheet.approved_by }}{% endif %}</div>{% endif %}
+    {% if timesheet.invoiced_at %}<div><strong>Invoiced:</strong> {{ timesheet.invoiced_at }}{% if timesheet.invoiced_by %} by {{ timesheet.invoiced_by }}{% endif %}</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<ul class="nav nav-tabs mb-3" id="timesheetDetailTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="time-tab" data-bs-toggle="tab" data-bs-target="#time-pane" type="button" role="tab" aria-controls="time-pane" aria-selected="true">Time</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="expenses-tab" data-bs-toggle="tab" data-bs-target="#expenses-pane" type="button" role="tab" aria-controls="expenses-pane" aria-selected="false">Expenses</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="parts-tab" data-bs-toggle="tab" data-bs-target="#parts-pane" type="button" role="tab" aria-controls="parts-pane" aria-selected="false">Parts</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="receipts-tab" data-bs-toggle="tab" data-bs-target="#receipts-pane" type="button" role="tab" aria-controls="receipts-pane" aria-selected="false">Receipts</button>
+  </li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="time-pane" role="tabpanel" aria-labelledby="time-tab" tabindex="0">
+    {% for day in grid %}
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
+        <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          <span class="badge text-bg-light">
+            Daily Totals:
+            Reg {{ day.total_regular|floatformat:2 }} |
+            OT {{ day.total_overtime|floatformat:2 }} |
+            DT {{ day.total_doubletime|floatformat:2 }} |
+            Total {{ day.total_hours|floatformat:2 }}
+          </span>
+          <span class="badge {% if day.overnight_stay %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+            Hotel overnight stay: {{ day.overnight_stay|yesno:"Yes,No" }}
+          </span>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
+          <thead>
+            <tr>
+              <th style="width: 3rem">#</th>
+              <th style="min-width: 6rem">Job #</th>
+              <th style="min-width: 6rem">Work Code</th>
+              <th class="hours-col text-end">Reg</th>
+              <th class="hours-col text-end">OT</th>
+              <th class="hours-col text-end">DT</th>
+              <th class="description-col">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in day.rows %}
+            {% with entry=row.entry %}
+            <tr class="{% if not entry %}blank-timesheet-row{% endif %}">
+              <td>{{ row.row_order }}</td>
+              <td>{% if entry %}{{ entry.job_display }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry and entry.work_code %}{{ entry.work_code.code }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry %}{{ entry.regular_hours }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry %}{{ entry.overtime_hours }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry %}{{ entry.doubletime_hours }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry %}{{ entry.description }}{% else %}&nbsp;{% endif %}</td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="tab-pane fade" id="expenses-pane" role="tabpanel" aria-labelledby="expenses-tab" tabindex="0">
+    <div class="alert alert-info rounded-4">Expenses are shown in the same date and row order as the time tab. Blank rows are included to match the timesheet form.</div>
+    {% for day in grid %}
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-header bg-body-tertiary rounded-top-4">
+        <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0 timesheet-expense-table">
+          <thead>
+            <tr>
+              <th style="width: 3rem">#</th>
+              <th style="min-width: 10rem">Job #</th>
+              <th class="text-end">Miles</th>
+              <th class="text-end">Mileage</th>
+              <th class="text-end">Per Diem Food</th>
+              <th class="text-end">Air Fare</th>
+              <th class="text-end">Hotel</th>
+              <th class="text-end">Tolls/Parking</th>
+              <th class="text-end">Rental Car/Fuel</th>
+              <th class="text-end">Business Meals</th>
+              <th class="text-end">Other</th>
+              <th class="description-col">Explanation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in day.rows %}
+            {% with entry=row.entry %}
+            <tr class="{% if not entry or not entry.expense %}blank-timesheet-row{% endif %}">
+              <td>{{ row.row_order }}</td>
+              <td>{% if entry %}{{ entry.job_display }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}{{ entry.expense.miles }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.mileage.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.per_diem_food.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.air_fare.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.hotel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.tolls_parking.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.rental_car_fuel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.business_meals.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.expense %}${{ entry.expense.other_expense.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry.expense %}{{ entry.expense.explanation_of_expenses }}{% else %}&nbsp;{% endif %}</td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="tab-pane fade" id="parts-pane" role="tabpanel" aria-labelledby="parts-tab" tabindex="0">
+    <div class="alert alert-info rounded-4">Parts are shown in the same date and row order as the time tab. Blank rows are included to match the timesheet form.</div>
+    {% for day in grid %}
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-header bg-body-tertiary rounded-top-4">
+        <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0 timesheet-parts-table">
+          <thead>
+            <tr>
+              <th style="width: 3rem">#</th>
+              <th style="min-width: 10rem">EE Stock/Job #</th>
+              <th class="text-end">Quantity</th>
+              <th style="min-width: 18rem">Part Description/Part Number</th>
+              <th class="description-col">Additional Notes For Customer</th>
+              <th>Re-Order Part</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in day.rows %}
+            {% with entry=row.entry %}
+            <tr class="{% if not entry or not entry.part_entry %}blank-timesheet-row{% endif %}">
+              <td>{{ row.row_order }}</td>
+              <td>{% if entry.part_entry %}{{ entry.part_entry.job_display }}{% elif entry %}{{ entry.job_display }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end">{% if entry.part_entry %}{{ entry.part_entry.quantity }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry.part_entry %}{{ entry.part_entry.part_description_part_number }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry.part_entry %}{{ entry.part_entry.additional_notes_for_customer }}{% else %}&nbsp;{% endif %}</td>
+              <td>{% if entry.part_entry %}{{ entry.part_entry.reorder_part|yesno:"Yes,No" }}{% else %}&nbsp;{% endif %}</td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="tab-pane fade" id="receipts-pane" role="tabpanel" aria-labelledby="receipts-tab" tabindex="0">
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-header bg-body-tertiary rounded-top-4 d-flex justify-content-between align-items-center">
+        <strong>Receipt Files</strong>
+        <a
+          class="btn btn-sm btn-outline-secondary"
+          href="{% url 'timesheet_receipts_pdf' timesheet.pk %}"
+        >
+          Download Receipts PDF
+        </a>
+      </div>
+      <div class="card-body">
+        {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
+        <form method="post" enctype="multipart/form-data" action="{% url 'timesheet_receipt_upload' timesheet.pk %}" class="mb-4">
+          {% csrf_token %}
+          <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label" for="receipt_files">Receipt files</label>
+              <input class="form-control" type="file" id="receipt_files" name="receipt_files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif">
+              <div class="form-text">You can upload multiple PDFs or images.</div>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label" for="receipt_description">Description</label>
+              <input class="form-control" id="receipt_description" name="receipt_description" placeholder="Optional note for these receipt(s)">
+            </div>
+            <div class="col-md-2">
+              <button class="btn btn-primary w-100" type="submit">Upload</button>
+            </div>
+          </div>
+        </form>
+        {% endif %}
+
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Description</th>
+                <th>Uploaded By</th>
+                <th>Uploaded At</th>
+                <th style="width: 12rem"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for receipt in timesheet.receipts.all %}
+              <tr>
+                <td>{{ receipt.filename }}</td>
+                <td>{{ receipt.description }}</td>
+                <td>{% if receipt.uploaded_by %}{{ receipt.uploaded_by.get_full_name|default:receipt.uploaded_by.username }}{% endif %}</td>
+                <td>{{ receipt.uploaded_at }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'timesheet_receipt_download' receipt.pk %}" target="_blank">View</a>
+                  {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
+                  <form method="post" action="{% url 'timesheet_receipt_delete' receipt.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete this receipt?')">Delete</button>
+                  </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="5" class="text-muted">No receipts have been uploaded for this timesheet.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'accounts',
     'timesheets.apps.TimesheetsConfig',
     'reports',
+    'jobgrid.apps.JobgridConfig',
 ]
 
 MIDDLEWARE = [
@@ -102,3 +103,5 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', '1025'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
+
+SITE_BASE_URL = os.getenv("SITE_BASE_URL", "https://timetrack.ccswi.us")

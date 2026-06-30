@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">Job Import Preview</h1>
+    <p class="text-muted mb-0">{{ import_record.original_filename }}</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'job_import' %}">Back to Import</a>
+</div>
+
+{% if errors %}
+  <div class="alert alert-danger">
+    <strong>Import cannot be applied.</strong>
+    <ul class="mb-0">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-body">
+    <h2 class="h5">Import Summary</h2>
+    <div class="row g-3">
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">New Jobs</div><div class="fs-4">{{ import_record.added_count }}</div></div></div>
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Updated Jobs</div><div class="fs-4">{{ import_record.updated_count }}</div></div></div>
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Unchanged</div><div class="fs-4">{{ import_record.unchanged_count }}</div></div></div>
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Year Rows Ignored</div><div class="fs-4">{{ import_record.ignored_year_row_count }}</div></div></div>
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Blank Rows Ignored</div><div class="fs-4">{{ import_record.ignored_blank_count }}</div></div></div>
+      <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Invalid Rows Ignored</div><div class="fs-4">{{ import_record.ignored_invalid_count }}</div></div></div>
+    </div>
+
+    {% if import_record.status != "applied" and not errors %}
+      <form method="post" action="{% url 'job_import_apply' import_record.pk %}" class="mt-4">
+        {% csrf_token %}
+        <button class="btn btn-success" type="submit">Apply Import</button>
+        <a class="btn btn-outline-secondary" href="{% url 'job_import' %}">Cancel</a>
+      </form>
+    {% elif import_record.status == "applied" %}
+      <div class="alert alert-success mt-4 mb-0">This import was applied {{ import_record.applied_at|date:"m/d/Y g:i A" }}.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if unknown_leads or unknown_engineers %}
+  <div class="card shadow-sm border-0 rounded-4">
+    <div class="card-body">
+      <h2 class="h5">Names Not Matched to Users</h2>
+      <p class="text-muted">These names will stay as text, but will not be linked to a user account.</p>
+      {% if unknown_leads %}
+        <h3 class="h6">Lead</h3>
+        <ul>{% for name in unknown_leads %}<li>{{ name }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if unknown_engineers %}
+        <h3 class="h6">Engineers</h3>
+        <ul>{% for name in unknown_engineers %}<li>{{ name }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

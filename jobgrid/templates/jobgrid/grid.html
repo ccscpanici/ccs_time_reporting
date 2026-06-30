@@ -1,0 +1,98 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Sheet</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+  <link href="{% static 'jobgrid/jobgrid.css' %}" rel="stylesheet">
+</head>
+<body class="sheet-body">
+  <div class="sheet-shell">
+    <aside class="blue-rail">
+      <div class="rail-icon active">⌂<span>Home</span></div>
+      <div class="rail-icon">🔔<span>Notifications</span></div>
+      <div class="rail-icon">🔎<span>Search</span></div>
+      <div class="rail-icon">▣<span>Browse</span></div>
+      <div class="rail-spacer"></div>
+      <div class="rail-icon">＋<span>Create</span></div>
+      <a class="rail-icon" href="{% url 'timesheet_list' %}">↩<span>Time</span></a>
+    </aside>
+
+    <aside class="workspace-pane">
+      <div class="workspace-top">
+        <div class="workspace-badge">▣</div>
+        <div class="workspace-icons">☆ ⋮ ×</div>
+      </div>
+      <h2>Projects</h2>
+      <button class="workspace-add" id="project-add">+ Add to workspace</button>
+      <div class="workspace-section-title">▾ Workspace items</div>
+      <div id="project-list" class="project-list">
+        {% for item in projects %}
+          <button class="project-pill {% if item.id == project.id %}active{% endif %}" data-project-id="{{ item.id }}">▯ {{ item.name }}</button>
+        {% endfor %}
+      </div>
+    </aside>
+
+    <main class="sheet-main">
+      <div class="promo-bar">▣ Project task planning sheet</div>
+
+      <header class="sheet-titlebar">
+        <div class="menu-strip">File&nbsp;&nbsp;&nbsp; Automation&nbsp;&nbsp;&nbsp; Forms&nbsp;&nbsp;&nbsp; Connections&nbsp;&nbsp;&nbsp; Dynamic View</div>
+        <div class="sheet-title-wrap">
+          <span class="sheet-doc-icon">▯</span>
+          <input id="project-name" class="sheet-title-input" value="{{ project.name }}">
+          <span class="star">☆</span>
+        </div>
+        <button class="share-btn">🔒 Share</button>
+      </header>
+
+      <div class="sheet-toolbar">
+        <button class="tool" id="save-order" title="Save row order">💾</button>
+        <button class="tool" onclick="window.print()" title="Print">🖨</button>
+        <span class="tool-muted">↶</span><span class="tool-muted">↷</span>
+        <span class="toolbar-sep"></span>
+        <button class="tool active">▦ Grid</button>
+        <button class="tool" id="filter-toggle">⌯ Filter</button>
+        <span class="toolbar-sep"></span>
+        <button class="tool" id="task-outdent">⇤</button>
+        <button class="tool" id="task-indent">⇥</button>
+        <span class="toolbar-sep"></span>
+        <button class="tool" id="task-add">+ Row</button>
+        <button class="tool" id="child-add">+ Child</button>
+        <button class="tool" id="task-duplicate">Copy</button>
+        <button class="tool danger" id="task-delete">Delete</button>
+        <span class="toolbar-sep"></span>
+        <span class="toolbar-help">Double-click cells to edit. Use Ctrl+C / Ctrl+V. Drag selected rows to move.</span>
+      </div>
+
+      <div class="grid-wrap">
+        <div id="project-sheet-table" class="project-sheet-table"></div>
+      </div>
+    </main>
+
+    <aside class="right-rail">
+      <div>💬</div><div>🔗</div><div>🗂</div><div>B↧</div><div>↻</div><div>⇧</div><div>≋</div><div>☊</div>
+    </aside>
+  </div>
+
+  {{ statuses|json_script:"jobgrid-statuses" }}
+  <script>
+  window.ProjectSheetConfig = {
+    initialProjectId: {{ project.id }},
+    dataUrlTemplate: "{% url 'jobgrid:project_data' 0 %}",
+    createProjectUrl: "{% url 'jobgrid:project_create' %}",
+    updateProjectUrlTemplate: "{% url 'jobgrid:project_update' 0 %}",
+    createTaskUrlTemplate: "{% url 'jobgrid:task_create' 0 %}",
+    updateTaskUrlTemplate: "{% url 'jobgrid:task_update' 0 %}",
+    duplicateTaskUrlTemplate: "{% url 'jobgrid:task_duplicate' 0 %}",
+    deleteTaskUrlTemplate: "{% url 'jobgrid:task_delete' 0 %}",
+    reorderUrlTemplate: "{% url 'jobgrid:task_reorder' 0 %}"
+  };
+  </script>
+  <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+  <script src="{% static 'jobgrid/jobgrid.js' %}"></script>
+</body>
+</html>
