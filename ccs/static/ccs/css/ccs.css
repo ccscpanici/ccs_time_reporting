@@ -1,0 +1,110 @@
+/*
+ * CCS UI Foundation
+ * Shared styles for CCS web applications.
+ *
+ * Keep this file generic.  Page-specific styling should remain in the owning
+ * template/app stylesheet unless it can be reused by Time Reporting and JobGrid.
+ */
+:root {
+  --ccs-status-saved: #198754;
+  --ccs-status-saving: #6c757d;
+  --ccs-status-unsaved: #fd7e14;
+  --ccs-status-error: #dc3545;
+  --ccs-shadow-sm: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.08);
+}
+
+.ccs-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Toast notifications */
+.ccs-toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.ccs-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, rgba(0, 0, 0, 0.175));
+  box-shadow: var(--ccs-shadow-sm);
+  color: var(--bs-body-color, #212529);
+  opacity: 0;
+  transform: translateY(-0.35rem);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: auto;
+}
+
+.ccs-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ccs-toast.is-hiding {
+  opacity: 0;
+  transform: translateY(-0.35rem);
+}
+
+.ccs-toast::before {
+  content: '';
+  flex: 0 0 0.45rem;
+  align-self: stretch;
+  border-radius: 999px;
+  background: var(--bs-secondary, #6c757d);
+}
+
+.ccs-toast-success::before {
+  background: var(--bs-success, #198754);
+}
+
+.ccs-toast-warning::before {
+  background: var(--bs-warning, #ffc107);
+}
+
+.ccs-toast-error::before {
+  background: var(--bs-danger, #dc3545);
+}
+
+.ccs-toast-info::before {
+  background: var(--bs-info, #0dcaf0);
+}
+
+.ccs-toast-message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ccs-toast-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  opacity: 0.65;
+  padding: 0;
+}
+
+.ccs-toast-close:hover,
+.ccs-toast-close:focus {
+  opacity: 1;
+}

@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'timesheets.apps.TimesheetsConfig',
     'reports',
     'jobgrid.apps.JobgridConfig',
+    'ccs.apps.CcsConfig',
 ]
 
 MIDDLEWARE = [

@@ -3,6 +3,7 @@
   lang="en"
   data-bs-theme="{% if ui_preferences and ui_preferences.theme != 'auto' %}{{ ui_preferences.theme }}{% else %}light{% endif %}"
 >
+  {% load static %}
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,7 +12,8 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
       rel="stylesheet"
     >
-    <link href="/static/css/site.css" rel="stylesheet">
+    <link href="{% static 'css/site.css' %}" rel="stylesheet">
+    <link href="{% static 'ccs/css/ccs.css' %}" rel="stylesheet">
   </head>
 
   <body class="scheme-{{ ui_preferences.color_scheme|default:'default' }}">
@@ -135,5 +137,8 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'ccs/js/ccs.js' %}"></script>
+    <script src="{% static 'ccs/js/request.js' %}"></script>
+    <script src="{% static 'ccs/js/toast.js' %}"></script>
   </body>
 </html>
