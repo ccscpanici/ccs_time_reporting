@@ -133,5 +133,15 @@
     LiveForm
   };
 
+  CCS.ready(() => {
+    document
+    .querySelectorAll("form[data-live-form]")
+    .forEach(form => {
+      if (!form._ccsLiveForm) {
+        form._ccsLiveForm = liveForm.attach(form);
+      }
+    });
+  });
+
   CCS.registerModule("liveForm", liveForm, { replace: true });
 })(window, document);
