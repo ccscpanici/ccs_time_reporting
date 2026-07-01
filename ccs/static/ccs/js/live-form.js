@@ -2,7 +2,7 @@
  * CCS LiveForm
  * Reusable form controller for dirty tracking, autosave, and save state.
  */
-(function (window) {
+(function (window, document) {
   "use strict";
 
   const CCS = window.CCS;
@@ -15,6 +15,9 @@
       this.saving = false;
       this.paused = false;
       this.destroyed = false;
+
+      this.handleChange = this.handleChange.bind(this);
+      this.bindEvents();
     }
 
     isDirty() {
@@ -25,14 +28,30 @@
       return this.saving;
     }
 
-    markDirty() {
-      if (this.paused || this.destroyed) return;
-      this.dirty = true;
+    markDirty(field) {
+      if (this.paused || this.destroyed) return this;
+
+      if (!this.dirty) {
+        this.dirty = true;
+
+        CCS.emit("form:dirty", {
+          form: this,
+          field: field || null
+        });
+      }
+
       return this;
     }
 
     markClean() {
-      this.dirty = false;
+      if (this.dirty) {
+        this.dirty = false;
+
+        CCS.emit("form:clean", {
+          form: this
+        });
+      }
+
       return this;
     }
 
@@ -44,6 +63,15 @@
     resume() {
       this.paused = false;
       return this;
+    }
+
+    bindEvents() {
+      this.form.addEventListener("input", this.handleChange);
+      this.form.addEventListener("change", this.handleChange);
+    }
+
+    handleChange(event) {
+      this.markDirty(event.target);
     }
 
     async save() {
@@ -69,6 +97,11 @@
     }
 
     destroy() {
+      if (this.form) {
+        this.form.removeEventListener("input", this.handleChange);
+        this.form.removeEventListener("change", this.handleChange);
+      }
+
       this.pause();
       this.destroyed = true;
       this.form = null;
@@ -100,5 +133,5 @@
     LiveForm
   };
 
-  CCS.registerModule("liveForm", liveForm);
-})(window);
+  CCS.registerModule("liveForm", liveForm, { replace: true });
+})(window, document);
