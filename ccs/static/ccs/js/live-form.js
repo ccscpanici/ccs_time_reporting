@@ -15,6 +15,8 @@
       this.saving = false;
       this.paused = false;
       this.destroyed = false;
+      this.saveTimer = null;
+      this.saveDelay = this.options.saveDelay || 750;
 
       this.handleChange = this.handleChange.bind(this);
       this.bindEvents();
@@ -72,6 +74,19 @@
 
     handleChange(event) {
       this.markDirty(event.target);
+      this.scheduleSave();
+    }
+
+    scheduleSave() {
+      if (this.paused || this.destroyed) return;
+
+      clearTimeout(this.saveTimer);
+
+      this.saveTimer = setTimeout(() => {
+        if (this.isDirty() && !this.isSaving()) {
+          this.save();
+        }
+      }, this.saveDelay);
     }
 
     async save() {
@@ -103,6 +118,7 @@
       }
 
       this.pause();
+      clearTimeout(this.saveTimer);
       this.destroyed = true;
       this.form = null;
       return this;
