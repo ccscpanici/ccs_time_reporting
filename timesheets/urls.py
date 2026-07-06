@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     path("", views.timesheet_list, name="timesheet_list"),
     path("create/", views.timesheet_create, name="timesheet_create"),
+    path("autosave/", views.timesheet_autosave, name="timesheet_autosave"),
     path("today/", views.timesheet_today, name="timesheet_today"),
     path("yesterday/", views.timesheet_yesterday, name="timesheet_yesterday"),
     path("template/download/", views.timesheet_template_download, name="timesheet_template_download"),

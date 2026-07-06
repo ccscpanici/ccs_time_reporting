@@ -104,11 +104,33 @@
         }
       }
 
-      return {
-        ok: true,
-        skipped: true,
-        reason: "No onSave handler provided."
-      };
+      const url = this.options.url || this.form.dataset.liveFormUrl;
+
+      if (!url) {
+        return {
+          ok: true,
+          skipped: true,
+          reason: "No onSave handler or URL provided."
+        };
+      }
+
+      this.saving = true;
+
+      try {
+        const response = await CCS.request(url, {
+          method: "POST",
+          body: new FormData(this.form)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Save failed: ${response.status}`);
+        }
+
+        this.markClean();
+        return response;
+      } finally {
+        this.saving = false;
+      }
     }
 
     destroy() {
