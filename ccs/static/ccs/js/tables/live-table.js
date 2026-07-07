@@ -100,19 +100,31 @@
         }
 
         rightCell() {
-            if (!this.selection.cell) {
+            if (!this.cell()) {
                 return null;
             }
 
-            return this.selection.cell.nextElementSibling;
+            let cell = this.cell().nextElementSibling;
+
+            while (cell && !this.isEditableCell(cell)) {
+                cell = cell.nextElementSibling;
+            }
+
+            return cell || null;
         }
 
         leftCell() {
-            if (!this.selection.cell) {
+            if (!this.cell()) {
                 return null;
             }
 
-            return this.selection.cell.previousElementSibling;
+            let cell = this.cell().previousElementSibling;
+
+            while (cell && !this.isEditableCell(cell)) {
+                cell = cell.previousElementSibling;
+            }
+
+            return cell || null;
         }
 
         downCell() {
