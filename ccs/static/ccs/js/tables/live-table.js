@@ -173,6 +173,7 @@
 			}
 
 			switch (event.key) {
+
                 case "ArrowRight":
                     event.preventDefault();
                     this.moveRight();
@@ -181,6 +182,16 @@
                 case "ArrowLeft":
                     event.preventDefault();
                     this.moveLeft();
+                    break;
+
+                case "ArrowDown":
+                    event.preventDefault();
+                    this.moveDown();
+                    break;
+
+                case "ArrowUp":
+                    event.preventDefault();
+                    this.moveUp();
                     break;
             }
 		}
@@ -198,7 +209,7 @@
 
             this.selectCell(next);
         }
-        
+
         moveLeft() {
             const previous = this.leftCell();
 
@@ -207,6 +218,26 @@
             }
 
             this.selectCell(previous);
+        }
+
+        moveUp() {
+            const previous = this.upCell();
+
+            if (!previous) {
+                return;
+            }
+
+            this.selectCell(previous);
+        }
+        
+        moveDown() {
+            const next = this.downCell();
+
+            if (!next) {
+                return;
+            }
+
+            this.selectCell(next);
         }
 
 		//
