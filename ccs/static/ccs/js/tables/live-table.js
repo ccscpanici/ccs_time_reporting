@@ -28,7 +28,12 @@
 		//
 
 		selectCell(cell) {
-			this.clearSelection();
+            
+            if (!this.isEditableCell(cell)) {
+                return this;
+            }
+			
+            this.clearSelection();
 
 			this.selection.cell = cell;
             this.selection.row = cell.closest("tr");
@@ -226,12 +231,26 @@
                         this.moveDown();
                     }
                     break;
+
+                case "Home":
+                    event.preventDefault();
+                    this.moveToRowStart();
+                    break;
+
+                case "End":
+                    event.preventDefault();
+                    this.moveToRowEnd();
+                    break;
             }
 		}
 
 		//
 		// Navigation
 		//
+        isEditableCell(cell) {
+            return this.controlInCell(cell) !== null;
+        }
+
         move(cell) {
             if (!cell) {
                 return;
@@ -254,6 +273,32 @@
 
         moveDown() {
             this.move(this.downCell());
+        }
+
+        moveToRowStart() {
+            const row = this.row();
+
+            if (!row) {
+                return;
+            }
+
+            const cell = Array.from(row.cells).find(cell => this.isEditableCell(cell));
+
+            this.move(cell || null);
+        }
+
+        moveToRowEnd() {
+            const row = this.row();
+
+            if (!row) {
+                return;
+            }
+
+            const cell = Array.from(row.cells)
+                .reverse()
+                .find(cell => this.isEditableCell(cell));
+
+            this.move(cell || null);
         }
 
         controlInCell(cell) {
