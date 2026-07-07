@@ -621,14 +621,25 @@
 
   </div>
 
-  <div class="d-flex gap-2">
+  <div class="d-flex align-items-center gap-2">
+
     <button class="btn btn-primary" type="submit">
       {{ save_button_label|default:"Save Today" }}
     </button>
-    <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
+
+    <span
+        class="small text-muted"
+        data-live-form-status>
+        Saved
+    </span>
+
+    <a class="btn btn-outline-secondary"
+      href="{{ timesheet.get_absolute_url }}">
       Cancel
     </a>
+
   </div>
+
 </form>
 <script>
 (function compactWorkCodeSelects() {

@@ -15,6 +15,7 @@
       this.saving = false;
       this.paused = false;
       this.destroyed = false;
+      this.statusElement = this.form.querySelector("[data-live-form-status]");
       this.saveTimer = null;
       this.saveDelay = this.options.saveDelay || 750;
 
@@ -30,11 +31,33 @@
       return this.saving;
     }
 
+    setStatus(text, state = "muted") {
+      if (!this.statusElement) return;
+
+      this.statusElement.textContent = text;
+      this.statusElement.classList.remove(
+        "text-muted",
+        "text-success",
+        "text-warning",
+        "text-danger"
+      );
+
+      const classMap = {
+        muted: "text-muted",
+        success: "text-success",
+        warning: "text-warning",
+        danger: "text-danger"
+      };
+
+      this.statusElement.classList.add(classMap[state] || "text-muted");
+    }
+
     markDirty(field) {
       if (this.paused || this.destroyed) return this;
 
       if (!this.dirty) {
         this.dirty = true;
+        this.setStatus("Unsaved Changes", "warning");
 
         CCS.emit("form:dirty", {
           form: this,
@@ -48,6 +71,13 @@
     markClean() {
       if (this.dirty) {
         this.dirty = false;
+        this.setStatus(
+          `✓ Saved ${new Date().toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit"
+          })}`,
+          "success"
+        );
 
         CCS.emit("form:clean", {
           form: this
@@ -92,18 +122,29 @@
     async save() {
       if (this.destroyed) return null;
 
+      //
+      // Custom save handler
+      //
       if (typeof this.options.onSave === "function") {
         this.saving = true;
+        this.setStatus("Saving...", "muted");
 
         try {
           const result = await this.options.onSave(this);
+
           this.markClean();
           return result;
+        } catch (error) {
+          this.setStatus("⚠ Save failed", "danger");
+          throw error;
         } finally {
           this.saving = false;
         }
       }
 
+      //
+      // Default AJAX save
+      //
       const url = this.options.url || this.form.dataset.liveFormUrl;
 
       if (!url) {
@@ -115,6 +156,7 @@
       }
 
       this.saving = true;
+      this.setStatus("Saving...", "muted");
 
       try {
         const response = await CCS.request(url, {
@@ -123,11 +165,16 @@
         });
 
         if (!response.ok) {
+          this.setStatus("⚠ Save failed", "danger");
           throw new Error(`Save failed: ${response.status}`);
         }
 
         this.markClean();
+
         return response;
+      } catch (error) {
+        this.setStatus("⚠ Save failed", "danger");
+        throw error;
       } finally {
         this.saving = false;
       }
