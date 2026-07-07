@@ -24,9 +24,14 @@
         (Number.isFinite(datasetDelay) ? datasetDelay : null) ??
         750;
 
+      this.enterNavigation =
+        this.options.enterNavigation ??
+        this.form.dataset.enterNavigation === "true";
+
       this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
 
       this.handleChange = this.handleChange.bind(this);
+      this.handleKeyDown = this.handleKeyDown.bind(this);
       this.handleSaveClick = this.handleSaveClick.bind(this);
       this.saveButton = this.form.querySelector("[data-live-form-save]");
       this.bindEvents();
@@ -111,6 +116,7 @@
     bindEvents() {
       this.form.addEventListener("input", this.handleChange);
       this.form.addEventListener("change", this.handleChange);
+      this.form.addEventListener("keydown", this.handleKeyDown);
       window.addEventListener("beforeunload", this.handleBeforeUnload);
       if (this.saveButton) {
         this.saveButton.addEventListener("click", this.handleSaveClick);
@@ -127,6 +133,48 @@
     handleChange(event) {
       this.markDirty(event.target);
       this.scheduleSave();
+    }
+
+    editableControls() {
+      return Array.from(
+        this.form.querySelectorAll("input, select, textarea")
+      ).filter(control => {
+        return (
+          !control.disabled &&
+          control.type !== "hidden" &&
+          control.type !== "checkbox" &&
+          !control.readOnly &&
+          control.offsetParent !== null
+        );
+      });
+    }
+
+    handleKeyDown(event) {
+      if (!this.enterNavigation) return;
+
+      if (event.key !== "Enter") return;
+
+      const target = event.target;
+
+      if (!target.matches("input, select")) return;
+      if (target.tagName === "TEXTAREA") return;
+
+      event.preventDefault();
+
+      const controls = this.editableControls();
+      const index = controls.indexOf(target);
+
+      if (index === -1) return;
+
+      const next = controls[index + 1];
+
+      if (next) {
+        next.focus();
+
+        if (typeof next.select === "function") {
+          next.select();
+        }
+      }
     }
 
     handleSaveClick(event) {
@@ -232,6 +280,7 @@
       if (this.form) {
         this.form.removeEventListener("input", this.handleChange);
         this.form.removeEventListener("change", this.handleChange);
+        this.form.removeEventListener("keydown", this.handleKeyDown);
       }
 
       if (this.saveButton) {
