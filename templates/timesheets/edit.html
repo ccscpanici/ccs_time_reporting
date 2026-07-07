@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="h3 mb-3">Edit week of {{ timesheet.week_start }}</h1>
-<form method="post" class="mb-5" id="weekly-timesheet-edit-form" data-live-form data-live-form-url="{% url 'timesheet_autosave' %}" data-enter-navigation="true">
+<form method="post" class="mb-5" id="weekly-timesheet-edit-form" data-live-form data-live-form-url="{% url 'timesheet_autosave' %}">
   {% csrf_token %}
   <datalist id="job-options">
     {% for job in job_options %}

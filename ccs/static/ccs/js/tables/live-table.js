@@ -217,6 +217,15 @@
                         this.moveRight();
                     }
                     break;
+                case "Enter":
+                    event.preventDefault();
+
+                    if (event.shiftKey) {
+                        this.moveUp();
+                    } else {
+                        this.moveDown();
+                    }
+                    break;
             }
 		}
 
