@@ -202,6 +202,20 @@
 
             this.selectCell(cell);
 
+            // This protects the field being edited from exiting
+            if (
+                ["ArrowLeft", "ArrowRight"].includes(event.key) &&
+                this.shouldLetControlHandleArrow(event, target)
+            ) {
+                return;
+            }
+
+            // fill down shift+d
+            if (event.ctrlKey && event.key.toLowerCase() === "d") {
+                event.preventDefault();
+                this.fillDown();
+                return;
+            }
 
 			switch (event.key) {
 
@@ -343,6 +357,34 @@
                 }
             }
         }
+        shouldLetControlHandleArrow(event, control) {
+            if (!control) {
+                return false;
+            }
+
+            if (event.altKey) {
+                return false;
+            }
+
+            if (control.tagName === "TEXTAREA") {
+                return true;
+            }
+
+            if (control.tagName === "INPUT") {
+                const type = (control.type || "text").toLowerCase();
+
+                return [
+                    "text",
+                    "search",
+                    "email",
+                    "url",
+                    "tel",
+                    "password"
+                ].includes(type);
+            }
+
+            return false;
+        }
 
         //
 		// Editing
@@ -364,6 +406,38 @@
 
             control.dispatchEvent(new Event("input", { bubbles: true }));
             control.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+
+        fillDown() {
+            const sourceCell = this.upCell();
+            const targetCell = this.cell();
+
+            if (!sourceCell || !targetCell) {
+                return;
+            }
+
+            const source = this.controlInCell(sourceCell);
+            const target = this.controlInCell(targetCell);
+
+            if (!source || !target) {
+                return;
+            }
+
+            if (source.type === "checkbox") {
+                target.checked = source.checked;
+            } else {
+                target.value = source.value;
+            }
+
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+            target.dispatchEvent(new Event("change", { bubbles: true }));
+
+            target.focus();
+
+            if (typeof target.select === "function") {
+                target.select();
+            }
         }
 
 		//
