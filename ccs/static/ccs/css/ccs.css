@@ -108,3 +108,12 @@
 .ccs-toast-close:focus {
   opacity: 1;
 }
+
+.ccs-table-active-cell {
+  outline: 2px solid var(--app-primary);
+  outline-offset: -2px;
+}
+
+.ccs-table-active-row > * {
+  background-color: rgba(var(--app-primary-rgb), 0.06);
+}
