@@ -20,6 +20,8 @@
       this.saveDelay = this.options.saveDelay || 750;
 
       this.handleChange = this.handleChange.bind(this);
+      this.handleSaveClick = this.handleSaveClick.bind(this);
+      this.saveButton = this.form.querySelector("[data-live-form-save]");
       this.bindEvents();
     }
 
@@ -100,11 +102,19 @@
     bindEvents() {
       this.form.addEventListener("input", this.handleChange);
       this.form.addEventListener("change", this.handleChange);
+      if (this.saveButton) {
+        this.saveButton.addEventListener("click", this.handleSaveClick);
+      }
     }
 
     handleChange(event) {
       this.markDirty(event.target);
       this.scheduleSave();
+    }
+
+    handleSaveClick(event) {
+      event.preventDefault();
+      this.save();
     }
 
     scheduleSave() {
@@ -127,6 +137,9 @@
       //
       if (typeof this.options.onSave === "function") {
         this.saving = true;
+        if (this.saveButton) {
+          this.saveButton.disabled = true;
+        }
         this.setStatus("Saving...", "muted");
 
         try {
@@ -139,6 +152,9 @@
           throw error;
         } finally {
           this.saving = false;
+          if (this.saveButton) {
+            this.saveButton.disabled = false;
+          }
         }
       }
 
@@ -156,6 +172,9 @@
       }
 
       this.saving = true;
+      if (this.saveButton) {
+          this.saveButton.disabled = true;
+      }
       this.setStatus("Saving...", "muted");
 
       try {
@@ -177,6 +196,9 @@
         throw error;
       } finally {
         this.saving = false;
+        if (this.saveButton) {
+          this.saveButton.disabled = false;
+        }
       }
     }
 
@@ -184,6 +206,10 @@
       if (this.form) {
         this.form.removeEventListener("input", this.handleChange);
         this.form.removeEventListener("change", this.handleChange);
+      }
+
+      if (this.saveButton) {
+        this.saveButton.removeEventListener("click", this.handleSaveClick);
       }
 
       this.pause();
