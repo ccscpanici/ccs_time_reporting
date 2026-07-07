@@ -253,6 +253,11 @@
                     event.preventDefault();
                     this.moveToRowEnd();
                     break;
+
+                case "Delete":
+                    event.preventDefault();
+                    this.clearCell();
+                    break;
             }
 		}
 
@@ -337,6 +342,28 @@
                     control.select();
                 }
             }
+        }
+
+        //
+		// Editing
+		//
+        clearCell() {
+            const control = this.controlInCell(this.cell());
+
+            if (!control) {
+                return;
+            }
+
+            if (control.tagName === "SELECT") {
+                control.selectedIndex = 0;
+            } else if (control.type === "checkbox") {
+                control.checked = false;
+            } else {
+                control.value = "";
+            }
+
+            control.dispatchEvent(new Event("input", { bubbles: true }));
+            control.dispatchEvent(new Event("change", { bubbles: true }));
         }
 
 		//
