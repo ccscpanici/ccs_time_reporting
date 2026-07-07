@@ -173,11 +173,16 @@
 			}
 
 			switch (event.key) {
-				case "ArrowRight":
-					event.preventDefault();
-					this.moveRight();
-					break;
-			}
+                case "ArrowRight":
+                    event.preventDefault();
+                    this.moveRight();
+                    break;
+
+                case "ArrowLeft":
+                    event.preventDefault();
+                    this.moveLeft();
+                    break;
+            }
 		}
 
 		//
@@ -192,6 +197,16 @@
             }
 
             this.selectCell(next);
+        }
+        
+        moveLeft() {
+            const previous = this.leftCell();
+
+            if (!previous) {
+                return;
+            }
+
+            this.selectCell(previous);
         }
 
 		//
