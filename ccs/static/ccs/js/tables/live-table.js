@@ -43,23 +43,30 @@
 				row: this.activeRow
 			});
 
+            if (!cell.querySelector("input, select, textarea, button")) {
+                cell.tabIndex = 0;
+                cell.focus();
+            }
+
 			return this;
 		}
 
 		clearSelection() {
-			if (this.activeCell) {
-				this.activeCell.classList.remove("ccs-table-active-cell");
-			}
+            
+            if (this.activeCell) {
+                this.activeCell.classList.remove("ccs-table-active-cell");
+                this.activeCell.removeAttribute("tabindex");
+            }
 
-			if (this.activeRow) {
-				this.activeRow.classList.remove("ccs-table-active-row");
-			}
+            if (this.activeRow) {
+                this.activeRow.classList.remove("ccs-table-active-row");
+            }
 
-			this.activeCell = null;
-			this.activeRow = null;
+            this.activeCell = null;
+            this.activeRow = null;
 
-			return this;
-		}
+            return this;
+        }
 
 		//
 		// Event Binding
