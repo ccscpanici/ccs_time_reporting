@@ -149,9 +149,25 @@
       });
     }
 
+    moveToNextControl(current) {
+      const controls = this.editableControls();
+      const index = controls.indexOf(current);
+
+      if (index === -1) return;
+
+      const next = controls[index + 1];
+
+      if (next) {
+          next.focus();
+
+          if (typeof next.select === "function") {
+              next.select();
+          }
+      }
+    }
+
     handleKeyDown(event) {
       if (!this.enterNavigation) return;
-
       if (event.key !== "Enter") return;
 
       const target = event.target;
@@ -161,20 +177,7 @@
 
       event.preventDefault();
 
-      const controls = this.editableControls();
-      const index = controls.indexOf(target);
-
-      if (index === -1) return;
-
-      const next = controls[index + 1];
-
-      if (next) {
-        next.focus();
-
-        if (typeof next.select === "function") {
-          next.select();
-        }
-      }
+      this.moveToNextControl(target);
     }
 
     handleSaveClick(event) {
