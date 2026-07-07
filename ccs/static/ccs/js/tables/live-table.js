@@ -206,7 +206,7 @@
                 return;
             }
 
-            this.selectCell(cell);
+            this.focusCell(cell);
         }
 
 		moveRight() {
@@ -223,6 +223,32 @@
 
         moveDown() {
             this.move(this.downCell());
+        }
+
+        controlInCell(cell) {
+            if (!cell) {
+                return null;
+            }
+
+            return cell.querySelector("input, select, textarea, button");
+        }
+
+        focusCell(cell) {
+            if (!cell) {
+                return;
+            }
+
+            this.selectCell(cell);
+
+            const control = this.controlInCell(cell);
+
+            if (control) {
+                control.focus();
+
+                if (typeof control.select === "function") {
+                    control.select();
+                }
+            }
         }
 
 		//
