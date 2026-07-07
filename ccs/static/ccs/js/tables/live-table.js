@@ -52,7 +52,7 @@
 		}
 
 		clearSelection() {
-            
+
             if (this.activeCell) {
                 this.activeCell.classList.remove("ccs-table-active-cell");
                 this.activeCell.removeAttribute("tabindex");
@@ -66,6 +66,82 @@
             this.activeRow = null;
 
             return this;
+        }
+
+        cell() {
+            return this.activeCell;
+        }
+
+        row() {
+            return this.activeRow;
+        }
+
+        rowIndex() {
+            if (!this.activeRow) {
+                return -1;
+            }
+
+            return Array.from(this.activeRow.parentElement.rows).indexOf(this.activeRow);
+        }
+
+        columnIndex() {
+            if (!this.activeCell) {
+                return -1;
+            }
+
+            return Array.from(this.activeCell.parentElement.cells).indexOf(this.activeCell);
+        }
+
+        rightCell() {
+            if (!this.activeCell) {
+                return null;
+            }
+
+            return this.activeCell.nextElementSibling;
+        }
+
+        leftCell() {
+            if (!this.activeCell) {
+                return null;
+            }
+
+            return this.activeCell.previousElementSibling;
+        }
+
+        downCell() {
+            const rowIndex = this.rowIndex();
+            const columnIndex = this.columnIndex();
+
+            if (rowIndex === -1 || columnIndex === -1) {
+                return null;
+            }
+
+            const rows = Array.from(this.activeRow.parentElement.rows);
+            const nextRow = rows[rowIndex + 1];
+
+            if (!nextRow) {
+                return null;
+            }
+
+            return nextRow.cells[columnIndex] || null;
+        }
+
+        upCell() {
+            const rowIndex = this.rowIndex();
+            const columnIndex = this.columnIndex();
+
+            if (rowIndex === -1 || columnIndex === -1) {
+                return null;
+            }
+
+            const rows = Array.from(this.activeRow.parentElement.rows);
+            const previousRow = rows[rowIndex - 1];
+
+            if (!previousRow) {
+                return null;
+            }
+
+            return previousRow.cells[columnIndex] || null;
         }
 
 		//
@@ -109,14 +185,14 @@
 		//
 
 		moveRight() {
-			const next = this.activeCell.nextElementSibling;
+            const next = this.rightCell();
 
-			if (!next) {
-				return;
-			}
+            if (!next) {
+                return;
+            }
 
-			this.selectCell(next);
-		}
+            this.selectCell(next);
+        }
 
 		//
 		// Cleanup
