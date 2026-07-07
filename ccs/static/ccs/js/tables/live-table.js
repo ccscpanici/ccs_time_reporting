@@ -207,6 +207,16 @@
                     event.preventDefault();
                     this.moveDown();
                     break;
+
+                case "Tab":
+                    event.preventDefault();
+
+                    if (event.shiftKey) {
+                        this.moveLeft();
+                    } else {
+                        this.moveRight();
+                    }
+                    break;
             }
 		}
 
