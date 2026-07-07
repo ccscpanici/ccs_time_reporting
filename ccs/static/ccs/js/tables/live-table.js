@@ -12,8 +12,10 @@
 			this.table = table;
 			this.options = options || {};
 
-			this.activeCell = null;
-			this.activeRow = null;
+            this.selection = {
+                cell: null,
+                row: null
+            };
 
 			this.handleClick = this.handleClick.bind(this);
 			this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -28,19 +30,19 @@
 		selectCell(cell) {
 			this.clearSelection();
 
-			this.activeCell = cell;
-			this.activeRow = cell.closest("tr");
+			this.selection.cell = cell;
+            this.selection.row = cell.closest("tr");
 
 			cell.classList.add("ccs-table-active-cell");
 
-			if (this.activeRow) {
-				this.activeRow.classList.add("ccs-table-active-row");
+			if (this.selection.row) {
+				this.selection.row.classList.add("ccs-table-active-row");
 			}
 
 			CCS.emit("table:cellSelected", {
 				table: this,
-				cell: this.activeCell,
-				row: this.activeRow
+				cell: this.selection.cell,
+				row: this.selection.row
 			});
 
             if (!cell.querySelector("input, select, textarea, button")) {
@@ -53,59 +55,59 @@
 
 		clearSelection() {
 
-            if (this.activeCell) {
-                this.activeCell.classList.remove("ccs-table-active-cell");
-                this.activeCell.removeAttribute("tabindex");
+            if (this.selection.cell) {
+                this.selection.cell.classList.remove("ccs-table-active-cell");
+                this.selection.cell.removeAttribute("tabindex");
             }
 
-            if (this.activeRow) {
-                this.activeRow.classList.remove("ccs-table-active-row");
+            if (this.selection.row) {
+                this.selection.row.classList.remove("ccs-table-active-row");
             }
 
-            this.activeCell = null;
-            this.activeRow = null;
+            this.selection.cell = null;
+            this.selection.row = null;
 
             return this;
         }
 
         cell() {
-            return this.activeCell;
+            return this.selection.cell;
         }
 
         row() {
-            return this.activeRow;
+            return this.selection.row;
         }
 
         rowIndex() {
-            if (!this.activeRow) {
+            if (!this.selection.row) {
                 return -1;
             }
 
-            return Array.from(this.activeRow.parentElement.rows).indexOf(this.activeRow);
+            return Array.from(this.selection.row.parentElement.rows).indexOf(this.selection.row);
         }
 
         columnIndex() {
-            if (!this.activeCell) {
+            if (!this.selection.cell) {
                 return -1;
             }
 
-            return Array.from(this.activeCell.parentElement.cells).indexOf(this.activeCell);
+            return Array.from(this.selection.cell.parentElement.cells).indexOf(this.selection.cell);
         }
 
         rightCell() {
-            if (!this.activeCell) {
+            if (!this.selection.cell) {
                 return null;
             }
 
-            return this.activeCell.nextElementSibling;
+            return this.selection.cell.nextElementSibling;
         }
 
         leftCell() {
-            if (!this.activeCell) {
+            if (!this.selection.cell) {
                 return null;
             }
 
-            return this.activeCell.previousElementSibling;
+            return this.selection.cell.previousElementSibling;
         }
 
         downCell() {
@@ -116,7 +118,7 @@
                 return null;
             }
 
-            const rows = Array.from(this.activeRow.parentElement.rows);
+            const rows = Array.from(this.selection.row.parentElement.rows);
             const nextRow = rows[rowIndex + 1];
 
             if (!nextRow) {
@@ -134,7 +136,7 @@
                 return null;
             }
 
-            const rows = Array.from(this.activeRow.parentElement.rows);
+            const rows = Array.from(this.selection.row.parentElement.rows);
             const previousRow = rows[rowIndex - 1];
 
             if (!previousRow) {
@@ -168,7 +170,7 @@
 		}
 
 		handleKeyDown(event) {
-			if (!this.activeCell) {
+			if (!this.selection.cell) {
 				return;
 			}
 
@@ -199,45 +201,28 @@
 		//
 		// Navigation
 		//
-
-		moveRight() {
-            const next = this.rightCell();
-
-            if (!next) {
+        move(cell) {
+            if (!cell) {
                 return;
             }
 
-            this.selectCell(next);
+            this.selectCell(cell);
+        }
+
+		moveRight() {
+            this.move(this.rightCell());
         }
 
         moveLeft() {
-            const previous = this.leftCell();
-
-            if (!previous) {
-                return;
-            }
-
-            this.selectCell(previous);
+            this.move(this.leftCell());
         }
 
         moveUp() {
-            const previous = this.upCell();
-
-            if (!previous) {
-                return;
-            }
-
-            this.selectCell(previous);
+            this.move(this.upCell());
         }
-        
+
         moveDown() {
-            const next = this.downCell();
-
-            if (!next) {
-                return;
-            }
-
-            this.selectCell(next);
+            this.move(this.downCell());
         }
 
 		//
