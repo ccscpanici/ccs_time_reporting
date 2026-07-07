@@ -3,336 +3,398 @@
  * Reusable form controller for dirty tracking, autosave, and save state.
  */
 (function (window, document) {
-  "use strict";
+	"use strict";
 
-  const CCS = window.CCS;
+	const CCS = window.CCS;
 
-  class LiveForm {
-    constructor(form, options) {
-      this.form = form;
-      this.options = options || {};
-      this.dirty = false;
-      this.saving = false;
-      this.paused = false;
-      this.destroyed = false;
-      this.statusElement = this.form.querySelector("[data-live-form-status]");
-      this.saveTimer = null;
-      const datasetDelay = parseInt(this.form.dataset.liveFormDelay, 10);
+	class LiveForm {
+		constructor(form, options) {
+			this.form = form;
+			this.options = options || {};
 
-      this.saveDelay =
-        this.options.saveDelay ??
-        (Number.isFinite(datasetDelay) ? datasetDelay : null) ??
-        750;
+			this.dirty = false;
+			this.saving = false;
+			this.paused = false;
+			this.destroyed = false;
 
-      this.enterNavigation =
-        this.options.enterNavigation ??
-        this.form.dataset.enterNavigation === "true";
+			this.statusElement = this.form.querySelector("[data-live-form-status]");
+			this.saveButton = this.form.querySelector("[data-live-form-save]");
 
-      this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
+			this.saveTimer = null;
 
-      this.handleChange = this.handleChange.bind(this);
-      this.handleKeyDown = this.handleKeyDown.bind(this);
-      this.handleSaveClick = this.handleSaveClick.bind(this);
-      this.saveButton = this.form.querySelector("[data-live-form-save]");
-      this.bindEvents();
-    }
+			const datasetDelay = parseInt(this.form.dataset.liveFormDelay, 10);
 
-    isDirty() {
-      return this.dirty;
-    }
+			this.saveDelay =
+				this.options.saveDelay ??
+				(Number.isFinite(datasetDelay) ? datasetDelay : null) ??
+				750;
 
-    isSaving() {
-      return this.saving;
-    }
+			this.enterNavigation =
+				this.options.enterNavigation ??
+				this.form.dataset.enterNavigation === "true";
 
-    setStatus(text, state = "muted") {
-      if (!this.statusElement) return;
+			this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
+			this.handleChange = this.handleChange.bind(this);
+			this.handleKeyDown = this.handleKeyDown.bind(this);
+			this.handleSaveClick = this.handleSaveClick.bind(this);
 
-      this.statusElement.textContent = text;
-      this.statusElement.classList.remove(
-        "text-muted",
-        "text-success",
-        "text-warning",
-        "text-danger"
-      );
+			this.bindEvents();
+		}
 
-      const classMap = {
-        muted: "text-muted",
-        success: "text-success",
-        warning: "text-warning",
-        danger: "text-danger"
-      };
+		//
+		// Public API
+		//
 
-      this.statusElement.classList.add(classMap[state] || "text-muted");
-    }
+		isDirty() {
+			return this.dirty;
+		}
 
-    markDirty(field) {
-      if (this.paused || this.destroyed) return this;
+		isSaving() {
+			return this.saving;
+		}
 
-      if (!this.dirty) {
-        this.dirty = true;
-        this.setStatus("Unsaved Changes", "warning");
+		setStatus(text, state = "muted") {
+			if (!this.statusElement) {
+				return;
+			}
 
-        CCS.emit("form:dirty", {
-          form: this,
-          field: field || null
-        });
-      }
+			this.statusElement.textContent = text;
 
-      return this;
-    }
+			this.statusElement.classList.remove(
+				"text-muted",
+				"text-success",
+				"text-warning",
+				"text-danger"
+			);
 
-    markClean() {
-      const wasDirty = this.dirty;
-      this.dirty = false;
+			const classMap = {
+				muted: "text-muted",
+				success: "text-success",
+				warning: "text-warning",
+				danger: "text-danger"
+			};
 
-      this.setStatus(
-        `✓ Saved ${new Date().toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit"
-        })}`,
-        "success"
-      );
+			this.statusElement.classList.add(classMap[state] || "text-muted");
+		}
 
-      if (wasDirty) {
-        CCS.emit("form:clean", {
-          form: this
-        });
-      }
+		markDirty(field) {
+			if (this.paused || this.destroyed) {
+				return this;
+			}
 
-      return this;
-    }
+			if (!this.dirty) {
+				this.dirty = true;
+				this.setStatus("Unsaved Changes", "warning");
 
-    pause() {
-      this.paused = true;
-      return this;
-    }
+				CCS.emit("form:dirty", {
+					form: this,
+					field: field || null
+				});
+			}
 
-    resume() {
-      this.paused = false;
-      return this;
-    }
+			return this;
+		}
 
-    bindEvents() {
-      this.form.addEventListener("input", this.handleChange);
-      this.form.addEventListener("change", this.handleChange);
-      this.form.addEventListener("keydown", this.handleKeyDown);
-      window.addEventListener("beforeunload", this.handleBeforeUnload);
-      if (this.saveButton) {
-        this.saveButton.addEventListener("click", this.handleSaveClick);
-      }
-    }
+		markClean() {
+			const wasDirty = this.dirty;
 
-    handleBeforeUnload(event) {
+			this.dirty = false;
+
+			this.setStatus(
+				`✓ Saved ${new Date().toLocaleTimeString([], {
+					hour: "numeric",
+					minute: "2-digit"
+				})}`,
+				"success"
+			);
+
+			if (wasDirty) {
+				CCS.emit("form:clean", {
+					form: this
+				});
+			}
+
+			return this;
+		}
+
+		pause() {
+			this.paused = true;
+			return this;
+		}
+
+		resume() {
+			this.paused = false;
+			return this;
+		}
+
+		//
+		// Event Binding
+		//
+
+		bindEvents() {
+			this.form.addEventListener("input", this.handleChange);
+			this.form.addEventListener("change", this.handleChange);
+			this.form.addEventListener("keydown", this.handleKeyDown);
+
+			window.addEventListener("beforeunload", this.handleBeforeUnload);
+
+			if (this.saveButton) {
+				this.saveButton.addEventListener("click", this.handleSaveClick);
+			}
+		}
+
+		//
+		// Event Handlers
+		//
+
+		handleBeforeUnload(event) {
       if (this.isDirty() || this.isSaving()) {
-          event.preventDefault();
-          event.returnValue = "";
-      }
-    }
+				event.preventDefault();
+				event.returnValue = "";
+			}
+		}
 
-    handleChange(event) {
-      this.markDirty(event.target);
-      this.scheduleSave();
-    }
+		handleChange(event) {
+			this.markDirty(event.target);
+			this.scheduleSave();
+		}
 
-    editableControls() {
-      return Array.from(
-        this.form.querySelectorAll("input, select, textarea")
-      ).filter(control => {
-        return (
-          !control.disabled &&
-          control.type !== "hidden" &&
-          control.type !== "checkbox" &&
-          !control.readOnly &&
-          control.offsetParent !== null
-        );
-      });
-    }
+		handleKeyDown(event) {
+			if (!this.enterNavigation) {
+				return;
+			}
 
-    moveToNextControl(current) {
-      const controls = this.editableControls();
-      const index = controls.indexOf(current);
+			if (event.key !== "Enter") {
+				return;
+			}
 
-      if (index === -1) return;
+			const target = event.target;
 
-      const next = controls[index + 1];
+			if (!target.matches("input, select")) {
+				return;
+			}
 
-      if (next) {
-          next.focus();
+			if (target.tagName === "TEXTAREA") {
+				return;
+			}
 
-          if (typeof next.select === "function") {
-              next.select();
-          }
-      }
-    }
+			event.preventDefault();
 
-    handleKeyDown(event) {
-      if (!this.enterNavigation) return;
-      if (event.key !== "Enter") return;
+			this.moveToNextControl(target);
+		}
 
-      const target = event.target;
+		handleSaveClick(event) {
+			event.preventDefault();
 
-      if (!target.matches("input, select")) return;
-      if (target.tagName === "TEXTAREA") return;
+			if (!this.isDirty()) {
+				return;
+			}
 
-      event.preventDefault();
+			this.save();
+		}
 
-      this.moveToNextControl(target);
-    }
+		//
+		// Navigation
+		//
 
-    handleSaveClick(event) {
+		editableControls() {
+			return Array.from(
+				this.form.querySelectorAll("input, select, textarea")
+			).filter(control => {
+				return (
+					!control.disabled &&
+					control.type !== "hidden" &&
+					control.type !== "checkbox" &&
+					!control.readOnly &&
+					control.offsetParent !== null
+				);
+			});
+		}
 
-      event.preventDefault();
+		moveToNextControl(current) {
+			const controls = this.editableControls();
+			const index = controls.indexOf(current);
 
-      if (!this.isDirty()) {
-          return;
-      }
+			if (index === -1) {
+				return;
+			}
 
-      this.save();
-    }
+			const next = controls[index + 1];
 
-    scheduleSave() {
-      if (this.paused || this.destroyed) return;
+			if (!next) {
+				return;
+			}
 
-      clearTimeout(this.saveTimer);
+			next.focus();
 
-      this.saveTimer = setTimeout(() => {
-        if (this.isDirty() && !this.isSaving()) {
-          this.save();
-        }
-      }, this.saveDelay);
-    }
+			if (typeof next.select === "function") {
+				next.select();
+			}
+		}
 
-    async save() {
-      if (this.destroyed) return null;
+		//
+		// Save Logic
+		//
 
-      //
-      // Custom save handler
-      //
-      if (this.saving) {
-        return;
-      }
-      if (typeof this.options.onSave === "function") {
-        this.saving = true;
-        if (this.saveButton) {
-          this.saveButton.disabled = true;
-        }
-        this.setStatus("Saving...", "muted");
+		scheduleSave() {
+			if (this.paused || this.destroyed) {
+				return;
+			}
 
-        try {
-          const result = await this.options.onSave(this);
+			clearTimeout(this.saveTimer);
 
-          this.markClean();
-          return result;
-        } catch (error) {
-          this.setStatus("⚠ Save failed", "danger");
-          throw error;
-        } finally {
-          this.saving = false;
-          if (this.saveButton) {
-            this.saveButton.disabled = false;
-          }
-        }
-      }
+			this.saveTimer = setTimeout(() => {
+				if (this.isDirty() && !this.isSaving()) {
+					this.save();
+				}
+			}, this.saveDelay);
+		}
 
-      //
-      // Default AJAX save
-      //
-      const url = this.options.url || this.form.dataset.liveFormUrl;
+		async save() {
+			if (this.destroyed || this.saving) {
+				return null;
+			}
 
-      if (!url) {
-        return {
-          ok: true,
-          skipped: true,
-          reason: "No onSave handler or URL provided."
-        };
-      }
+			//
+			// Custom save handler
+			//
 
-      this.saving = true;
-      if (this.saveButton) {
-          this.saveButton.disabled = true;
-      }
-      this.setStatus("Saving...", "muted");
+			if (typeof this.options.onSave === "function") {
+				this.saving = true;
 
-      try {
-        const response = await CCS.request(url, {
-          method: "POST",
-          body: new FormData(this.form)
-        });
+				if (this.saveButton) {
+					this.saveButton.disabled = true;
+				}
 
-        if (!response.ok) {
-          this.setStatus("⚠ Save failed", "danger");
-          throw new Error(`Save failed: ${response.status}`);
-        }
+				this.setStatus("Saving...", "muted");
 
-        this.markClean();
+				try {
+					const result = await this.options.onSave(this);
 
-        return response;
-      } catch (error) {
-        this.setStatus("⚠ Save failed", "danger");
-        throw error;
-      } finally {
-        this.saving = false;
-        if (this.saveButton) {
-          this.saveButton.disabled = false;
-        }
-      }
-    }
+					this.markClean();
 
-    destroy() {
-      if (this.form) {
-        this.form.removeEventListener("input", this.handleChange);
-        this.form.removeEventListener("change", this.handleChange);
-        this.form.removeEventListener("keydown", this.handleKeyDown);
-      }
+					return result;
+				} catch (error) {
+					this.setStatus("⚠ Save failed", "danger");
+					throw error;
+				} finally {
+					this.saving = false;
 
-      if (this.saveButton) {
-        this.saveButton.removeEventListener("click", this.handleSaveClick);
-      }
+					if (this.saveButton) {
+						this.saveButton.disabled = false;
+					}
+				}
+			}
 
-      window.removeEventListener("beforeunload", this.handleBeforeUnload);
+			//
+			// Default AJAX save
+			//
 
-      this.pause();
-      clearTimeout(this.saveTimer);
-      this.destroyed = true;
-      this.form = null;
-      return this;
-    }
-  }
+			const url = this.options.url || this.form.dataset.liveFormUrl;
 
-  function resolveForm(target) {
-    if (typeof target === "string") {
-      return document.querySelector(target);
-    }
+			if (!url) {
+				return {
+					ok: true,
+					skipped: true,
+					reason: "No onSave handler or URL provided."
+				};
+			}
 
-    return target;
-  }
+			this.saving = true;
 
-  const liveForm = {
-    version: "1.0.0",
+			if (this.saveButton) {
+				this.saveButton.disabled = true;
+			}
 
-    attach(target, options) {
-      const form = resolveForm(target);
+			this.setStatus("Saving...", "muted");
 
-      if (!form) {
-        throw new Error("CCS.liveForm.attach: form not found.");
-      }
+			try {
+				const response = await CCS.request(url, {
+					method: "POST",
+					body: new FormData(this.form)
+				});
 
-      return new LiveForm(form, options || {});
-    },
+				if (!response.ok) {
+					this.setStatus("⚠ Save failed", "danger");
+					throw new Error(`Save failed: ${response.status}`);
+				}
 
-    LiveForm
-  };
+				this.markClean();
 
-  CCS.ready(() => {
-    document
-    .querySelectorAll("form[data-live-form]")
-    .forEach(form => {
-      if (!form._ccsLiveForm) {
-        form._ccsLiveForm = liveForm.attach(form);
-      }
-    });
-  });
+				return response;
+			} catch (error) {
+				this.setStatus("⚠ Save failed", "danger");
+				throw error;
+			} finally {
+				this.saving = false;
 
-  CCS.registerModule("liveForm", liveForm, { replace: true });
+				if (this.saveButton) {
+					this.saveButton.disabled = false;
+				}
+			}
+		}
+
+		//
+		// Cleanup
+		//
+
+		destroy() {
+			if (this.form) {
+				this.form.removeEventListener("input", this.handleChange);
+				this.form.removeEventListener("change", this.handleChange);
+				this.form.removeEventListener("keydown", this.handleKeyDown);
+			}
+
+			if (this.saveButton) {
+				this.saveButton.removeEventListener("click", this.handleSaveClick);
+			}
+
+			window.removeEventListener("beforeunload", this.handleBeforeUnload);
+
+			this.pause();
+
+			clearTimeout(this.saveTimer);
+
+			this.destroyed = true;
+			this.form = null;
+
+			return this;
+		}
+	}
+
+	function resolveForm(target) {
+		if (typeof target === "string") {
+			return document.querySelector(target);
+		}
+
+		return target;
+	}
+
+	const liveForm = {
+		version: "1.0.0",
+
+		attach(target, options) {
+			const form = resolveForm(target);
+
+			if (!form) {
+				throw new Error("CCS.liveForm.attach: form not found.");
+			}
+
+			return new LiveForm(form, options || {});
+		},
+
+		LiveForm
+	};
+
+	CCS.ready(() => {
+		document
+			.querySelectorAll("form[data-live-form]")
+			.forEach(form => {
+				if (!form._ccsLiveForm) {
+					form._ccsLiveForm = liveForm.attach(form);
+				}
+			});
+	});
+
+	CCS.registerModule("liveForm", liveForm, { replace: true });
 })(window, document);
