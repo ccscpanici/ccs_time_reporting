@@ -170,30 +170,42 @@
 		}
 
 		handleKeyDown(event) {
-			if (!this.selection.cell) {
-				return;
-			}
+
+			const target = event.target;
+
+            if (!target.matches("input, select, textarea")) {
+                return;
+            }
+
+            const cell = target.closest("td");
+
+            if (!cell) {
+                return;
+            }
+
+            this.selectCell(cell);
+
 
 			switch (event.key) {
-
-                case "ArrowRight":
-                    event.preventDefault();
-                    this.moveRight();
-                    break;
 
                 case "ArrowLeft":
                     event.preventDefault();
                     this.moveLeft();
                     break;
 
-                case "ArrowDown":
+                case "ArrowRight":
                     event.preventDefault();
-                    this.moveDown();
+                    this.moveRight();
                     break;
 
                 case "ArrowUp":
                     event.preventDefault();
                     this.moveUp();
+                    break;
+
+                case "ArrowDown":
+                    event.preventDefault();
+                    this.moveDown();
                     break;
             }
 		}
