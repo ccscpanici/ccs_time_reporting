@@ -17,7 +17,14 @@
       this.destroyed = false;
       this.statusElement = this.form.querySelector("[data-live-form-status]");
       this.saveTimer = null;
-      this.saveDelay = this.options.saveDelay || 750;
+      const datasetDelay = parseInt(this.form.dataset.liveFormDelay, 10);
+
+      this.saveDelay =
+        this.options.saveDelay ??
+        (Number.isFinite(datasetDelay) ? datasetDelay : null) ??
+        750;
+
+      this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
 
       this.handleChange = this.handleChange.bind(this);
       this.handleSaveClick = this.handleSaveClick.bind(this);
@@ -71,16 +78,18 @@
     }
 
     markClean() {
-      if (this.dirty) {
-        this.dirty = false;
-        this.setStatus(
-          `✓ Saved ${new Date().toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit"
-          })}`,
-          "success"
-        );
+      const wasDirty = this.dirty;
+      this.dirty = false;
 
+      this.setStatus(
+        `✓ Saved ${new Date().toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit"
+        })}`,
+        "success"
+      );
+
+      if (wasDirty) {
         CCS.emit("form:clean", {
           form: this
         });
@@ -102,8 +111,16 @@
     bindEvents() {
       this.form.addEventListener("input", this.handleChange);
       this.form.addEventListener("change", this.handleChange);
+      window.addEventListener("beforeunload", this.handleBeforeUnload);
       if (this.saveButton) {
         this.saveButton.addEventListener("click", this.handleSaveClick);
+      }
+    }
+
+    handleBeforeUnload(event) {
+      if (this.isDirty() || this.isSaving()) {
+          event.preventDefault();
+          event.returnValue = "";
       }
     }
 
@@ -113,7 +130,13 @@
     }
 
     handleSaveClick(event) {
+
       event.preventDefault();
+
+      if (!this.isDirty()) {
+          return;
+      }
+
       this.save();
     }
 
@@ -135,6 +158,9 @@
       //
       // Custom save handler
       //
+      if (this.saving) {
+        return;
+      }
       if (typeof this.options.onSave === "function") {
         this.saving = true;
         if (this.saveButton) {
@@ -211,6 +237,8 @@
       if (this.saveButton) {
         this.saveButton.removeEventListener("click", this.handleSaveClick);
       }
+
+      window.removeEventListener("beforeunload", this.handleBeforeUnload);
 
       this.pause();
       clearTimeout(this.saveTimer);
