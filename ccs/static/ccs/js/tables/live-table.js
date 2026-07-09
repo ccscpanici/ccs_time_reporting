@@ -217,6 +217,13 @@
                 return;
             }
 
+            // clears the row
+            if (event.ctrlKey && event.key.toLowerCase() === "l") {
+                event.preventDefault();
+                this.clearRow();
+                return;
+            }
+
 			switch (event.key) {
 
                 case "ArrowLeft":
@@ -438,6 +445,33 @@
             if (typeof target.select === "function") {
                 target.select();
             }
+        }
+
+        clearRow() {
+            const row = this.row();
+
+            if (!row) {
+                return;
+            }
+
+            Array.from(row.cells).forEach(cell => {
+                const control = this.controlInCell(cell);
+
+                if (!control) {
+                    return;
+                }
+
+                if (control.tagName === "SELECT") {
+                    control.selectedIndex = 0;
+                } else if (control.type === "checkbox") {
+                    control.checked = false;
+                } else {
+                    control.value = "";
+                }
+
+                control.dispatchEvent(new Event("input", { bubbles: true }));
+                control.dispatchEvent(new Event("change", { bubbles: true }));
+            });
         }
 
 		//
