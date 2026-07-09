@@ -41,6 +41,7 @@ urlpatterns = [
     path("receipts/<int:receipt_pk>/download/", views.timesheet_receipt_download, name="timesheet_receipt_download"),
     path("receipts/<int:receipt_pk>/delete/", views.timesheet_receipt_delete, name="timesheet_receipt_delete"),
     path("<int:pk>/reopen/", views.timesheet_reopen, name="timesheet_reopen"),
+    path("<int:pk>/request-reopen/", views.timesheet_reopen_request, name="timesheet_reopen_request"),
     path("<int:pk>/approve/", views.timesheet_approve, name="timesheet_approve"),
     path("<int:pk>/reject/", views.timesheet_reject, name="timesheet_reject"),
     path("<int:pk>/mark-invoiced/", views.timesheet_mark_invoiced, name="timesheet_mark_invoiced"),

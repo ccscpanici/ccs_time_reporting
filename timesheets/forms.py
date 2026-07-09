@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 from django import forms
-from .models import ActiveProject, Customer, Job, JobListImport, Timesheet, TimesheetImport
-
+from .models import ActiveProject, Customer, Job, JobListImport, Timesheet, TimesheetImport, TimesheetReopenRequest
 
 class TimesheetCreateForm(forms.ModelForm):
     def clean_week_start(self):
@@ -246,6 +245,17 @@ class TimesheetDeleteForm(forms.Form):
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Optional reason"}),
     )
 
+class TimesheetReopenRequestForm(forms.ModelForm):
+    class Meta:
+        model = TimesheetReopenRequest
+        fields = ["reason"]
+        widgets = {
+            "reason": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Explain why this timesheet needs to be reopened.",
+            })
+        }
 
 class TimesheetReopenForm(forms.Form):
     reason = forms.CharField(

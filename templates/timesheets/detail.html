@@ -29,6 +29,9 @@
     {% if timesheet.can_submit and timesheet.employee_id == request.user.id %}
       <a class="btn btn-success" href="{% url 'timesheet_submit' timesheet.pk %}">Submit</a>
     {% endif %}
+    {% if timesheet.status == "approved" or timesheet.status == "invoiced" %}
+      <a class="btn btn-outline-warning" href="{% url 'timesheet_reopen_request' timesheet.pk %}">Request Reopen</a>
+    {% endif %}
     {% if timesheet.can_reopen and timesheet.employee_id == request.user.id %}
       <a class="btn btn-warning" href="{% url 'timesheet_reopen' timesheet.pk %}">Reopen for Corrections</a>
     {% endif %}

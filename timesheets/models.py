@@ -473,6 +473,16 @@ class Timesheet(models.Model):
     def can_export_excel(self):
         return not self.has_excel_overflow
 
+    @property
+    def open_url(self):
+        if self.status in ("draft", "reopened"):
+            return reverse("timesheet_edit", args=[self.pk])
+        # end if
+        return self.get_absolute_url()
+
+    @property
+    def is_editable(self):
+        return self.status in ("draft", "reopened")
 
 class TimeEntry(models.Model):
     timesheet = models.ForeignKey(Timesheet, on_delete=models.CASCADE, related_name="entries")
@@ -705,6 +715,20 @@ class TimesheetSubmissionRecipient(models.Model):
 
     def __str__(self):
         return self.email
+
+class TimesheetReopenRequest(models.Model):
+    timesheet = models.ForeignKey(Timesheet, on_delete=models.CASCADE, related_name="reopen_requests")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=[
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("denied", "Denied"),
+    ], default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
 
 class BulkImportJob(models.Model):

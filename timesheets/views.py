@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
-from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm
+from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm, TimesheetReopenRequestForm
 from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
@@ -2237,6 +2237,50 @@ def timesheet_reopen(request, pk):
         form = TimesheetReopenForm()
     return render(request, "timesheets/reopen.html", {"timesheet": timesheet, "form": form})
 
+@login_required
+def timesheet_reopen_request(request, pk):
+    timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user)
+
+    if timesheet.status in {Timesheet.Status.DRAFT, Timesheet.Status.REOPENED}:
+        messages.info(request, "This timesheet is already editable.")
+        return redirect("timesheet_edit", pk=timesheet.pk)
+
+    if request.method == "POST":
+        form = TimesheetReopenRequestForm(request.POST)
+
+        if form.is_valid():
+            reopen_request = form.save(commit=False)
+            reopen_request.timesheet = timesheet
+            reopen_request.requested_by = request.user
+            reopen_request.supervisor = getattr(request.user, "supervisor", None)
+
+            if reopen_request.supervisor:
+                reopen_request.status = "pending"
+                reopen_request.save()
+                messages.success(request, "Your reopen request has been submitted.")
+            else:
+                reopen_request.status = "approved"
+                reopen_request.decided_by = request.user
+                reopen_request.decided_at = timezone.now()
+                reopen_request.save()
+
+                timesheet.status = Timesheet.Status.REOPENED
+                timesheet.save(update_fields=["status", "updated_at"])
+
+                messages.success(request, "Timesheet reopened.")
+
+            return redirect(timesheet.get_absolute_url())
+    else:
+        form = TimesheetReopenRequestForm()
+
+    return render(
+        request,
+        "timesheets/reopen_request.html",
+        {
+            "timesheet": timesheet,
+            "form": form,
+        },
+    )
 
 @login_required
 def timesheet_approve(request, pk):
