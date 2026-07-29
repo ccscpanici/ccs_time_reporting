@@ -6,6 +6,7 @@ from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.core.mail.backends.smtp import EmailBackend
 from django.utils import timezone
+from django.urls import reverse
 
 from ..models import (
     ApprovalNotificationRecipient,
@@ -357,4 +358,125 @@ def send_reopened_admin_notification(timesheet, reopened_by):
         subject=subject,
         body=body,
         to=recipients,
+    )
+
+
+
+def _reopen_request_review_url(reopen_request):
+    base_url = getattr(settings, "SITE_BASE_URL", "https://timetrack.ccswi.us").rstrip("/")
+    return f"{base_url}{reverse('reopen_request_review', kwargs={'pk': reopen_request.pk})}"
+
+
+def send_timesheet_reopen_request_email(reopen_request):
+    """Notify the assigned supervisor that a reopen request needs review."""
+    config = EmailConfiguration.active_config()
+    if not config:
+        raise ValueError("No active email configuration exists.")
+
+    supervisor = reopen_request.supervisor
+    if not supervisor:
+        raise ValueError("Reopen request does not have a supervisor assigned.")
+    if not supervisor.email:
+        raise ValueError("Supervisor does not have an email address.")
+
+    timesheet = reopen_request.timesheet
+    employee_name = timesheet.employee.get_full_name() or timesheet.employee.get_username()
+    requester_name = reopen_request.requested_by.get_full_name() or reopen_request.requested_by.get_username()
+
+    subject = f"{employee_name} Timesheet {timesheet.week_start:%m/%d/%Y} - Reopen Request"
+    body = "\n".join([
+        f"{employee_name} has requested that a timesheet be reopened.",
+        "",
+        f"Week Start: {timesheet.week_start:%m/%d/%Y}",
+        f"Requested By: {requester_name}",
+        f"Priority: {reopen_request.get_priority_display()}",
+        "",
+        "Reason:",
+        reopen_request.reason or "No reason provided.",
+        "",
+        "Review Request:",
+        _reopen_request_review_url(reopen_request),
+    ])
+
+    _send_basic_email(
+        config=config,
+        subject=subject,
+        body=body,
+        to=[supervisor.email],
+    )
+
+
+def send_employee_reopen_approved_email(reopen_request):
+    """Notify the employee that the request was approved and the sheet is editable."""
+    config = EmailConfiguration.active_config()
+    if not config:
+        raise ValueError("No active email configuration exists.")
+
+    employee = reopen_request.timesheet.employee
+    if not employee.email:
+        raise ValueError("Employee does not have an email address.")
+
+    decision_name = (
+        reopen_request.decided_by.get_full_name()
+        or reopen_request.decided_by.get_username()
+        if reopen_request.decided_by
+        else "System"
+    )
+    timesheet = reopen_request.timesheet
+    subject = f"Timesheet Reopen Request Approved - Week of {timesheet.week_start:%m/%d/%Y}"
+    body = "\n".join([
+        f"Your request to reopen the timesheet for the week of {timesheet.week_start:%m/%d/%Y} was approved.",
+        "",
+        f"Approved By: {decision_name}",
+        "",
+        "Decision Notes:",
+        reopen_request.decision_notes or "No notes provided.",
+        "",
+        "Edit Timesheet:",
+        _timesheet_url(timesheet),
+    ])
+
+    _send_basic_email(
+        config=config,
+        subject=subject,
+        body=body,
+        to=[employee.email],
+    )
+
+
+def send_employee_reopen_rejected_email(reopen_request):
+    """Notify the employee that the request was rejected."""
+    config = EmailConfiguration.active_config()
+    if not config:
+        raise ValueError("No active email configuration exists.")
+
+    employee = reopen_request.timesheet.employee
+    if not employee.email:
+        raise ValueError("Employee does not have an email address.")
+
+    decision_name = (
+        reopen_request.decided_by.get_full_name()
+        or reopen_request.decided_by.get_username()
+        if reopen_request.decided_by
+        else "System"
+    )
+    timesheet = reopen_request.timesheet
+    subject = f"Timesheet Reopen Request Rejected - Week of {timesheet.week_start:%m/%d/%Y}"
+    body = "\n".join([
+        f"Your request to reopen the timesheet for the week of {timesheet.week_start:%m/%d/%Y} was rejected.",
+        "",
+        f"Rejected By: {decision_name}",
+        "",
+        "Decision Notes:",
+        reopen_request.decision_notes or "No notes provided.",
+        "",
+        "View Timesheet:",
+        _timesheet_url(timesheet),
+    ])
+
+    _send_basic_email(
+        config=config,
+        subject=subject,
+        body=body,
+        to=[employee.email],
     )

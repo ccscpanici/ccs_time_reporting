@@ -21,7 +21,16 @@ from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
 from .services.importer import find_invalid_time_entry_job_numbers, import_timesheet_upload, valid_time_entry_job_qs
 from .services.job_importer import apply_job_import, preview_job_import
-from .services.notifications import send_employee_timesheet_approved_email, send_employee_timesheet_rejected_email, send_timesheet_approved_email, send_timesheet_reopened_email, send_timesheet_submitted_supervisor_email
+from .services.notifications import (
+    send_employee_reopen_approved_email,
+    send_employee_reopen_rejected_email,
+    send_employee_timesheet_approved_email,
+    send_employee_timesheet_rejected_email,
+    send_reopened_admin_notification,
+    send_timesheet_approved_email,
+    send_timesheet_reopen_request_email,
+    send_timesheet_submitted_supervisor_email,
+)
 from .services.receipts_pdf import build_receipts_pdf_bytes, receipts_pdf_filename
 from .services.submission import create_timesheet_artifact, submit_timesheet
 from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
@@ -2230,7 +2239,7 @@ def timesheet_reopen(request, pk):
                 return redirect(timesheet)
 
             try:
-                send_timesheet_reopened_email(reopened_timesheet, request.user)
+                send_reopened_admin_notification(reopened_timesheet, request.user)
             except Exception as exc:
                 messages.warning(
                     request,
@@ -2251,10 +2260,6 @@ def user_can_manage_reopen_requests(user):
 @login_required
 def timesheet_reopen_request(request, pk):
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user)
-
-    if not user_can_manage_reopen_requests(request.user):
-        messages.error(request, "You do not have permission to manage reopen requests.")
-        return redirect("timesheet_list")
 
     allowed = {
         Timesheet.Status.SUBMITTED,
@@ -2281,22 +2286,44 @@ def timesheet_reopen_request(request, pk):
             reopen_request = form.save(commit=False)
             reopen_request.timesheet = timesheet
             reopen_request.requested_by = request.user
-            reopen_request.supervisor = getattr(request.user, "supervisor", None)
+            profile = getattr(request.user, "employee_profile", None)
+            reopen_request.supervisor = getattr(profile, "supervisor", None) if profile else None
 
             if reopen_request.supervisor:
                 reopen_request.status = "pending"
                 reopen_request.save()
-                messages.success(request, "Your reopen request has been submitted.")
+
+                try:
+                    send_timesheet_reopen_request_email(reopen_request)
+                except Exception as exc:
+                    messages.warning(
+                        request,
+                        f"Your reopen request was submitted, but the supervisor email could not be sent: {exc}",
+                    )
+                else:
+                    messages.success(request, "Your reopen request has been submitted and your supervisor was notified.")
             else:
-                reopen_request.status = "approved"
-                reopen_request.decided_by = request.user
-                reopen_request.decided_at = timezone.now()
                 reopen_request.save()
+                reopen_request.approve(request.user, "Automatically approved because no supervisor is assigned.")
 
-                timesheet.status = Timesheet.Status.REOPENED
-                timesheet.save(update_fields=["status", "updated_at"])
+                email_warnings = []
+                try:
+                    send_employee_reopen_approved_email(reopen_request)
+                except Exception as exc:
+                    email_warnings.append(f"employee notification: {exc}")
 
-                messages.success(request, "Timesheet reopened.")
+                try:
+                    send_reopened_admin_notification(reopen_request.timesheet, request.user)
+                except Exception as exc:
+                    email_warnings.append(f"admin notification: {exc}")
+
+                if email_warnings:
+                    messages.warning(
+                        request,
+                        "Timesheet reopened, but one or more emails could not be sent: " + "; ".join(email_warnings),
+                    )
+                else:
+                    messages.success(request, "Timesheet reopened and notifications sent.")
 
             return redirect(timesheet.get_absolute_url())
     else:
@@ -2370,17 +2397,27 @@ def reopen_request_approve(request, pk):
     if request.method != "POST":
         return redirect("reopen_request_review", pk=reopen_request.pk)
 
-    reopen_request.status = "approved"
-    reopen_request.decided_by = request.user
-    reopen_request.decided_at = timezone.now()
     notes = request.POST.get("decision_notes", "").strip()
     reopen_request.approve(request.user, notes)
 
-    timesheet = reopen_request.timesheet
-    timesheet.status = Timesheet.Status.REOPENED
-    timesheet.save(update_fields=["status", "updated_at"])
+    email_warnings = []
+    try:
+        send_employee_reopen_approved_email(reopen_request)
+    except Exception as exc:
+        email_warnings.append(f"employee notification: {exc}")
 
-    messages.success(request, "Timesheet reopen request approved.")
+    try:
+        send_reopened_admin_notification(reopen_request.timesheet, request.user)
+    except Exception as exc:
+        email_warnings.append(f"admin notification: {exc}")
+
+    if email_warnings:
+        messages.warning(
+            request,
+            "Request approved, but one or more emails could not be sent: " + "; ".join(email_warnings),
+        )
+    else:
+        messages.success(request, "Timesheet reopen request approved and notifications sent.")
     return redirect("reopen_request_list")
 
 
@@ -2396,13 +2433,18 @@ def reopen_request_reject(request, pk):
     if request.method != "POST":
         return redirect("reopen_request_review", pk=reopen_request.pk)
 
-    reopen_request.status = "denied"
-    reopen_request.decided_by = request.user
-    reopen_request.decided_at = timezone.now()
     notes = request.POST.get("decision_notes", "").strip()
     reopen_request.reject(request.user, notes)
 
-    messages.success(request, "Timesheet reopen request rejected.")
+    try:
+        send_employee_reopen_rejected_email(reopen_request)
+    except Exception as exc:
+        messages.warning(
+            request,
+            f"Request rejected, but the employee notification email could not be sent: {exc}",
+        )
+    else:
+        messages.success(request, "Timesheet reopen request rejected and the employee was notified.")
     return redirect("reopen_request_list")
 
 

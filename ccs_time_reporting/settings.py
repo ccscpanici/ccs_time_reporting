@@ -10,11 +10,25 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,192.168.59.44,timetrack.ccswi.us').split(',') if h.strip()]
 CSRF_TRUSTED_ORIGINS = [
-    "https://timetrack.ccswi.us",
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://timetrack.ccswi.us",
+    ).split(",")
+    if origin.strip()
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+
+SESSION_COOKIE_SECURE = os.getenv(
+    "SESSION_COOKIE_SECURE",
+    "True",
+).lower() == "true"
+
+CSRF_COOKIE_SECURE = os.getenv(
+    "CSRF_COOKIE_SECURE",
+    "True",
+).lower() == "true"
+
 USE_X_FORWARDED_HOST = True
 SECURE_SSL_REDIRECT = False
 
