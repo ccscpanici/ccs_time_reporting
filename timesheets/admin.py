@@ -5,7 +5,7 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
-from .models import ApprovalNotificationRecipient, Customer, EmailConfiguration, Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode
+from .models import ApprovalNotificationRecipient, Customer, EmailConfiguration, Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode, TimesheetReopenRequest
 from .services.notifications import send_test_email
 
 
@@ -277,3 +277,27 @@ class TimesheetReceiptAdmin(admin.ModelAdmin):
         "timesheet__employee__last_name",
     )
     readonly_fields = ("uploaded_at",)
+
+@admin.register(TimesheetReopenRequest)
+class TimesheetReopenRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "timesheet",
+        "requested_by",
+        "supervisor",
+        "priority",
+        "status",
+        "created_at",
+        "decided_by",
+        "decided_at",
+    )
+    list_filter = ("status", "priority", "created_at", "decided_at")
+    search_fields = (
+        "requested_by__username",
+        "requested_by__first_name",
+        "requested_by__last_name",
+        "supervisor__username",
+        "reason",
+        "decision_notes",
+    )
+    readonly_fields = ("created_at", "decided_at")
+    ordering = ("-created_at",)

@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
 from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm, TimesheetReopenRequestForm
-from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport
+from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
@@ -432,6 +432,12 @@ def timesheet_detail(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
     weekly_total_hours = sum(day["total_hours"] for day in grid)
+    
+    pending_reopen_request = TimesheetReopenRequest.objects.filter(
+        timesheet=timesheet,
+        status="pending",
+    ).first()
+
     return render(
         request,
         "timesheets/detail.html",
@@ -440,6 +446,7 @@ def timesheet_detail(request, pk):
             "grid": grid,
             "can_approve_this_timesheet": can_approve_timesheet(request.user, timesheet),
 	    "weekly_total_hours": weekly_total_hours,
+        "pending_reopen_request": pending_reopen_request,
         },
     )
 
@@ -2237,13 +2244,35 @@ def timesheet_reopen(request, pk):
         form = TimesheetReopenForm()
     return render(request, "timesheets/reopen.html", {"timesheet": timesheet, "form": form})
 
+# Helper function
+def user_can_manage_reopen_requests(user):
+    return user.is_superuser or user.groups.filter(name="ManagementStaff").exists()
+
 @login_required
 def timesheet_reopen_request(request, pk):
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user)
 
+    if not user_can_manage_reopen_requests(request.user):
+        messages.error(request, "You do not have permission to manage reopen requests.")
+        return redirect("timesheet_list")
+
+    allowed = {
+        Timesheet.Status.SUBMITTED,
+        Timesheet.Status.APPROVED,
+        Timesheet.Status.INVOICED,
+    }
+
     if timesheet.status in {Timesheet.Status.DRAFT, Timesheet.Status.REOPENED}:
         messages.info(request, "This timesheet is already editable.")
         return redirect("timesheet_edit", pk=timesheet.pk)
+
+    if timesheet.status not in allowed:
+        messages.info(request, "This timesheet cannot be reopened from its current status.")
+        return redirect(timesheet.get_absolute_url())
+
+    if TimesheetReopenRequest.objects.filter(timesheet=timesheet, status="pending").exists():
+        messages.warning(request, "A reopen request is already pending for this timesheet.")
+        return redirect(timesheet.get_absolute_url())
 
     if request.method == "POST":
         form = TimesheetReopenRequestForm(request.POST)
@@ -2281,6 +2310,101 @@ def timesheet_reopen_request(request, pk):
             "form": form,
         },
     )
+
+
+
+@login_required
+def reopen_request_list(request):
+
+    if not user_can_manage_reopen_requests(request.user):
+        messages.error(request, "You do not have permission to manage reopen requests.")
+        return redirect("timesheet_list")
+
+    requests = (
+        TimesheetReopenRequest.objects
+        .select_related("timesheet", "requested_by", "supervisor")
+        .filter(status="pending")
+        .order_by("priority", "created_at")
+    )
+
+    return render(
+        request,
+        "timesheets/reopen_request_list.html",
+        {"requests": requests},
+    )
+
+@login_required
+def reopen_request_review(request, pk):
+
+    if not user_can_manage_reopen_requests(request.user):
+        messages.error(request, "You do not have permission to manage reopen requests.")
+        return redirect("timesheet_list")
+
+    reopen_request = get_object_or_404(
+        TimesheetReopenRequest.objects.select_related(
+            "timesheet",
+            "requested_by",
+            "supervisor",
+        ),
+        pk=pk,
+    )
+
+    return render(
+        request,
+        "timesheets/reopen_request_review.html",
+        {
+            "reopen_request": reopen_request,
+            "timesheet": reopen_request.timesheet,
+        },
+    )
+
+@login_required
+def reopen_request_approve(request, pk):
+
+    if not user_can_manage_reopen_requests(request.user):
+        messages.error(request, "You do not have permission to manage reopen requests.")
+        return redirect("timesheet_list")
+
+    reopen_request = get_object_or_404(TimesheetReopenRequest, pk=pk, status="pending")
+
+    if request.method != "POST":
+        return redirect("reopen_request_review", pk=reopen_request.pk)
+
+    reopen_request.status = "approved"
+    reopen_request.decided_by = request.user
+    reopen_request.decided_at = timezone.now()
+    notes = request.POST.get("decision_notes", "").strip()
+    reopen_request.approve(request.user, notes)
+
+    timesheet = reopen_request.timesheet
+    timesheet.status = Timesheet.Status.REOPENED
+    timesheet.save(update_fields=["status", "updated_at"])
+
+    messages.success(request, "Timesheet reopen request approved.")
+    return redirect("reopen_request_list")
+
+
+@login_required
+def reopen_request_reject(request, pk):
+
+    if not user_can_manage_reopen_requests(request.user):
+        messages.error(request, "You do not have permission to manage reopen requests.")
+        return redirect("timesheet_list")
+        
+    reopen_request = get_object_or_404(TimesheetReopenRequest, pk=pk, status="pending")
+
+    if request.method != "POST":
+        return redirect("reopen_request_review", pk=reopen_request.pk)
+
+    reopen_request.status = "denied"
+    reopen_request.decided_by = request.user
+    reopen_request.decided_at = timezone.now()
+    notes = request.POST.get("decision_notes", "").strip()
+    reopen_request.reject(request.user, notes)
+
+    messages.success(request, "Timesheet reopen request rejected.")
+    return redirect("reopen_request_list")
+
 
 @login_required
 def timesheet_approve(request, pk):

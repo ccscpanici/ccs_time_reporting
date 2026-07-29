@@ -324,7 +324,7 @@ def send_timesheet_submitted_supervisor_email(timesheet, submitted_by):
         to=[supervisor.email],
     )
 
-def send_timesheet_reopened_email(timesheet, reopened_by):
+def send_reopened_admin_notification(timesheet, reopened_by):
     config = EmailConfiguration.active_config()
     if not config:
         raise ValueError("No active email configuration exists.")

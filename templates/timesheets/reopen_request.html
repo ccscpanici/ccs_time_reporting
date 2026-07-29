@@ -10,6 +10,16 @@
 
     <form method="post">
       {% csrf_token %}
+      
+      <div class="mb-3">
+      <label class="form-label" for="{{ form.priority.id_for_label }}">
+          Priority
+      </label>
+      {{ form.priority }}
+      {% if form.priority.errors %}
+        <div class="text-danger small mt-1">{{ form.priority.errors }}</div>
+      {% endif %}
+      </div>
 
       <div class="mb-3">
         <label class="form-label" for="{{ form.reason.id_for_label }}">

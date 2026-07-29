@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Review Reopen Request</h1>
+
+<div class="card shadow-sm border-0 rounded-4 mb-3">
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Employee</dt>
+      <dd class="col-sm-9">{{ reopen_request.requested_by.get_full_name|default:reopen_request.requested_by.username }}</dd>
+
+      <dt class="col-sm-3">Week</dt>
+      <dd class="col-sm-9">{{ timesheet.week_start }}</dd>
+
+      <dt class="col-sm-3">Current Status</dt>
+      <dd class="col-sm-9">{{ timesheet.get_status_display }}</dd>
+
+      <dt class="col-sm-3">Priority</dt>
+      <dd class="col-sm-9">{{ reopen_request.get_priority_display }}</dd>
+
+      <dt class="col-sm-3">Requested</dt>
+      <dd class="col-sm-9">{{ reopen_request.created_at|date:"M j, Y g:i A" }}</dd>
+
+      <dt class="col-sm-3">Reason</dt>
+      <dd class="col-sm-9">{{ reopen_request.reason|linebreaksbr }}</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="mb-3">
+        <label class="form-label" for="decision_notes">Decision Notes</label>
+        <textarea class="form-control" id="decision_notes" name="decision_notes" rows="4"></textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-success" type="submit" formaction="{% url 'reopen_request_approve' reopen_request.pk %}">
+          Approve
+        </button>
+
+        <button class="btn btn-outline-danger" type="submit" formaction="{% url 'reopen_request_reject' reopen_request.pk %}">
+          Reject
+        </button>
+
+        <a class="btn btn-outline-primary" href="{{ timesheet.get_absolute_url }}">
+          View Timesheet
+        </a>
+
+        <a class="btn btn-outline-secondary" href="{% url 'reopen_request_list' %}">
+          Back
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

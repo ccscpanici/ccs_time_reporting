@@ -6,6 +6,7 @@ from django.db import models
 from django.urls import reverse
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
+from django.utils import timezone
 
 
 class Customer(models.Model):
@@ -717,6 +718,12 @@ class TimesheetSubmissionRecipient(models.Model):
         return self.email
 
 class TimesheetReopenRequest(models.Model):
+    class Priority(models.TextChoices):
+        HIGH = "high", "High"
+        MEDIUM = "medium", "Medium"
+        LOW = "low", "Low"
+    # end class
+
     timesheet = models.ForeignKey(Timesheet, on_delete=models.CASCADE, related_name="reopen_requests")
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
@@ -729,7 +736,26 @@ class TimesheetReopenRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     decided_at = models.DateTimeField(null=True, blank=True)
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    priority = models.CharField(max_length=10, choices=Priority.choices, default=Priority.LOW)
+    decision_notes = models.TextField(blank=True)
 
+    def approve(self, user, notes=""):
+        self.status = "approved"
+        self.decided_by = user
+        self.decided_at = timezone.now()
+        self.decision_notes = notes or ""
+        self.save()
+
+        self.timesheet.status = Timesheet.Status.REOPENED
+        self.timesheet.save(update_fields=["status", "updated_at"])
+
+
+    def reject(self, user, notes=""):
+        self.status = "denied"
+        self.decided_by = user
+        self.decided_at = timezone.now()
+        self.decision_notes = notes or ""
+        self.save()
 
 class BulkImportJob(models.Model):
     STATUS_CHOICES = [("pending","Pending"),("running","Running"),("completed","Completed"),("failed","Failed")]

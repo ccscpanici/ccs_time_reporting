@@ -157,16 +157,12 @@
     </div>
   </div>
   <div class="d-flex align-items-center gap-2">
-    <button class="btn btn-primary" type="button" data-live-form-save>
-      Save Now
-    </button>
-
     <span class="small text-muted" data-live-form-status>
       Saved
     </span>
-
-    <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
-      Cancel
+    <a class="btn btn-success btn-lg" href="{{ timesheet.get_absolute_url }}">
+    <i class="bi bi-eye"></i>
+      Review &amp; Submit
     </a>
   </div>
 </form>

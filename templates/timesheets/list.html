@@ -71,9 +71,16 @@
             <td class="text-end">{{ ts.total_hours|floatformat:2 }}</td>
             <td class="text-end">
               <div class="btn-group btn-group-sm">
-                <a class="btn btn-outline-primary timesheet-action-btn" href="{{ ts.get_absolute_url }}">
-                  Open
-                </a>
+
+                {% if ts.is_editable %}
+                  <a class="btn btn-primary timesheet-action-btn" href="{{ ts.open_url }}">
+                    Edit
+                  </a>
+                {% else %}
+                  <a class="btn btn-outline-primary timesheet-action-btn" href="{{ ts.open_url }}">
+                    Open
+                  </a>
+                {% endif %}
 
                 {% if ts.can_export_excel %}
                   <a

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Reopen Requests{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+	<div class="d-flex justify-content-between align-items-center mb-4">
+		<h1 class="mb-0">
+			Reopen Requests
+		</h1>
+
+		<span class="badge bg-primary fs-6">
+			{{ requests|length }} Pending
+		</span>
+	</div>
+
+	<div class="card shadow-sm">
+		<div class="table-responsive">
+
+			<table class="table table-hover align-middle mb-0">
+
+				<thead class="table-light">
+					<tr>
+						<th>Priority</th>
+						<th>Employee</th>
+						<th>Week</th>
+						<th>Requested</th>
+						<th>Reason</th>
+						<th class="text-end">Actions</th>
+					</tr>
+				</thead>
+
+				<tbody>
+
+					{% for request in requests %}
+					<tr>
+
+						<td>
+							{% if request.priority == "high" %}
+								<span class="badge bg-danger">High</span>
+							{% elif request.priority == "medium" %}
+								<span class="badge bg-warning text-dark">Medium</span>
+							{% else %}
+								<span class="badge bg-success">Low</span>
+							{% endif %}
+						</td>
+
+						<td>
+							{{ request.requested_by.get_full_name|default:request.requested_by.username }}
+						</td>
+
+						<td>
+							{{ request.timesheet.week_start }}
+						</td>
+
+						<td>
+							{{ request.created_at|date:"M j, Y g:i A" }}
+						</td>
+
+						<td style="max-width:400px;">
+							{{ request.reason|truncatechars:100 }}
+						</td>
+
+						<td class="text-end">
+
+							<a class="btn btn-sm btn-outline-primary"
+							   href="{% url 'reopen_request_review' request.pk %}">
+								<i class="bi bi-eye"></i>
+								Review
+							</a>
+
+						</td>
+
+					</tr>
+					{% empty %}
+					<tr>
+						<td colspan="6" class="text-center text-muted py-5">
+							No reopen requests are waiting for approval.
+						</td>
+					</tr>
+					{% endfor %}
+
+				</tbody>
+
+			</table>
+
+		</div>
+	</div>
+
+</div>
+{% endblock %}

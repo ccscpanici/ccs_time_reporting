@@ -248,13 +248,14 @@ class TimesheetDeleteForm(forms.Form):
 class TimesheetReopenRequestForm(forms.ModelForm):
     class Meta:
         model = TimesheetReopenRequest
-        fields = ["reason"]
+        fields = ["priority", "reason"]
         widgets = {
+            "priority": forms.Select(attrs={"class": "form-select"}),
             "reason": forms.Textarea(attrs={
                 "class": "form-control",
                 "rows": 4,
                 "placeholder": "Explain why this timesheet needs to be reopened.",
-            })
+            }),
         }
 
 class TimesheetReopenForm(forms.Form):
