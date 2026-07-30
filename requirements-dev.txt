@@ -1,0 +1,6 @@
+coverage
+pytest
+pytest-django
+factory-boy
+model-bakery
+playwright
