@@ -43,6 +43,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from .permissions import can_approve_timesheet, can_view_timesheet, is_management_staff, is_project_manager
 from django.views.decorators.http import require_POST
+from timesheets.services.history import build_timesheet_history
 
 def _job_number_sort_key(job):
     """Return a numeric-aware sort key for CCS job numbers.
@@ -441,6 +442,7 @@ def timesheet_detail(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
     weekly_total_hours = sum(day["total_hours"] for day in grid)
+    history = build_timesheet_history(timesheet)
     
     pending_reopen_request = TimesheetReopenRequest.objects.filter(
         timesheet=timesheet,
@@ -453,9 +455,13 @@ def timesheet_detail(request, pk):
         {
             "timesheet": timesheet,
             "grid": grid,
-            "can_approve_this_timesheet": can_approve_timesheet(request.user, timesheet),
+            "can_approve_this_timesheet": can_approve_timesheet(
+                request.user, 
+                timesheet
+            ),
 	    "weekly_total_hours": weekly_total_hours,
         "pending_reopen_request": pending_reopen_request,
+        "history": history,
         },
     )
 

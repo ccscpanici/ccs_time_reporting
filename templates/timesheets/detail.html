@@ -114,6 +114,9 @@
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="receipts-tab" data-bs-toggle="tab" data-bs-target="#receipts-pane" type="button" role="tab" aria-controls="receipts-pane" aria-selected="false">Receipts</button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-pane" type="button" role="tab" aria-controls="history-pane" aria-selected="false">History</button>
+  </li>
 </ul>
 
 <div class="tab-content">
@@ -328,6 +331,54 @@
           </table>
         </div>
       </div>
+    </div>
+  </div>
+  <div class="tab-pane fade"
+     id="history-pane"
+     role="tabpanel"
+     aria-labelledby="history-tab"
+     tabindex="0">
+
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-header bg-body-tertiary rounded-top-4">
+        <strong>Timesheet History</strong>
+      </div>
+
+    <div class="card-body">
+      {% if history %}
+        <div class="list-group list-group-flush">
+        {% for event in history %}
+          <div class="list-group-item px-0">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h6 class="mb-1">
+                  <i class="bi {{ event.icon }}"></i>
+                  {{ event.title }}
+                </h6>
+                <div class="text-muted small">
+                  {{ event.user }}
+                  •
+                  {{ event.timestamp|date:"m/d/Y g:i A" }}
+                </div>
+                {% if event.details %}
+                  <div class="mt-2">
+                    {{ event.details|linebreaksbr }}
+                  </div>
+                {% endif %}
+              </div>
+
+              <span class="badge text-bg-{{ event.badge }}">
+                {{ event.title }}
+              </span>
+            </div>
+          </div>
+        {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">
+          No history is available for this timesheet.
+        </p>
+      {% endif %}
     </div>
   </div>
 </div>
