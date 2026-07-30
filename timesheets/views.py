@@ -2261,7 +2261,7 @@ def timesheet_reopen(request, pk):
 
 # Helper function
 def user_can_manage_reopen_requests(user):
-    return user.is_superuser or user.groups.filter(name="ManagementStaff").exists()
+    return is_management_staff(user)
 
 @login_required
 def timesheet_reopen_request(request, pk):
