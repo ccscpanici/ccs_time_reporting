@@ -26,3 +26,13 @@ Thumbs.db
 # COVERAGE DATA
 .coverage
 htmlcov/
+# Generated/runtime files
+venv/
+staticfiles/
+media/
+*.orig
+*.before_*
+*.code-workspace
+__pycache__/
+*.pyc
+.env
