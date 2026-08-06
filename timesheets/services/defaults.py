@@ -97,6 +97,34 @@ DEFAULT_MILEAGE_RATES = {
 }
 
 
+DEFAULT_OVERNIGHT_RATES = {
+    2026: "50.00",
+}
+
+
+def seed_overnight_rates(*, stdout=None):
+    """Create/update yearly overnight reimbursement rates. Safe to repeat."""
+    from decimal import Decimal
+    from timesheets.models import OvernightRate
+
+    created = 0
+    updated = 0
+    for year, rate in DEFAULT_OVERNIGHT_RATES.items():
+        _, was_created = OvernightRate.objects.update_or_create(
+            year=year,
+            defaults={"rate": Decimal(rate)},
+        )
+        if was_created:
+            created += 1
+        else:
+            updated += 1
+
+    if stdout:
+        stdout.write(f"Overnight rates seeded: {created} created, {updated} updated.")
+
+    return created, updated
+
+
 def seed_mileage_rates(*, stdout=None):
     """Create/update yearly mileage rates from 2000 through 2026.
 

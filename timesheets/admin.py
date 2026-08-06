@@ -5,7 +5,7 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
-from .models import ApprovalNotificationRecipient, Customer, EmailConfiguration, Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode, TimesheetReopenRequest
+from .models import ApprovalNotificationRecipient, Customer, EmailConfiguration, Expense, Job, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode, TimesheetReopenRequest
 from .services.notifications import send_test_email
 
 
@@ -104,7 +104,7 @@ class TimeEntryInline(admin.TabularInline):
 
 @admin.register(Timesheet)
 class TimesheetAdmin(admin.ModelAdmin):
-    list_display = ("employee", "week_start", "mileage_rate", "status", "submitted_at", "reopened_at", "approved_at", "invoiced_at", "deleted_at")
+    list_display = ("employee", "week_start", "mileage_rate", "overnight_rate", "status", "submitted_at", "reopened_at", "approved_at", "invoiced_at", "deleted_at")
     list_filter = ("status", "week_start", "submitted_at", "approved_at", "invoiced_at", "deleted_at")
     search_fields = ("employee__username", "employee__first_name", "employee__last_name")
     inlines = [TimeEntryInline]
@@ -155,6 +155,13 @@ class WorkCodeAdmin(admin.ModelAdmin):
 
 @admin.register(MileageRate)
 class MileageRateAdmin(admin.ModelAdmin):
+    list_display = ("year", "rate")
+    search_fields = ("year",)
+    ordering = ("-year",)
+
+
+@admin.register(OvernightRate)
+class OvernightRateAdmin(admin.ModelAdmin):
     list_display = ("year", "rate")
     search_fields = ("year",)
     ordering = ("-year",)

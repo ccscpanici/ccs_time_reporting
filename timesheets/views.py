@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
 from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm, TimesheetReopenRequestForm
-from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest
+from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
@@ -405,6 +405,7 @@ def timesheet_create(request):
                     "entries_per_day": entries_per_day,
                     "template_entries_per_day": 5,
                     "mileage_rate": MileageRate.rate_for_date(week_start),
+                    "overnight_rate": OvernightRate.rate_for_date(week_start),
                     "status": Timesheet.Status.DRAFT,
                 },
             )
@@ -715,6 +716,7 @@ def _timesheet_day_entry(request, target_date, page_title):
             "entries_per_day": 5,
             "template_entries_per_day": 5,
             "mileage_rate": MileageRate.rate_for_date(week_start),
+            "overnight_rate": OvernightRate.rate_for_date(week_start),
             "status": Timesheet.Status.DRAFT,
         },
     )
@@ -801,6 +803,7 @@ def timesheet_autosave(request):
             "entries_per_day": 5,
             "template_entries_per_day": 5,
             "mileage_rate": MileageRate.rate_for_date(week_start),
+            "overnight_rate": OvernightRate.rate_for_date(week_start),
             "status": Timesheet.Status.DRAFT,
         },
     )
@@ -909,6 +912,7 @@ def timesheet_today(request):
             "entries_per_day": 5,
             "template_entries_per_day": 5,
             "mileage_rate": MileageRate.rate_for_date(week_start),
+            "overnight_rate": OvernightRate.rate_for_date(week_start),
             "status": Timesheet.Status.DRAFT,
         },
     )

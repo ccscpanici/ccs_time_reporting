@@ -26,6 +26,7 @@ from timesheets.models import (
     TimesheetSubmissionArtifact,
     WorkCode,
     MileageRate,
+    OvernightRate,
 )
 from timesheets.services.exporter import (
     _export_initials_filename,
@@ -101,6 +102,7 @@ class TimesheetExportTestBase(TestCase):
             status=status,
             template_entries_per_day=template_entries_per_day,
             mileage_rate=Decimal("0.720"),
+            overnight_rate=Decimal("50.00"),
         )
 
     def make_entry(self, timesheet, *, day_offset=0, row_order=1, **overrides):
@@ -189,8 +191,48 @@ class ExporterServiceTests(TimesheetExportTestBase):
 
         self.assertTrue(export_path.exists())
         self.assertTrue(export_path.read_bytes().startswith(b"%PDF"))
-        self.assertGreaterEqual(len(PdfReader(str(export_path)).pages), 3)
+        reader = PdfReader(str(export_path))
+        self.assertGreaterEqual(len(reader.pages), 3)
+
+        pdf_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn(f"{self.week_start:%A} - {self.week_start:%m/%d/%Y}", pdf_text)
+        self.assertIn("Daily Totals", pdf_text)
+        self.assertIn("Weekly Totals", pdf_text)
+        self.assertIn("Total Hours: 8.00", pdf_text)
+        self.assertIn("Expense Report", pdf_text)
+        self.assertIn("Totals", pdf_text)
+        self.assertIn("Grand Total", pdf_text)
+        self.assertIn("Overnight", pdf_text)
+        self.assertIn("Stays: 1", pdf_text)
+        self.assertIn("Rate: $50.00", pdf_text)
+        self.assertIn("Overnight Total: $50.00", pdf_text)
+        self.assertIn("$18.00", pdf_text)      # Mileage
+        self.assertIn("$50.00", pdf_text)      # Overnight reimbursement
+        self.assertIn("$125.00", pdf_text)     # Hotel
+        self.assertIn("$32.50", pdf_text)      # Business meals
+        self.assertIn("$175.50", pdf_text)     # Grand Total
+        self.assertIn("Receipts", pdf_text)
+        self.assertIn("No receipts were submitted for this timesheet.", pdf_text)
+
+    def test_pdf_export_always_includes_expense_and_receipt_pages(self):
+        timesheet = self.make_timesheet()
+        self.make_entry(timesheet)
+
+        export_path = build_timesheet_pdf(timesheet)
+        reader = PdfReader(str(export_path))
+        pdf_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+
+        self.assertIn("Expense Report", pdf_text)
+        self.assertIn("Grand Total", pdf_text)
+        self.assertIn("$0.00", pdf_text)
+        self.assertIn("Receipts", pdf_text)
+        self.assertIn("No receipts were submitted for this timesheet.", pdf_text)
         
+    def test_overnight_rate_uses_exact_year_and_fallback(self):
+        OvernightRate.objects.update_or_create(year=2026, defaults={"rate": Decimal("50.00")})
+        self.assertEqual(OvernightRate.rate_for_date(date(2026, 8, 2)), Decimal("50.00"))
+        self.assertEqual(OvernightRate.rate_for_date(date(2027, 8, 1)), Decimal("50.00"))
+
     def test_create_artifact_persists_generated_pdf(self):
         timesheet = self.make_timesheet()
         self.make_entry(timesheet)

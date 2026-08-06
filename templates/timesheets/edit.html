@@ -16,6 +16,16 @@
     </div>
   </div>
 
+  <div class="alert alert-info d-flex align-items-center shadow-sm rounded-4 mb-3" role="alert">
+    <i class="bi bi-info-circle-fill fs-5 me-3"></i>
+    <div>
+      <strong>Travel Reimbursement Tip:</strong>
+      Meal per diem is <strong>$37.50</strong> for a travel day and
+      <strong>${{ timesheet.overnight_rate|floatformat:2 }}/day</strong> for overnight work or any workday exceeding
+      <strong>12 hours</strong>, in accordance with CCS travel policy.
+    </div>
+  </div>
+
   <ul class="nav nav-tabs mb-3" id="timesheetEditTabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="time-tab" data-bs-toggle="tab" data-bs-target="#time-pane" type="button" role="tab" aria-controls="time-pane" aria-selected="true">Time</button>
@@ -73,6 +83,18 @@
               {% endwith %}
               {% endfor %}
             </tbody>
+            <tfoot>
+              <tr class="table-light fw-semibold">
+                <td colspan="3" class="text-end">Daily Totals</td>
+                <td class="daily-reg-total text-end">0.00</td>
+                <td class="daily-ot-total text-end">0.00</td>
+                <td class="daily-dt-total text-end">0.00</td>
+                <td>
+                  Total Hours:
+                  <span class="daily-hours-total">0.00</span>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -254,6 +276,56 @@ document.addEventListener("input", function (event) {
     if (!event.target.classList.contains('job-input')) return;
     updateWarning(event.target);
   });
+})();
+</script>
+
+
+<script>
+(function dailyTimeTotals() {
+  function parseHours(input) {
+    const value = parseFloat(input.value || "0");
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function updateTableTotals(table) {
+    let regular = 0;
+    let overtime = 0;
+    let doubletime = 0;
+
+    table.querySelectorAll('input[name$="_regular_hours"]').forEach(function(input) {
+      regular += parseHours(input);
+    });
+
+    table.querySelectorAll('input[name$="_overtime_hours"]').forEach(function(input) {
+      overtime += parseHours(input);
+    });
+
+    table.querySelectorAll('input[name$="_doubletime_hours"]').forEach(function(input) {
+      doubletime += parseHours(input);
+    });
+
+    const total = regular + overtime + doubletime;
+
+    table.querySelector(".daily-reg-total").textContent = regular.toFixed(2);
+    table.querySelector(".daily-ot-total").textContent = overtime.toFixed(2);
+    table.querySelector(".daily-dt-total").textContent = doubletime.toFixed(2);
+    table.querySelector(".daily-hours-total").textContent = total.toFixed(2);
+  }
+
+  function updateAllDailyTotals() {
+    document.querySelectorAll(".timesheet-entry-table").forEach(updateTableTotals);
+  }
+
+  document.addEventListener("input", function(event) {
+    if (!event.target.classList.contains("hours-input")) return;
+
+    const table = event.target.closest(".timesheet-entry-table");
+    if (table) {
+      updateTableTotals(table);
+    }
+  });
+
+  updateAllDailyTotals();
 })();
 </script>
 

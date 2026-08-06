@@ -345,6 +345,27 @@ class MileageRate(models.Model):
         return Decimal("0.720")
 
 
+class OvernightRate(models.Model):
+    year = models.PositiveIntegerField(unique=True)
+    rate = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        ordering = ["-year"]
+
+    def __str__(self):
+        return f"{self.year}: ${self.rate:.2f}"
+
+    @classmethod
+    def rate_for_date(cls, work_date):
+        exact = cls.objects.filter(year=work_date.year).first()
+        if exact:
+            return exact.rate
+        latest = cls.objects.order_by("-year").first()
+        if latest:
+            return latest.rate
+        return Decimal("50.00")
+
+
 class Timesheet(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -366,6 +387,8 @@ class Timesheet(models.Model):
     # Snapshot of the yearly mileage reimbursement rate used for this timesheet.
     # Populated from MileageRate based on week_start when the timesheet is created.
     mileage_rate = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.720"))
+    # Snapshot of the yearly overnight reimbursement rate used for this timesheet.
+    overnight_rate = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("50.00"))
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)

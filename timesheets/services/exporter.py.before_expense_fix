@@ -359,7 +359,6 @@ def build_timesheet_pdf(timesheet):
     story.append(Paragraph(f"Employee: {employee_name}", styles["Normal"]))
     story.append(Paragraph(f"Week Start: {timesheet.week_start:%m/%d/%Y}", styles["Normal"]))
     story.append(Paragraph(f"Mileage Rate: ${timesheet.mileage_rate} per mile", styles["Normal"]))
-    story.append(Paragraph(f"Overnight Rate: ${timesheet.overnight_rate:.2f} per stay", styles["Normal"]))
     if timesheet.submitted_at:
         story.append(Paragraph(f"Submitted: {timesheet.submitted_at:%m/%d/%Y %I:%M %p}", styles["Normal"]))
     story.append(Spacer(1, 12))
@@ -387,7 +386,6 @@ def build_timesheet_pdf(timesheet):
     total_reg = Decimal("0")
     total_ot = Decimal("0")
     total_dt = Decimal("0")
-    total_overnight_stays = 0
 
     for day_offset in range(7):
         work_date = timesheet.week_start + timedelta(days=day_offset)
@@ -400,7 +398,6 @@ def build_timesheet_pdf(timesheet):
         total_reg += day_reg
         total_ot += day_ot
         total_dt += day_dt
-        total_overnight_stays += sum(1 for entry in day_entries if entry.overnight_stay)
 
         day_data = [[
             Paragraph(
@@ -414,7 +411,7 @@ def build_timesheet_pdf(timesheet):
                 ),
             ),
             "", "", "", "", "", "",
-        ], ["Job", "Code", "Reg", "OT", "DT", "Overnight", "Description"]]
+        ], ["Job", "Code", "Reg", "OT", "DT", "Hotel", "Description"]]
 
         row_count = max(5, len(day_entries))
         for row_index in range(row_count):
@@ -465,23 +462,13 @@ def build_timesheet_pdf(timesheet):
         story.append(Spacer(1, 7))
 
     weekly_total = total_reg + total_ot + total_dt
-    overnight_total = Decimal(total_overnight_stays) * timesheet.overnight_rate
-    weekly_data = [
-        [
-            "Weekly Totals",
-            f"Regular: {total_reg:.2f}",
-            f"OT: {total_ot:.2f}",
-            f"DT: {total_dt:.2f}",
-            f"Total Hours: {weekly_total:.2f}",
-        ],
-        [
-            "Overnight Summary",
-            f"Stays: {total_overnight_stays}",
-            f"Rate: ${timesheet.overnight_rate:.2f}",
-            "",
-            f"Overnight Total: ${overnight_total:.2f}",
-        ],
-    ]
+    weekly_data = [[
+        "Weekly Totals",
+        f"Regular: {total_reg:.2f}",
+        f"OT: {total_ot:.2f}",
+        f"DT: {total_dt:.2f}",
+        f"Total Hours: {weekly_total:.2f}",
+    ]]
     weekly_table = Table(weekly_data, colWidths=[160, 125, 105, 105, 205])
     weekly_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9D9D9")),
@@ -495,10 +482,10 @@ def build_timesheet_pdf(timesheet):
     ]))
     story.append(weekly_table)
 
+    expenses = []
     expense_totals = {
         "miles": Decimal("0"),
         "mileage": Decimal("0"),
-        "overnight": Decimal("0"),
         "per_diem_food": Decimal("0"),
         "air_fare": Decimal("0"),
         "hotel": Decimal("0"),
@@ -507,14 +494,7 @@ def build_timesheet_pdf(timesheet):
         "business_meals": Decimal("0"),
         "other_expense": Decimal("0"),
     }
-
-    # Calculate weekly expense totals from the same ordered time-entry rows used
-    # by the timesheet section. Expense rows remain aligned with their matching
-    # time-entry rows, including blank expense lines.
-    for entry in ordered_entries:
-        if entry.overnight_stay:
-            expense_totals["overnight"] += timesheet.overnight_rate
-
+    for entry in timesheet.entries.select_related("expense").order_by("work_date", "row_order"):
         expense = getattr(entry, "expense", None)
         if not _has_expense(expense):
             continue
@@ -532,185 +512,106 @@ def build_timesheet_pdf(timesheet):
         ):
             expense_totals[field_name] += _money_amount(getattr(expense, field_name))
 
-    # Always include the expense report page, even when no expenses exist.
-    story.append(PageBreak())
-    story.append(Paragraph("Expense Report", styles["Title"]))
-    story.append(Paragraph(f"Employee: {employee_name}", styles["Normal"]))
-    story.append(
-        Paragraph(
-            f"Week Start: {timesheet.week_start:%m/%d/%Y}",
-            styles["Normal"],
-        )
-    )
-    story.append(Spacer(1, 12))
+        expenses.append([
+            entry.work_date.strftime("%m/%d/%Y"),
+            Paragraph(entry.job_display or "", small),
+            _display_number(expense.miles),
+            _display_money(expense.mileage),
+            _display_money(expense.per_diem_food),
+            _display_money(expense.air_fare),
+            _display_money(expense.hotel),
+            _display_money(expense.tolls_parking),
+            _display_money(expense.rental_car_fuel),
+            _display_money(expense.business_meals),
+            _display_money(expense.other_expense),
+            Paragraph(expense.explanation_of_expenses or "", small_wrap),
+        ])
 
-    expensetable_colWidths = [
-        58,   # Job
-        34,   # Miles
-        44,   # Mileage
-        48,   # Overnight
-        44,   # Per Diem
-        36,   # Air
-        36,   # Hotel
-        52,   # Tolls/Parking
-        52,   # Rental/Fuel
-        42,   # Meals
-        42,   # Other
-        212,  # Explanation
-    ]
+    if expenses:
+        story.append(PageBreak())
+        story.append(Paragraph("Expense Report", styles["Title"]))
+        story.append(Paragraph(f"Employee: {employee_name}", styles["Normal"]))
+        story.append(Paragraph(f"Week Start: {timesheet.week_start:%m/%d/%Y}", styles["Normal"]))
+        story.append(Spacer(1, 12))
+        expense_data = [["Date", "Job", "Miles", "Mileage", "Per Diem", "Air", "Hotel", "Tolls/Parking", "Rental/Fuel", "Meals", "Other", "Explanation"]] + expenses
+        expense_data.append([
+            "Totals",
+            "",
+            f"{expense_totals['miles']:.2f}",
+            f"${expense_totals['mileage']:.2f}",
+            f"${expense_totals['per_diem_food']:.2f}",
+            f"${expense_totals['air_fare']:.2f}",
+            f"${expense_totals['hotel']:.2f}",
+            f"${expense_totals['tolls_parking']:.2f}",
+            f"${expense_totals['rental_car_fuel']:.2f}",
+            f"${expense_totals['business_meals']:.2f}",
+            f"${expense_totals['other_expense']:.2f}",
+            "",
+        ])
+        totals_row = len(expense_data) - 1
+        expensetable_colWidths = [
+            50,   # Date
+            58,   # Job
+            38,   # Miles
+            48,   # Mileage
+            48,   # Per Diem
+            40,   # Air
+            40,   # Hotel
+            58,   # Tolls/Parking
+            58,   # Rental/Fuel
+            45,   # Meals
+            45,   # Other
+            192,  # Explanation
+        ]
 
-    # Match the time report layout: one bordered block per day, with at least
-    # five rows. Each expense row corresponds to the same time-entry row.
-    for day_offset in range(7):
-        work_date = timesheet.week_start + timedelta(days=day_offset)
-        day_entries = entries_by_date.get(work_date, [])
-
-        day_data = [[
-            Paragraph(
-                f"{work_date:%A} - {work_date:%m/%d/%Y}",
-                ParagraphStyle(
-                    f"expense_day_header_{day_offset}",
-                    parent=small,
-                    fontName="Helvetica-Bold",
-                    fontSize=8,
-                    leading=9,
-                ),
-            ),
-            "", "", "", "", "", "", "", "", "", "", "",
-        ], [
-            "Job",
-            "Miles",
-            "Mileage",
-            "Overnight",
-            "Per Diem",
-            "Air",
-            "Hotel",
-            "Tolls/Parking",
-            "Rental/Fuel",
-            "Meals",
-            "Other",
-            "Explanation",
-        ]]
-
-        row_count = max(5, len(day_entries))
-        for row_index in range(row_count):
-            if row_index >= len(day_entries):
-                day_data.append(["", "", "", "", "", "", "", "", "", "", "", ""])
-                continue
-
-            entry = day_entries[row_index]
-            expense = getattr(entry, "expense", None)
-
-            if _has_expense(expense):
-                day_data.append([
-                    Paragraph(entry.job_display or "", small),
-                    _display_number(expense.miles),
-                    _display_money(expense.mileage),
-                    _display_money(timesheet.overnight_rate if entry.overnight_stay else Decimal("0")),
-                    _display_money(expense.per_diem_food),
-                    _display_money(expense.air_fare),
-                    _display_money(expense.hotel),
-                    _display_money(expense.tolls_parking),
-                    _display_money(expense.rental_car_fuel),
-                    _display_money(expense.business_meals),
-                    _display_money(expense.other_expense),
-                    Paragraph(expense.explanation_of_expenses or "", small_wrap),
-                ])
-            else:
-                # Preserve the matching time-entry/job line even when no
-                # expense was entered for it.
-                day_data.append([
-                    Paragraph(entry.job_display or "", small),
-                    "",
-                    "",
-                    _display_money(timesheet.overnight_rate if entry.overnight_stay else Decimal("0")),
-                    "", "", "", "", "", "", "", "",
-                ])
-
-        expense_day_table = Table(
-            day_data,
+        expense_table = Table(
+            expense_data,
+            repeatRows=1,
             colWidths=expensetable_colWidths,
-            repeatRows=2,
         )
-        expense_day_table.setStyle(TableStyle([
-            ("SPAN", (0, 0), (-1, 0)),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9D9D9")),
-            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#EEEEEE")),
-            ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
-            ("INNERGRID", (0, 1), (-1, -1), 0.25, colors.HexColor("#B7B7B7")),
+        expense_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("BACKGROUND", (0, totals_row), (-1, totals_row), colors.HexColor("#F2F2F2")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ALIGN", (1, 1), (10, -1), "RIGHT"),
+            ("ALIGN", (2, 1), (10, -1), "RIGHT"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, totals_row), (-1, totals_row), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 7),
             ("LEFTPADDING", (0, 0), (-1, -1), 3),
             ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ("TOPPADDING", (0, 2), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 2), (-1, -1), 4),
         ]))
-        story.append(expense_day_table)
-        story.append(Spacer(1, 7))
+        story.append(expense_table)
 
-    expense_totals_data = [[
-        "Weekly Totals",
-        f"{expense_totals['miles']:.2f}",
-        f"${expense_totals['mileage']:.2f}",
-        f"${expense_totals['overnight']:.2f}",
-        f"${expense_totals['per_diem_food']:.2f}",
-        f"${expense_totals['air_fare']:.2f}",
-        f"${expense_totals['hotel']:.2f}",
-        f"${expense_totals['tolls_parking']:.2f}",
-        f"${expense_totals['rental_car_fuel']:.2f}",
-        f"${expense_totals['business_meals']:.2f}",
-        f"${expense_totals['other_expense']:.2f}",
-        "",
-    ]]
-
-    expense_totals_table = Table(
-        expense_totals_data,
-        colWidths=expensetable_colWidths,
-    )
-    expense_totals_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9D9D9")),
-        ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#B7B7B7")),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("ALIGN", (1, 0), (10, 0), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    story.append(expense_totals_table)
-
-    grand_total = sum(
-        expense_totals[field_name]
-        for field_name in (
-            "mileage",
-            "per_diem_food",
-            "air_fare",
-            "hotel",
-            "tolls_parking",
-            "rental_car_fuel",
-            "business_meals",
-            "other_expense",
+        grand_total = sum(
+            expense_totals[field_name]
+            for field_name in (
+                "mileage",
+                "per_diem_food",
+                "air_fare",
+                "hotel",
+                "tolls_parking",
+                "rental_car_fuel",
+                "business_meals",
+                "other_expense",
+            )
         )
-    )
-
-    story.append(Spacer(1, 8))
-
-    grand_total_table = Table(
-        [["Grand Total", f"${grand_total:.2f}"]],
-        colWidths=[575, 125],
-    )
-    grand_total_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9D9D9")),
-        ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    story.append(grand_total_table)
+        story.append(Spacer(1, 8))
+        grand_total_table = Table(
+            [["Grand Total", f"${grand_total:.2f}"]],
+            colWidths=[575, 125],
+        )
+        grand_total_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9D9D9")),
+            ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(grand_total_table)
 
     parts = []
     for entry in timesheet.entries.select_related("part_entry").order_by("work_date", "row_order"):

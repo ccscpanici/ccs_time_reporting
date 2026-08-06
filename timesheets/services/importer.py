@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from django.db import transaction
 from openpyxl import load_workbook
-from ..models import Expense, Job, MileageRate, PartEntry, TimeEntry, Timesheet, WorkCode
+from ..models import Expense, Job, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, WorkCode
 from .helpers import as_decimal, parse_bool_cell
 from .workbook_mapping import *
 
@@ -324,7 +324,7 @@ def import_timesheet_upload(upload, job_corrections=None):
     timesheet, _ = Timesheet.objects.get_or_create(
         employee=upload.employee,
         week_start=week_start,
-        defaults={"entries_per_day": 5, "template_entries_per_day": 5, "mileage_rate": MileageRate.rate_for_date(week_start)},
+        defaults={"entries_per_day": 5, "template_entries_per_day": 5, "mileage_rate": MileageRate.rate_for_date(week_start), "overnight_rate": OvernightRate.rate_for_date(week_start)},
     )
     if timesheet.status in {Timesheet.Status.SUBMITTED, Timesheet.Status.APPROVED, Timesheet.Status.INVOICED, Timesheet.Status.VOID}:
         raise ValueError("Submitted, approved, invoiced, or voided timesheets cannot be replaced by upload. Reopen the submitted timesheet first if corrections are needed.")
