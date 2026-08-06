@@ -6,6 +6,7 @@ run with only the production requirements installed.
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from decimal import Decimal
 from typing import Any
 
@@ -14,6 +15,7 @@ from django.contrib.auth.models import Group
 
 from accounts.models import EmployeeProfile
 from timesheets.models import Customer, Job, TimeEntry, Timesheet
+from openpyxl import Workbook
 
 User = get_user_model()
 
@@ -104,3 +106,88 @@ def make_time_entry(
         row_order=row_order,
         **values,
     )
+
+
+def write_job_workbook(
+    path: str | Path,
+    *,
+    headers: list[str],
+    rows: list[list[Any]],
+    sheet_title: str = "Jobs - Quotes",
+    preface_rows: list[list[Any]] | None = None,
+) -> Path:
+    """Write a compact XLSX workbook for job-import tests and return its path."""
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = sheet_title
+
+    for row in preface_rows or []:
+        worksheet.append(row)
+    worksheet.append(headers)
+    for row in rows:
+        worksheet.append(row)
+
+    output_path = Path(path)
+    workbook.save(output_path)
+    return output_path
+
+
+def write_timesheet_workbook(
+    path: str | Path,
+    *,
+    week_start: date | None = date(2026, 8, 2),
+    time_rows: list[dict[str, Any]] | None = None,
+    expense_rows: list[dict[str, Any]] | None = None,
+    part_rows: list[dict[str, Any]] | None = None,
+    include_expense_sheet: bool = True,
+    include_parts_sheet: bool = True,
+) -> Path:
+    """Write a compact workbook using the production timesheet cell mapping."""
+    workbook = Workbook()
+    time_sheet = workbook.active
+    time_sheet.title = "Time Sheet"
+
+    if week_start is not None:
+        time_sheet["F7"] = week_start
+
+    for item in time_rows or []:
+        row = int(item.get("row", 20))
+        if "date" in item:
+            time_sheet[f"A{row}"] = item["date"]
+        time_sheet[f"B{row}"] = item.get("job_number", "")
+        time_sheet[f"C{row}"] = item.get("work_code", "")
+        time_sheet[f"D{row}"] = item.get("regular", 0)
+        time_sheet[f"E{row}"] = item.get("overtime", 0)
+        time_sheet[f"F{row}"] = item.get("doubletime", 0)
+        time_sheet[f"G{row}"] = item.get("description", "")
+        if "overnight" in item:
+            chunk_end = 24 + ((row - 20) // 5) * 5
+            time_sheet[f"N{chunk_end}"] = item["overnight"]
+
+    if include_expense_sheet:
+        expense_sheet = workbook.create_sheet("Expense Report")
+        for item in expense_rows or []:
+            row = int(item.get("row", 9))
+            expense_sheet[f"C{row}"] = item.get("miles", 0)
+            expense_sheet[f"E{row}"] = item.get("per_diem_food", 0)
+            expense_sheet[f"F{row}"] = item.get("air_fare", 0)
+            expense_sheet[f"G{row}"] = item.get("hotel", 0)
+            expense_sheet[f"H{row}"] = item.get("tolls_parking", 0)
+            expense_sheet[f"I{row}"] = item.get("rental_car_fuel", 0)
+            expense_sheet[f"J{row}"] = item.get("business_meals", 0)
+            expense_sheet[f"K{row}"] = item.get("other_expense", 0)
+            expense_sheet[f"L{row}"] = item.get("explanation", "")
+
+    if include_parts_sheet:
+        parts_sheet = workbook.create_sheet("Parts Report")
+        for item in part_rows or []:
+            row = int(item.get("row", 9))
+            parts_sheet[f"B{row}"] = item.get("ee_stock_job_number", "")
+            parts_sheet[f"C{row}"] = item.get("quantity", 0)
+            parts_sheet[f"D{row}"] = item.get("description", "")
+            parts_sheet[f"E{row}"] = item.get("notes", "")
+            parts_sheet[f"F{row}"] = item.get("reorder", False)
+
+    output_path = Path(path)
+    workbook.save(output_path)
+    return output_path
