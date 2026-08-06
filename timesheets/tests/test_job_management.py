@@ -1,8 +1,9 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
+from .base import AppTestCase
 
 from timesheets.models import Customer, Job
 
@@ -11,7 +12,7 @@ User = get_user_model()
 
 
 @override_settings(USE_TZ=True)
-class JobManagementTestBase(TestCase):
+class JobManagementTestBase(AppTestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(
@@ -39,20 +40,14 @@ class JobManagementTestBase(TestCase):
 
     def make_job(self, job_number, **overrides):
         values = {
-            "description": f"Description for {job_number}",
             "customer": self.customer,
-            "year": 2026,
-            "job_month": 1,
-            "job_status": Job.STATUS_ACTIVE,
-            "invoice_status": Job.INVOICE_STATUS_PROGRESS,
             "work_type": "Controls",
             "location": "Appleton",
             "customer_po": "PO-100",
             "quote_number": "Q-100",
-            "active": True,
         }
         values.update(overrides)
-        return Job.objects.create(job_number=job_number, **values)
+        return self.make_job_record(job_number=job_number, **values)
 
     def valid_form_data(self, **overrides):
         data = {

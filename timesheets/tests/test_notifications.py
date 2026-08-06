@@ -1,3 +1,4 @@
+from .base import AppTestCase
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,7 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.mail import get_connection
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.utils import timezone
 
 from accounts.models import EmployeeProfile
@@ -24,7 +25,7 @@ from timesheets.services import notifications
 User = get_user_model()
 
 
-class NotificationTestBase(TestCase):
+class NotificationTestBase(AppTestCase):
     week_start = date(2026, 8, 2)
 
     @classmethod

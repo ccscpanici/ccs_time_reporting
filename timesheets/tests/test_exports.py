@@ -10,8 +10,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
+from .base import AppTestCase
 from openpyxl import load_workbook
 from pypdf import PdfReader
 from decimal import Decimal
@@ -50,7 +51,7 @@ from timesheets.services.workbook_mapping import (
 User = get_user_model()
 
 
-class TimesheetExportTestBase(TestCase):
+class TimesheetExportTestBase(AppTestCase):
     week_start = date(2026, 8, 2)
 
     @classmethod
@@ -96,7 +97,7 @@ class TimesheetExportTestBase(TestCase):
         self.addCleanup(self.media_dir.cleanup)
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.APPROVED, template_entries_per_day=5):
-        return Timesheet.objects.create(
+        return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=self.week_start,
             status=status,
@@ -118,7 +119,15 @@ class TimesheetExportTestBase(TestCase):
             "description": "Export test work",
         }
         values.update(overrides)
-        return TimeEntry.objects.create(**values)
+        timesheet = values.pop("timesheet")
+        work_date = values.pop("work_date")
+        row_order = values.pop("row_order")
+        return self.make_time_entry_record(
+            timesheet=timesheet,
+            work_date=work_date,
+            row_order=row_order,
+            **values,
+        )
 
     def make_artifact(self, timesheet, *, employee=None, suffix="pdf", content=b"test artifact"):
         artifact = TimesheetSubmissionArtifact(

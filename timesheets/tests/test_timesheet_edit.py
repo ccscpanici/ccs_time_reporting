@@ -2,8 +2,8 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
 from django.urls import reverse
+from .base import AppTestCase
 
 from accounts.models import EmployeeProfile
 from timesheets.models import Expense, Job, PartEntry, TimeEntry, Timesheet, WorkCode
@@ -12,7 +12,7 @@ from timesheets.models import Expense, Job, PartEntry, TimeEntry, Timesheet, Wor
 User = get_user_model()
 
 
-class TimesheetEditTestBase(TestCase):
+class TimesheetEditTestBase(AppTestCase):
     week_start = date(2026, 7, 26)
     work_date = date(2026, 7, 27)
 
@@ -54,7 +54,7 @@ class TimesheetEditTestBase(TestCase):
         )
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.DRAFT, entries_per_day=5):
-        return Timesheet.objects.create(
+        return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=self.week_start,
             status=status,

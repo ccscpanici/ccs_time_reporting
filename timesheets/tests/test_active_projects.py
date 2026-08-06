@@ -3,8 +3,8 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
 from django.urls import reverse
+from .base import AppTestCase
 from django.utils import timezone
 
 from timesheets.models import ActiveProject, Job, TimeEntry, Timesheet
@@ -13,7 +13,7 @@ from timesheets.models import ActiveProject, Job, TimeEntry, Timesheet
 User = get_user_model()
 
 
-class ActiveProjectTestBase(TestCase):
+class ActiveProjectTestBase(AppTestCase):
     week_start = date(2026, 8, 2)
 
     @classmethod

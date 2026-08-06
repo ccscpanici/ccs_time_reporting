@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
 from django.urls import reverse
+from .base import AppTestCase
 
 from accounts.models import EmployeeProfile
 from timesheets.models import TimeEntry, Timesheet, TimesheetReopenRequest
@@ -13,7 +13,7 @@ from timesheets.models import TimeEntry, Timesheet, TimesheetReopenRequest
 User = get_user_model()
 
 
-class TimesheetViewTestBase(TestCase):
+class TimesheetViewTestBase(AppTestCase):
     week_start = date(2026, 7, 26)
 
     @classmethod
