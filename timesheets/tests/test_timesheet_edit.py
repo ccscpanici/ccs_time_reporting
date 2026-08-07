@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -315,6 +315,37 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         entry = TimeEntry.objects.get(timesheet=timesheet, work_date=self.work_date, row_order=1)
         self.assertEqual(entry.regular_hours, Decimal("8"))
         self.assertEqual(entry.description, "Autosaved work")
+
+    def test_weekly_autosave_updates_non_today_entry(self):
+        timesheet = self.make_timesheet()
+        self.client.force_login(self.employee)
+
+        non_today = self.week_start + timedelta(days=4)
+
+        TimeEntry.objects.create(
+            timesheet=timesheet,
+            work_date=non_today,
+            row_order=1,
+            regular_hours=Decimal("5.50"),
+        )
+
+        data = {
+            "timesheet_id": str(timesheet.pk),
+            "entries_per_day": "5",
+            f"entry_{non_today.isoformat()}_1_regular_hours": "6.25",
+        }
+
+        response = self.client.post(reverse("timesheet_autosave"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+
+        entry = TimeEntry.objects.get(
+            timesheet=timesheet,
+            work_date=non_today,
+            row_order=1,
+        )
+        self.assertEqual(entry.regular_hours, Decimal("6.25"))
 
     def test_autosave_returns_validation_errors_for_invalid_job(self):
         self.make_timesheet()

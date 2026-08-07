@@ -785,28 +785,40 @@ def _timesheet_day_entry(request, target_date, page_title):
 @login_required
 @require_POST
 def timesheet_autosave(request):
-    target_date = timezone.localdate()
-    date_value = request.POST.get("work_date") or request.POST.get("date")
+    timesheet_id = request.POST.get("timesheet_id")
 
-    if date_value:
-        try:
-            target_date = date.fromisoformat(date_value)
-        except ValueError:
-            return JsonResponse({"ok": False, "error": "Invalid work date."}, status=400)
+    if timesheet_id:
+        timesheet = get_object_or_404(
+            Timesheet,
+            pk=timesheet_id,
+            employee=request.user,
+            deleted_at__isnull=True,
+        )
+        work_dates = timesheet.week_dates
+    else:
+        target_date = timezone.localdate()
+        date_value = request.POST.get("work_date") or request.POST.get("date")
 
-    week_start = sunday_for(target_date)
+        if date_value:
+            try:
+                target_date = date.fromisoformat(date_value)
+            except ValueError:
+                return JsonResponse({"ok": False, "error": "Invalid work date."}, status=400)
 
-    timesheet, created = Timesheet.objects.get_or_create(
-        employee=request.user,
-        week_start=week_start,
-        defaults={
-            "entries_per_day": 5,
-            "template_entries_per_day": 5,
-            "mileage_rate": MileageRate.rate_for_date(week_start),
-            "overnight_rate": OvernightRate.rate_for_date(week_start),
-            "status": Timesheet.Status.DRAFT,
-        },
-    )
+        week_start = sunday_for(target_date)
+
+        timesheet, created = Timesheet.objects.get_or_create(
+            employee=request.user,
+            week_start=week_start,
+            defaults={
+                "entries_per_day": 5,
+                "template_entries_per_day": 5,
+                "mileage_rate": MileageRate.rate_for_date(week_start),
+                "overnight_rate": OvernightRate.rate_for_date(week_start),
+                "status": Timesheet.Status.DRAFT,
+            },
+        )
+        work_dates = [target_date]
 
     if not timesheet.can_edit:
         return JsonResponse({"ok": False, "error": "Timesheet is locked."}, status=403)
@@ -815,11 +827,12 @@ def timesheet_autosave(request):
     timesheet.entries_per_day = max(5, min(entries_per_day, 25))
     timesheet.save(update_fields=["entries_per_day", "updated_at"])
 
-    job_errors = _validate_timesheet_jobs_from_post(request, timesheet, [target_date])
+    job_errors = _validate_timesheet_jobs_from_post(request, timesheet, work_dates)
     if job_errors:
         return JsonResponse({"ok": False, "errors": job_errors}, status=400)
 
-    _save_timesheet_day_from_post(request, timesheet, target_date)
+    for work_date in work_dates:
+        _save_timesheet_day_from_post(request, timesheet, work_date)
 
     return JsonResponse({"ok": True})
 

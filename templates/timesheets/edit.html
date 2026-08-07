@@ -3,6 +3,7 @@
 <h1 class="h3 mb-3">Edit week of {{ timesheet.week_start }}</h1>
 <form method="post" class="mb-5" id="weekly-timesheet-edit-form" data-live-form data-live-form-url="{% url 'timesheet_autosave' %}">
   {% csrf_token %}
+  <input type="hidden" name="timesheet_id" value="{{ timesheet.pk }}">
   <datalist id="job-options">
     {% for job in job_options %}
       <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>
