@@ -4,13 +4,17 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-coverage erase
+python -m coverage erase
 
-coverage run manage.py test \
+python -m coverage run manage.py test \
+    accounts \
+    jobgrid \
+    reports \
+    timesheets \
     --settings=ccs_time_reporting.test_settings
 
-coverage report -m
-coverage html
+python -m coverage report -m
+python -m coverage html
 
 echo
 echo "Coverage report written to htmlcov/index.html"

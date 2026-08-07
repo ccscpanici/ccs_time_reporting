@@ -1,0 +1,60 @@
+name: Django Tests
+
+on:
+  push:
+    branches:
+      - master
+      - ccs-platform
+  pull_request:
+    branches:
+      - master
+      - ccs-platform
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run Django system checks
+        run: |
+          python manage.py check \
+            --settings=ccs_time_reporting.test_settings
+
+      - name: Run tests with coverage
+        run: |
+          python -m coverage erase
+          python -m coverage run manage.py test \
+            accounts \
+            jobgrid \
+            reports \
+            timesheets \
+            --settings=ccs_time_reporting.test_settings
+          python -m coverage report -m --fail-under=75
+
+      - name: Generate HTML coverage report
+        if: always()
+        run: |
+          python -m coverage html
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 14
