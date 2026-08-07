@@ -1,15 +1,16 @@
 {% load static %}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="{% if ui_preferences and ui_preferences.theme != 'auto' %}{{ ui_preferences.theme }}{% else %}light{% endif %}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Project Sheet</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_simple.min.css" rel="stylesheet">
+  <link href="{% static 'css/site.css' %}" rel="stylesheet">
   <link href="{% static 'jobgrid/jobgrid.css' %}" rel="stylesheet">
 </head>
-<body class="sheet-body">
+<body class="sheet-body scheme-{{ ui_preferences.color_scheme|default:'default' }}">
   <div class="sheet-shell">
     <aside class="blue-rail">
       <div class="rail-icon active">⌂<span>Home</span></div>
