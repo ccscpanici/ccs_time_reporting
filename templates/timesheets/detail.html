@@ -166,6 +166,19 @@
             {% endwith %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr class="table-active fw-semibold">
+              <td colspan="3" class="text-end">Daily Totals</td>
+              <td class="text-end">{{ day.total_regular|floatformat:2 }}</td>
+              <td class="text-end">{{ day.total_overtime|floatformat:2 }}</td>
+              <td class="text-end">{{ day.total_doubletime|floatformat:2 }}</td>
+              <td>
+                <span class="badge text-bg-light">
+                  Total {{ day.total_hours|floatformat:2 }}
+                </span>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -203,20 +216,39 @@
             <tr class="{% if not entry or not entry.expense %}blank-timesheet-row{% endif %}">
               <td>{{ row.row_order }}</td>
               <td>{% if entry %}{{ entry.job_display }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}{{ entry.expense.miles }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.mileage.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.per_diem_food.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.air_fare.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.hotel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.tolls_parking.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.rental_car_fuel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.business_meals.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
-              <td class="text-end">{% if entry.expense %}${{ entry.expense.other_expense.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="miles" data-value="{% if entry.expense %}{{ entry.expense.miles|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}{{ entry.expense.miles }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="mileage" data-value="{% if entry.expense %}{{ entry.expense.mileage.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.mileage.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="per_diem_food" data-value="{% if entry.expense %}{{ entry.expense.per_diem_food.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.per_diem_food.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="air_fare" data-value="{% if entry.expense %}{{ entry.expense.air_fare.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.air_fare.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="hotel" data-value="{% if entry.expense %}{{ entry.expense.hotel.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.hotel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="tolls_parking" data-value="{% if entry.expense %}{{ entry.expense.tolls_parking.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.tolls_parking.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="rental_car_fuel" data-value="{% if entry.expense %}{{ entry.expense.rental_car_fuel.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.rental_car_fuel.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="business_meals" data-value="{% if entry.expense %}{{ entry.expense.business_meals.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.business_meals.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
+              <td class="text-end expense-value" data-expense-field="other_expense" data-value="{% if entry.expense %}{{ entry.expense.other_expense.amount|default_if_none:0 }}{% else %}0{% endif %}">{% if entry.expense %}${{ entry.expense.other_expense.amount|floatformat:2 }}{% else %}&nbsp;{% endif %}</td>
               <td>{% if entry.expense %}{{ entry.expense.explanation_of_expenses }}{% else %}&nbsp;{% endif %}</td>
             </tr>
             {% endwith %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr class="table-active fw-semibold expense-daily-total-row">
+              <td colspan="2" class="text-end">Daily Totals</td>
+              <td class="text-end" data-total-field="miles">0.00</td>
+              <td class="text-end" data-total-field="mileage">$0.00</td>
+              <td class="text-end" data-total-field="per_diem_food">$0.00</td>
+              <td class="text-end" data-total-field="air_fare">$0.00</td>
+              <td class="text-end" data-total-field="hotel">$0.00</td>
+              <td class="text-end" data-total-field="tolls_parking">$0.00</td>
+              <td class="text-end" data-total-field="rental_car_fuel">$0.00</td>
+              <td class="text-end" data-total-field="business_meals">$0.00</td>
+              <td class="text-end" data-total-field="other_expense">$0.00</td>
+              <td>
+                <span class="badge text-bg-light expense-grand-total">
+                  Total $0.00
+                </span>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -382,4 +414,55 @@
     </div>
   </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".timesheet-expense-table").forEach(function (table) {
+    const totals = {
+      miles: 0,
+      mileage: 0,
+      per_diem_food: 0,
+      air_fare: 0,
+      hotel: 0,
+      tolls_parking: 0,
+      rental_car_fuel: 0,
+      business_meals: 0,
+      other_expense: 0
+    };
+
+    table.querySelectorAll("tbody .expense-value").forEach(function (cell) {
+      const field = cell.dataset.expenseField;
+      const value = parseFloat(cell.dataset.value || "0");
+
+      if (Object.prototype.hasOwnProperty.call(totals, field) && !Number.isNaN(value)) {
+        totals[field] += value;
+      }
+    });
+
+    Object.entries(totals).forEach(function ([field, value]) {
+      const totalCell = table.querySelector(`[data-total-field="${field}"]`);
+      if (!totalCell) return;
+
+      totalCell.textContent = field === "miles"
+        ? value.toFixed(2)
+        : `$${value.toFixed(2)}`;
+    });
+
+    const grandTotal =
+      totals.mileage +
+      totals.per_diem_food +
+      totals.air_fare +
+      totals.hotel +
+      totals.tolls_parking +
+      totals.rental_car_fuel +
+      totals.business_meals +
+      totals.other_expense;
+
+    const grandTotalBadge = table.querySelector(".expense-grand-total");
+    if (grandTotalBadge) {
+      grandTotalBadge.textContent = `Total $${grandTotal.toFixed(2)}`;
+    }
+  });
+});
+</script>
 {% endblock %}
