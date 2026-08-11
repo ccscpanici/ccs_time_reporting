@@ -164,7 +164,7 @@
               {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
               <tr>
                 <td>{{ row.row_order }}</td>
-                <td><input class="form-control form-control-sm part-job-input" name="entry_{{ key }}_{{ row.row_order }}_part_ee_stock_job_number" value="{% if entry.part_entry %}{{ entry.part_entry.ee_stock_job_number }}{% elif entry %}{{ entry.job_display }}{% endif %}" placeholder="EE Stock/Job #"></td>
+                <td><input class="form-control form-control-sm part-job-input" data-entry-key="{{ key }}_{{ row.row_order }}" data-linked-to-time="{% if entry.part_entry %}0{% else %}1{% endif %}" name="entry_{{ key }}_{{ row.row_order }}_part_ee_stock_job_number" value="{% if entry.part_entry %}{{ entry.part_entry.ee_stock_job_number }}{% elif entry %}{{ entry.job_display }}{% endif %}" placeholder="EE Stock/Job #"></td>
                 <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_part_quantity" value="{% if entry.part_entry %}{{ entry.part_entry.quantity }}{% endif %}"></td>
                 <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_part_description_part_number" value="{% if entry.part_entry %}{{ entry.part_entry.part_description_part_number }}{% endif %}"></td>
                 <td><input class="form-control form-control-sm description-input" name="entry_{{ key }}_{{ row.row_order }}_part_additional_notes_for_customer" value="{% if entry.part_entry %}{{ entry.part_entry.additional_notes_for_customer }}{% endif %}"></td>
@@ -279,8 +279,6 @@ document.addEventListener("input", function (event) {
   });
 })();
 </script>
-
-
 <script>
 (function dailyTimeTotals() {
   function parseHours(input) {
@@ -330,37 +328,59 @@ document.addEventListener("input", function (event) {
 })();
 </script>
 <script>
-(function syncExpenseJobNumbers() {
+(function syncLinkedJobNumbers() {
   function getEntryKey(input) {
     const match = input.name.match(/^entry_(.+)_job_number$/);
     return match ? match[1] : null;
   }
 
-  function updateExpenseJob(input) {
+  function updateLinkedJobs(input) {
     const entryKey = getEntryKey(input);
     if (!entryKey) return;
 
+    const jobNumber = input.value.trim();
+
+    // Keep the Expense tab Job # synchronized.
     const expenseJob = document.querySelector(
       '.expense-job-display[data-entry-key="' + entryKey + '"]'
     );
 
-    if (!expenseJob) return;
+    if (expenseJob) {
+      expenseJob.textContent = jobNumber;
+    }
 
-    expenseJob.textContent = input.value.trim();
+    // Keep the Parts tab Job # synchronized unless the user
+    // has manually overridden that Parts field.
+    const partJob = document.querySelector(
+      '.part-job-input[data-entry-key="' + entryKey + '"]'
+    );
+
+    if (partJob && partJob.dataset.linkedToTime === '1') {
+      partJob.value = jobNumber;
+    }
   }
 
+  // Initialize linked displays when the page loads.
   document.querySelectorAll('.job-input').forEach(function(input) {
-    updateExpenseJob(input);
+    updateLinkedJobs(input);
   });
 
+  // Update Expense and Parts as the Time-tab job changes.
   document.addEventListener('input', function(event) {
     if (!event.target.classList.contains('job-input')) return;
-    updateExpenseJob(event.target);
+    updateLinkedJobs(event.target);
   });
 
   document.addEventListener('change', function(event) {
     if (!event.target.classList.contains('job-input')) return;
-    updateExpenseJob(event.target);
+    updateLinkedJobs(event.target);
+  });
+
+  // If the user manually edits the Parts EE Stock/Job #,
+  // stop automatically replacing it from the Time tab.
+  document.addEventListener('input', function(event) {
+    if (!event.target.classList.contains('part-job-input')) return;
+    event.target.dataset.linkedToTime = '0';
   });
 })();
 </script>
