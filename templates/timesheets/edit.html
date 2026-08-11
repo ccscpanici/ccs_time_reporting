@@ -119,7 +119,7 @@
               {% with entry=row.entry key=day.work_date|date:'Y-m-d' %}
               <tr>
                 <td>{{ row.row_order }}</td>
-                <td class="text-body-secondary small">{% if entry %}{{ entry.job_display }}{% endif %}</td>
+                <td class="text-body-secondary small expense-job-display" data-entry-key="{{ key }}_{{ row.row_order }}">{% if entry %}{{ entry.job_display }}{% endif %}</td>
                 <td><input class="form-control form-control-sm expense-number-input mileage-miles" data-rate="{{ timesheet.mileage_rate }}" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_miles" value="{% if entry.expense %}{{ entry.expense.miles }}{% endif %}"></td>
                 <td><input class="form-control form-control-sm expense-number-input mileage-amount" type="text" value="{% if entry.expense %}${{ entry.expense.mileage.amount|floatformat:2 }}{% else %}$0.00{% endif %}" readonly tabindex="-1"></td>
                 <td><input class="form-control form-control-sm expense-number-input" type="number" step="0.01" name="entry_{{ key }}_{{ row.row_order }}_expense_per_diem_food" value="{% if entry.expense %}{{ entry.expense.per_diem_food.amount }}{% endif %}"></td>
@@ -329,5 +329,39 @@ document.addEventListener("input", function (event) {
   updateAllDailyTotals();
 })();
 </script>
+<script>
+(function syncExpenseJobNumbers() {
+  function getEntryKey(input) {
+    const match = input.name.match(/^entry_(.+)_job_number$/);
+    return match ? match[1] : null;
+  }
 
+  function updateExpenseJob(input) {
+    const entryKey = getEntryKey(input);
+    if (!entryKey) return;
+
+    const expenseJob = document.querySelector(
+      '.expense-job-display[data-entry-key="' + entryKey + '"]'
+    );
+
+    if (!expenseJob) return;
+
+    expenseJob.textContent = input.value.trim();
+  }
+
+  document.querySelectorAll('.job-input').forEach(function(input) {
+    updateExpenseJob(input);
+  });
+
+  document.addEventListener('input', function(event) {
+    if (!event.target.classList.contains('job-input')) return;
+    updateExpenseJob(event.target);
+  });
+
+  document.addEventListener('change', function(event) {
+    if (!event.target.classList.contains('job-input')) return;
+    updateExpenseJob(event.target);
+  });
+})();
+</script>
 {% endblock %}
