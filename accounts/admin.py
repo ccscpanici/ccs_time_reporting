@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import EmployeeProfile, OfficeLocation, UserPreference
+from .models import EmployeeProfile, OfficeLocation, UserPreference, AccountNotificationRecipient
 
 
 @admin.register(OfficeLocation)
@@ -37,3 +37,10 @@ class EmployeeProfileAdmin(admin.ModelAdmin):
 class UserPreferenceAdmin(admin.ModelAdmin):
     list_display = ("user", "color_scheme", "theme")
     list_filter = ("color_scheme", "theme")
+
+@admin.register(AccountNotificationRecipient)
+class AccountNotificationRecipientAdmin(admin.ModelAdmin):
+    list_display = ("email", "name", "active")
+    list_filter = ("active",)
+    search_fields = ("email", "name")
+    ordering = ("email",)

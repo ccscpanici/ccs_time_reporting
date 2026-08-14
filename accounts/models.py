@@ -91,3 +91,22 @@ class UserPreference(models.Model):
 
     def __str__(self):
         return f'{self.user} preferences'
+
+class AccountNotificationRecipient(models.Model):
+    name = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Optional name for this notification recipient.",
+    )
+    email = models.EmailField(unique=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["email"]
+        verbose_name = "Account Notification Recipient"
+        verbose_name_plural = "Account Notification Recipients"
+
+    def __str__(self):
+        if self.name:
+            return f"{self.name} <{self.email}>"
+        return self.email
