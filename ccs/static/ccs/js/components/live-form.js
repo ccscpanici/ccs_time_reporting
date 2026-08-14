@@ -15,6 +15,8 @@
 			this.dirty = false;
 			this.saving = false;
 			this.paused = false;
+			this.revision = 0;
+			this.currentSavePromise = null;
 			this.destroyed = false;
 
 			this.statusElement = this.form.querySelector("[data-live-form-status]");
@@ -39,6 +41,7 @@
 			this.handleChange = this.handleChange.bind(this);
 			this.handleKeyDown = this.handleKeyDown.bind(this);
 			this.handleSaveClick = this.handleSaveClick.bind(this);
+			this.handleDocumentClick = this.handleDocumentClick.bind(this);
 
 			this.bindEvents();
 		}
@@ -154,6 +157,9 @@
 				return this;
 			}
 
+			// Every edit gets a revision number. A save may only mark the form
+			// clean if no newer revision was made while its request was in flight.
+			this.revision += 1;
 			this.activeField = field || null;
 
 			this.setFieldStatus(
@@ -174,22 +180,21 @@
 			return this;
 		}
 
-		markClean(field = this.activeField) {
-			const wasDirty = this.dirty;
-
-			this.dirty = false;
-
+		setSavedStatus(field = this.activeField) {
 			const savedText =
 				`✓ Week Saved ${new Date().toLocaleTimeString([], {
 					hour: "numeric",
 					minute: "2-digit"
 				})}`;
 
-			this.setFieldStatus(
-				field,
-				savedText,
-				"success"
-			);
+			this.setFieldStatus(field, savedText, "success");
+		}
+
+		markClean(field = this.activeField) {
+			const wasDirty = this.dirty;
+
+			this.dirty = false;
+			this.setSavedStatus(field);
 
 			if (wasDirty) {
 				CCS.emit("form:clean", {
@@ -221,6 +226,7 @@
 			this.form.addEventListener("keydown", this.handleKeyDown);
 
 			window.addEventListener("beforeunload", this.handleBeforeUnload);
+			document.addEventListener("click", this.handleDocumentClick);
 
 			if (this.saveButton) {
 				this.saveButton.addEventListener("click", this.handleSaveClick);
@@ -304,6 +310,47 @@
 			this.save();
 		}
 
+		handleDocumentClick(event) {
+			if (event.defaultPrevented || event.button !== 0) {
+				return;
+			}
+
+			if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+				return;
+			}
+
+			const link = event.target.closest("a[href]");
+
+			if (!link || link.target === "_blank" || link.hasAttribute("download")) {
+				return;
+			}
+
+			const href = link.getAttribute("href");
+
+			if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
+				return;
+			}
+
+			if (!this.isDirty() && !this.isSaving()) {
+				return;
+			}
+
+			const destination = new URL(link.href, window.location.href);
+
+			if (destination.origin !== window.location.origin) {
+				return;
+			}
+
+			event.preventDefault();
+
+			this.flush().then(() => {
+				window.location.assign(destination.href);
+			}).catch(() => {
+				// The save error is already displayed by save(). Stay on the page
+				// so the user can correct the problem without losing their edit.
+			});
+		}
+
 		//
 		// Navigation
 		//
@@ -361,47 +408,96 @@
 			}, this.saveDelay);
 		}
 
-		async save() {
-			if (this.destroyed || this.saving) {
-				return null;
+		async flush() {
+			clearTimeout(this.saveTimer);
+
+			while (!this.destroyed && (this.isDirty() || this.isSaving())) {
+				if (this.currentSavePromise) {
+					await this.currentSavePromise;
+				} else if (this.isDirty()) {
+					await this.save();
+				}
+			}
+
+			return true;
+		}
+
+		save() {
+			if (this.destroyed) {
+				return Promise.resolve(null);
+			}
+
+			if (this.currentSavePromise) {
+				return this.currentSavePromise;
+			}
+
+			if (!this.isDirty()) {
+				return Promise.resolve(null);
 			}
 
 			const saveField = this.activeField;
+			const saveRevision = this.revision;
 
-			//
-			// Custom save handler
-			//
+			this.saving = true;
 
-			if (typeof this.options.onSave === "function") {
-				this.saving = true;
+			if (this.saveButton) {
+				this.saveButton.disabled = true;
+			}
 
-				if (this.saveButton) {
-					this.saveButton.disabled = true;
-				}
+			this.setFieldStatus(saveField, "Saving Week...", "muted");
 
-				this.setFieldStatus(saveField, "Saving Week...", "muted");
+			let savedStaleRevision = false;
 
-				try {
-					const result = await this.options.onSave(this);
-
-					this.markClean(saveField);
+			const requestPromise = this.performSave(saveField, saveRevision)
+				.then(result => {
+					if (this.revision === saveRevision) {
+						this.markClean(saveField);
+					} else {
+						savedStaleRevision = true;
+						this.dirty = true;
+						this.setSavedStatus(saveField);
+						this.setFieldStatus(
+							this.activeField,
+							"Unsaved Changes",
+							"warning"
+						);
+					}
 
 					return result;
-				} catch (error) {
+				})
+				.catch(error => {
 					this.showSaveError(saveField, error);
 					throw error;
-				} finally {
+				})
+				.finally(() => {
 					this.saving = false;
 
 					if (this.saveButton) {
 						this.saveButton.disabled = false;
 					}
-				}
-			}
 
-			//
-			// Default AJAX save
-			//
+					this.currentSavePromise = null;
+
+					// If a newer edit arrived during a successful request, immediately
+					// start another save. The form must remain dirty until that newer
+					// revision is acknowledged by the server.
+					if (savedStaleRevision && this.isDirty() && !this.destroyed) {
+						clearTimeout(this.saveTimer);
+						this.saveTimer = setTimeout(() => this.save(), 0);
+					}
+				});
+
+			this.currentSavePromise = requestPromise;
+			return requestPromise;
+		}
+
+		async performSave(saveField, saveRevision) {
+			if (typeof this.options.onSave === "function") {
+				return this.options.onSave(this, {
+					field: saveField,
+					revision: saveRevision
+				});
+			}
 
 			const url = this.options.url || this.form.dataset.liveFormUrl;
 
@@ -413,33 +509,10 @@
 				};
 			}
 
-			this.saving = true;
-
-			if (this.saveButton) {
-				this.saveButton.disabled = true;
-			}
-
-			this.setFieldStatus(saveField, "Saving Week...", "muted");
-
-			try {
-				const response = await CCS.request(url, {
-					method: "POST",
-					body: new FormData(this.form)
-				});
-
-				this.markClean(saveField);
-
-				return response;
-			} catch (error) {
-				this.showSaveError(saveField, error);
-				throw error;
-			} finally {
-				this.saving = false;
-
-				if (this.saveButton) {
-					this.saveButton.disabled = false;
-				}
-			}
+			return CCS.request(url, {
+				method: "POST",
+				body: new FormData(this.form)
+			});
 		}
 
 		//
@@ -459,6 +532,7 @@
 			}
 
 			window.removeEventListener("beforeunload", this.handleBeforeUnload);
+			document.removeEventListener("click", this.handleDocumentClick);
 
 			this.pause();
 

@@ -40,6 +40,7 @@
 
 <form method="post" class="mb-5" data-live-form data-live-form-url="{% url 'timesheet_autosave' %}" data-enter-navigation="true">
   {% csrf_token %}
+  <input type="hidden" name="work_date" value="{{ day.work_date|date:'Y-m-d' }}">
   <datalist id="job-options">
     {% for job in job_options %}
       <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>

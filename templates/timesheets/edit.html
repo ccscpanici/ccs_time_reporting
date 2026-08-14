@@ -41,6 +41,31 @@
 
   <div class="tab-content">
     <div class="tab-pane fade show active" id="time-pane" role="tabpanel" aria-labelledby="time-tab" tabindex="0">
+      <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body py-3">
+          <div class="row g-3 align-items-center text-center text-md-end">
+            <div class="col-12 col-md">
+              <div class="fw-semibold fs-5 text-start">Weekly Totals</div>
+            </div>
+            <div class="col-4 col-md-auto">
+              <div class="small text-body-secondary">Regular</div>
+              <div class="fw-semibold"><span id="weekly-reg-total">0.00</span> hrs</div>
+            </div>
+            <div class="col-4 col-md-auto">
+              <div class="small text-body-secondary">OT</div>
+              <div class="fw-semibold"><span id="weekly-ot-total">0.00</span> hrs</div>
+            </div>
+            <div class="col-4 col-md-auto">
+              <div class="small text-body-secondary">DT</div>
+              <div class="fw-semibold"><span id="weekly-dt-total">0.00</span> hrs</div>
+            </div>
+            <div class="col-12 col-md-auto border-start-md ps-md-4">
+              <div class="small text-body-secondary">Total Hours</div>
+              <div class="fw-bold fs-5"><span id="weekly-hours-total">0.00</span> hrs</div>
+            </div>
+          </div>
+        </div>
+      </div>
       {% for day in grid %}
       <div class="card shadow-sm border-0 rounded-4 mb-4" data-live-form-day="{{ day.work_date|date:'Y-m-d' }}">
         <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
@@ -103,6 +128,7 @@
         </div>
       </div>
       {% endfor %}
+
     </div>
 
     <div class="tab-pane fade" id="expenses-pane" role="tabpanel" aria-labelledby="expenses-tab" tabindex="0">
@@ -316,8 +342,34 @@ document.addEventListener("input", function (event) {
     table.querySelector(".daily-hours-total").textContent = total.toFixed(2);
   }
 
+  function updateWeeklyTotals() {
+    let regular = 0;
+    let overtime = 0;
+    let doubletime = 0;
+
+    document.querySelectorAll('.timesheet-entry-table input[name$="_regular_hours"]').forEach(function(input) {
+      regular += parseHours(input);
+    });
+
+    document.querySelectorAll('.timesheet-entry-table input[name$="_overtime_hours"]').forEach(function(input) {
+      overtime += parseHours(input);
+    });
+
+    document.querySelectorAll('.timesheet-entry-table input[name$="_doubletime_hours"]').forEach(function(input) {
+      doubletime += parseHours(input);
+    });
+
+    const total = regular + overtime + doubletime;
+
+    document.getElementById("weekly-reg-total").textContent = regular.toFixed(2);
+    document.getElementById("weekly-ot-total").textContent = overtime.toFixed(2);
+    document.getElementById("weekly-dt-total").textContent = doubletime.toFixed(2);
+    document.getElementById("weekly-hours-total").textContent = total.toFixed(2);
+  }
+
   function updateAllDailyTotals() {
     document.querySelectorAll(".timesheet-entry-table").forEach(updateTableTotals);
+    updateWeeklyTotals();
   }
 
   document.addEventListener("input", function(event) {
@@ -326,6 +378,7 @@ document.addEventListener("input", function (event) {
     const table = event.target.closest(".timesheet-entry-table");
     if (table) {
       updateTableTotals(table);
+      updateWeeklyTotals();
     }
   });
 
