@@ -21,6 +21,7 @@
 			this.saveButton = this.form.querySelector("[data-live-form-save]");
 
 			this.saveTimer = null;
+			this.activeField = null;
 
 			const datasetDelay = parseInt(this.form.dataset.liveFormDelay, 10);
 
@@ -34,6 +35,7 @@
 				this.form.dataset.enterNavigation === "true";
 
 			this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
+			this.handleBlur = this.handleBlur.bind(this);
 			this.handleChange = this.handleChange.bind(this);
 			this.handleKeyDown = this.handleKeyDown.bind(this);
 			this.handleSaveClick = this.handleSaveClick.bind(this);
@@ -77,14 +79,91 @@
 			this.statusElement.classList.add(classMap[state] || "text-muted");
 		}
 
+		setFieldStatus(field, text, state = "muted") {
+			let statusElement = null;
+
+			if (field) {
+				const day = field.closest("[data-live-form-day]");
+
+				if (day) {
+					statusElement = day.querySelector("[data-live-form-day-status]");
+				}
+			}
+
+			// Fall back to the form-wide status indicator.
+			if (!statusElement) {
+				this.setStatus(text, state);
+				return;
+			}
+
+			statusElement.textContent = text;
+
+			statusElement.classList.remove(
+				"text-muted",
+				"text-success",
+				"text-warning",
+				"text-danger"
+			);
+
+			const classMap = {
+				muted: "text-muted",
+				success: "text-success",
+				warning: "text-warning",
+				danger: "text-danger"
+			};
+
+			statusElement.classList.add(
+				classMap[state] || "text-muted"
+			);
+		}
+
+		getSaveErrorMessage(error) {
+			if (error && error.data) {
+				if (Array.isArray(error.data.errors) && error.data.errors.length) {
+					return error.data.errors.join(" ");
+				}
+
+				if (error.data.error) {
+					return error.data.error;
+				}
+
+				if (error.data.message) {
+					return error.data.message;
+				}
+			}
+
+			if (error && error.message) {
+				return error.message;
+			}
+
+			return "An unknown error occurred.";
+		}
+
+		showSaveError(field, error) {
+			const message = this.getSaveErrorMessage(error);
+
+			this.setFieldStatus(
+				field,
+				`⚠ Save of Week Failed. ${message}`,
+				"danger"
+			);
+		}
+
 		markDirty(field) {
 			if (this.paused || this.destroyed) {
 				return this;
 			}
 
+			this.activeField = field || null;
+
+			this.setFieldStatus(
+				this.activeField,
+				"Unsaved Changes",
+				"warning"
+			);
+
 			if (!this.dirty) {
 				this.dirty = true;
-				this.setStatus("Unsaved Changes", "warning");
 
 				CCS.emit("form:dirty", {
 					form: this,
@@ -95,16 +174,20 @@
 			return this;
 		}
 
-		markClean() {
+		markClean(field = this.activeField) {
 			const wasDirty = this.dirty;
 
 			this.dirty = false;
 
-			this.setStatus(
-				`✓ Saved ${new Date().toLocaleTimeString([], {
+			const savedText =
+				`✓ Week Saved ${new Date().toLocaleTimeString([], {
 					hour: "numeric",
 					minute: "2-digit"
-				})}`,
+				})}`;
+
+			this.setFieldStatus(
+				field,
+				savedText,
 				"success"
 			);
 
@@ -134,6 +217,7 @@
 		bindEvents() {
 			this.form.addEventListener("input", this.handleChange);
 			this.form.addEventListener("change", this.handleChange);
+			this.form.addEventListener("blur", this.handleBlur, true);
 			this.form.addEventListener("keydown", this.handleKeyDown);
 
 			window.addEventListener("beforeunload", this.handleBeforeUnload);
@@ -148,14 +232,26 @@
 		//
 
 		handleBeforeUnload(event) {
-      if (this.isDirty() || this.isSaving()) {
+			if (this.isDirty() || this.isSaving()) {
 				event.preventDefault();
 				event.returnValue = "";
 			}
 		}
 
 		handleChange(event) {
-			this.markDirty(event.target);
+			const target = event.target;
+
+			this.markDirty(target);
+
+			const isJobField =
+				target.matches('input[name*="_job_number"]');
+
+			// While typing in Project / Job, mark dirty but don't autosave yet.
+			if (isJobField && event.type === "input") {
+				clearTimeout(this.saveTimer);
+				return;
+			}
+
 			this.scheduleSave();
 		}
 
@@ -181,6 +277,21 @@
 			event.preventDefault();
 
 			this.moveToNextControl(target);
+		}
+
+		handleBlur(event) {
+			const target = event.target;
+
+			if (!target.matches('input[name*="_job_number"]')) {
+				return;
+			}
+
+			if (!this.isDirty()) {
+				return;
+			}
+
+			clearTimeout(this.saveTimer);
+			this.save();
 		}
 
 		handleSaveClick(event) {
@@ -255,6 +366,8 @@
 				return null;
 			}
 
+			const saveField = this.activeField;
+
 			//
 			// Custom save handler
 			//
@@ -266,16 +379,16 @@
 					this.saveButton.disabled = true;
 				}
 
-				this.setStatus("Saving...", "muted");
+				this.setFieldStatus(saveField, "Saving Week...", "muted");
 
 				try {
 					const result = await this.options.onSave(this);
 
-					this.markClean();
+					this.markClean(saveField);
 
 					return result;
 				} catch (error) {
-					this.setStatus("⚠ Save failed", "danger");
+					this.showSaveError(saveField, error);
 					throw error;
 				} finally {
 					this.saving = false;
@@ -306,7 +419,7 @@
 				this.saveButton.disabled = true;
 			}
 
-			this.setStatus("Saving...", "muted");
+			this.setFieldStatus(saveField, "Saving Week...", "muted");
 
 			try {
 				const response = await CCS.request(url, {
@@ -314,16 +427,11 @@
 					body: new FormData(this.form)
 				});
 
-				if (!response.ok) {
-					this.setStatus("⚠ Save failed", "danger");
-					throw new Error(`Save failed: ${response.status}`);
-				}
-
-				this.markClean();
+				this.markClean(saveField);
 
 				return response;
 			} catch (error) {
-				this.setStatus("⚠ Save failed", "danger");
+				this.showSaveError(saveField, error);
 				throw error;
 			} finally {
 				this.saving = false;
@@ -342,6 +450,7 @@
 			if (this.form) {
 				this.form.removeEventListener("input", this.handleChange);
 				this.form.removeEventListener("change", this.handleChange);
+				this.form.removeEventListener("blur", this.handleBlur, true);
 				this.form.removeEventListener("keydown", this.handleKeyDown);
 			}
 
