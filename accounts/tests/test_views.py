@@ -1,12 +1,19 @@
+from django.core import mail
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.urls import reverse
 
-from accounts.models import EmployeeProfile, OfficeLocation, UserPreference
+from django.test import override_settings
 from timesheets.tests.base import AppTestCase
 
-User = get_user_model()
+from accounts.models import (
+    AccountNotificationRecipient,
+    EmployeeProfile, 
+    OfficeLocation, 
+    UserPreference,
+)
 
+User = get_user_model()
 
 class AccountsViewTestCase(AppTestCase):
     def make_office(self, name="Appleton", *, active=True, **overrides):
@@ -121,6 +128,52 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertFalse(User.objects.filter(username="newemployee").exists())
         self.assertIn("password2", response.context["form"].errors)
 
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="timetrack@gotoccs.com",
+    )
+    def test_signup_sends_one_account_notification_after_profile_creation(self):
+        AccountNotificationRecipient.objects.create(
+            email="admin@gotoccs.com",
+            active=True,
+        )
+
+        expected_office = OfficeLocation.objects.get(name="Appleton Office")
+
+        self.client.post(
+            reverse("signup"),
+            self.signup_data(),
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+
+        email = mail.outbox[0]
+
+        self.assertEqual(email.to, ["admin@gotoccs.com"])
+        self.assertIn("New Employee", email.subject)
+        self.assertIn("Username: newemployee", email.body)
+        self.assertIn("Email: new.employee@gotoccs.com", email.body)
+        self.assertIn(str(expected_office), email.body)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="timetrack@gotoccs.com",
+    )
+    def test_signup_without_office_still_sends_one_notification(self):
+        OfficeLocation.objects.all().delete()
+
+        AccountNotificationRecipient.objects.create(
+            email="admin@gotoccs.com",
+            active=True,
+        )
+
+        self.client.post(
+            reverse("signup"),
+            self.signup_data(),
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Office: Not assigned", mail.outbox[0].body)
 
 class ProfileViewTests(AccountsViewTestCase):
     def profile_data(self, office, **overrides):
