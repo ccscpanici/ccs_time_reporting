@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -115,6 +116,34 @@ class TimesheetEditTestBase(AppTestCase):
             else:
                 values[mapping[key]] = value
         return values
+
+
+class TimesheetDayViewTests(TimesheetEditTestBase):
+    @patch("timesheets.views.timezone.localdate", return_value=date(2026, 7, 27))
+    def test_today_live_form_includes_work_date(self, _localdate):
+        self.client.force_login(self.employee)
+
+        response = self.client.get(reverse("timesheet_today"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="work_date" value="2026-07-27"',
+            html=False,
+        )
+
+    @patch("timesheets.views.timezone.localdate", return_value=date(2026, 7, 27))
+    def test_yesterday_live_form_includes_yesterday_work_date(self, _localdate):
+        self.client.force_login(self.employee)
+
+        response = self.client.get(reverse("timesheet_yesterday"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="work_date" value="2026-07-26"',
+            html=False,
+        )
 
 
 class TimesheetEditViewTests(TimesheetEditTestBase):
