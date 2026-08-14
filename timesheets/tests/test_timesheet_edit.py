@@ -316,6 +316,65 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(entry.regular_hours, Decimal("8"))
         self.assertEqual(entry.description, "Autosaved work")
 
+
+    def test_autosave_accepts_fractional_hour_value(self):
+        self.client.force_login(self.employee)
+        data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
+        data.update(self.row_post(regular_hours="0.1"))
+
+        response = self.client.post(reverse("timesheet_autosave"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+
+        timesheet = Timesheet.objects.get(employee=self.employee, week_start=self.week_start)
+        entry = TimeEntry.objects.get(timesheet=timesheet, work_date=self.work_date, row_order=1)
+        self.assertEqual(entry.regular_hours, Decimal("0.1"))
+
+    def test_autosave_accepts_24_hours(self):
+        self.client.force_login(self.employee)
+        data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
+        data.update(self.row_post(regular_hours="24"))
+
+        response = self.client.post(reverse("timesheet_autosave"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+
+        timesheet = Timesheet.objects.get(employee=self.employee, week_start=self.week_start)
+        entry = TimeEntry.objects.get(timesheet=timesheet, work_date=self.work_date, row_order=1)
+        self.assertEqual(entry.regular_hours, Decimal("24"))
+
+    def test_autosave_rejects_hours_above_24(self):
+        self.client.force_login(self.employee)
+        data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
+        data.update(self.row_post(regular_hours="24.1"))
+
+        response = self.client.post(reverse("timesheet_autosave"), data)
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("Regular hours must be between 0 and 24.", payload["errors"][0])
+
+        timesheet = Timesheet.objects.get(employee=self.employee, week_start=self.week_start)
+        self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
+
+    def test_autosave_rejects_negative_hours(self):
+        self.client.force_login(self.employee)
+        data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
+        data.update(self.row_post(regular_hours="-0.1"))
+
+        response = self.client.post(reverse("timesheet_autosave"), data)
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("Regular hours must be between 0 and 24.", payload["errors"][0])
+
+        timesheet = Timesheet.objects.get(employee=self.employee, week_start=self.week_start)
+        self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
+
     def test_weekly_autosave_updates_non_today_entry(self):
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
