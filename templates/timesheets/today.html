@@ -9,19 +9,21 @@
       Week of {{ timesheet.week_start }} &middot;
       Status: {{ timesheet.get_status_display }}
     </p>
-
   </div>
 
   <div class="d-flex gap-2 flex-wrap justify-content-end">
     <a class="btn btn-outline-primary" href="{% url 'timesheet_today' %}">
       Today
     </a>
+
     <a class="btn btn-outline-primary" href="{% url 'timesheet_yesterday' %}">
       Yesterday
     </a>
+
     <a class="btn btn-outline-secondary" href="{{ timesheet.get_absolute_url }}">
       Full Timesheet
     </a>
+
     <a class="btn btn-outline-secondary" href="{% url 'timesheet_list' %}">
       My Timesheets
     </a>
@@ -38,12 +40,31 @@
   {% csrf_token %}
 </form>
 
-<form method="post" class="mb-5" data-live-form data-live-form-url="{% url 'timesheet_autosave' %}" data-enter-navigation="true">
+<form
+  method="post"
+  class="mb-5"
+  data-live-form
+  data-live-form-url="{% url 'timesheet_autosave' %}"
+  data-enter-navigation="true"
+>
   {% csrf_token %}
-  <input type="hidden" name="work_date" value="{{ day.work_date|date:'Y-m-d' }}">
+
+  <input
+    type="hidden"
+    name="work_date"
+    value="{{ day.work_date|date:'Y-m-d' }}"
+  >
+
   <datalist id="job-options">
     {% for job in job_options %}
-      <option value="{{ job.job_number }}" label="{{ job.label }}" data-status="{{ job.status }}" data-warning="{% if job.warning %}1{% else %}0{% endif %}">{{ job.label }}</option>
+      <option
+        value="{{ job.job_number }}"
+        label="{{ job.label }}"
+        data-status="{{ job.status }}"
+        data-warning="{% if job.warning %}1{% else %}0{% endif %}"
+      >
+        {{ job.label }}
+      </option>
     {% endfor %}
   </datalist>
 
@@ -52,6 +73,7 @@
       <label class="form-label" for="entries_per_day">
         Rows for today
       </label>
+
       <input
         class="form-control"
         style="max-width: 10rem"
@@ -62,51 +84,15 @@
         id="entries_per_day"
         value="{{ timesheet.entries_per_day }}"
       >
+
       <div class="form-text">
         The Excel template supports 5 rows per date. More rows are allowed online and export as PDF.
       </div>
     </div>
   </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-md-3">
-      <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-body py-3">
-          <div class="text-muted small">Regular</div>
-          <div class="h4 mb-0" data-today-total-regular>{{ day.total_regular|floatformat:2 }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-3">
-      <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-body py-3">
-          <div class="text-muted small">OT</div>
-          <div class="h4 mb-0" data-today-total-overtime>{{ day.total_overtime|floatformat:2 }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-3">
-      <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-body py-3">
-          <div class="text-muted small">DT</div>
-          <div class="h4 mb-0" data-today-total-doubletime>{{ day.total_doubletime|floatformat:2 }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-3">
-      <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-body py-3">
-          <div class="text-muted small">Today's Totals</div>
-          <div class="h4 mb-0" data-today-total-hours>{{ day.total_hours|floatformat:2 }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <ul class="nav nav-tabs mb-3" id="todayTimesheetTabs" role="tablist">
+
     <li class="nav-item" role="presentation">
       <button
         class="nav-link active"
@@ -166,9 +152,12 @@
         Receipts
       </button>
     </li>
+
   </ul>
 
   <div class="tab-content">
+
+    <!-- TIME -->
     <div
       class="tab-pane fade show active"
       id="time-pane"
@@ -177,10 +166,13 @@
       tabindex="0"
     >
       <div class="card shadow-sm border-0 rounded-4 mb-4">
+
         <div class="card-header bg-body-tertiary d-flex justify-content-between align-items-center rounded-top-4">
+
           <strong>{{ day.work_date|date:"l m/d/Y" }}</strong>
 
           <div class="form-check form-switch">
+
             <input
               class="form-check-input"
               type="checkbox"
@@ -188,14 +180,22 @@
               id="overnight_{{ day.work_date|date:'Y-m-d' }}"
               {% if day.overnight_stay %}checked{% endif %}
             >
-            <label class="form-check-label" for="overnight_{{ day.work_date|date:'Y-m-d' }}">
+
+            <label
+              class="form-check-label"
+              for="overnight_{{ day.work_date|date:'Y-m-d' }}"
+            >
               Hotel overnight stay
             </label>
+
           </div>
+
         </div>
 
         <div class="table-responsive">
+
           <table class="table table-sm table-bordered align-middle mb-0 timesheet-entry-table">
+
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
@@ -209,10 +209,15 @@
             </thead>
 
             <tbody>
+
               {% for row in day.rows %}
                 {% with entry=row.entry %}
+
                 <tr>
-                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    {{ row.row_order }}
+                  </td>
 
                   <td>
                     <input
@@ -222,6 +227,7 @@
                       value="{% if entry %}{{ entry.job_display }}{% endif %}"
                       placeholder="Blank for internal"
                     >
+
                     <div class="form-text text-warning small job-warning d-none"></div>
                   </td>
 
@@ -230,7 +236,9 @@
                       class="form-select form-select-sm work-code-select-compact"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_work_code"
                     >
+
                       <option value=""></option>
+
                       {% for work_code in work_codes %}
                         <option
                           value="{{ work_code.pk }}"
@@ -241,6 +249,7 @@
                           {{ work_code }}
                         </option>
                       {% endfor %}
+
                     </select>
                   </td>
 
@@ -287,15 +296,51 @@
                       value="{% if entry %}{{ entry.description }}{% endif %}"
                     >
                   </td>
+
                 </tr>
+
                 {% endwith %}
               {% endfor %}
+
             </tbody>
+
+            <tfoot>
+              <tr class="table-light fw-semibold">
+
+                <td colspan="3" class="text-end">
+                  Daily Totals
+                </td>
+
+                <td class="text-end">
+                  <span data-daily-time-regular>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  <span data-daily-time-overtime>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  <span data-daily-time-doubletime>0.00</span>
+                </td>
+
+                <td>
+                  Total Hours:
+                  <strong>
+                    <span data-daily-time-hours>0.00</span>
+                  </strong>
+                </td>
+
+              </tr>
+            </tfoot>
+
           </table>
+
         </div>
       </div>
     </div>
 
+
+    <!-- EXPENSES -->
     <div
       class="tab-pane fade"
       id="expenses-pane"
@@ -303,18 +348,25 @@
       aria-labelledby="expenses-tab"
       tabindex="0"
     >
+
       <div class="card shadow-sm border-0 rounded-4 mb-4">
+
         <div class="card-header bg-body-tertiary rounded-top-4">
-          <strong>Expenses for {{ day.work_date|date:"l m/d/Y" }}</strong>
+          <strong>
+            Expenses for {{ day.work_date|date:"l m/d/Y" }}
+          </strong>
         </div>
 
         <div class="table-responsive">
+
           <table class="table table-sm table-bordered align-middle mb-0 timesheet-expense-table">
+
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
                 <th style="min-width: 6rem">Time Entry Job #</th>
                 <th class="text-end">Miles</th>
+                <th class="text-end">Mileage</th>
                 <th class="text-end">Per Diem Food</th>
                 <th class="text-end">Air Fare</th>
                 <th class="text-end">Hotel</th>
@@ -327,10 +379,15 @@
             </thead>
 
             <tbody>
+
               {% for row in day.rows %}
                 {% with entry=row.entry expense=row.entry.expense %}
+
                 <tr>
-                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    {{ row.row_order }}
+                  </td>
 
                   <td>
                     <input
@@ -342,7 +399,10 @@
 
                   <td>
                     <input
-                      class="form-control form-control-sm text-end"
+                      class="form-control form-control-sm text-end mileage-miles"
+                      data-rate="{{ timesheet.mileage_rate }}"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_miles"
                       value="{% if expense %}{{ expense.miles }}{% endif %}"
                     >
@@ -350,7 +410,19 @@
 
                   <td>
                     <input
+                      class="form-control form-control-sm text-end mileage-amount"
+                      type="text"
+                      value="$0.00"
+                      readonly
+                      tabindex="-1"
+                    >
+                  </td>
+
+                  <td>
+                    <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_per_diem_food"
                       value="{% if expense %}{{ expense.per_diem_food.amount }}{% endif %}"
                     >
@@ -359,6 +431,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_air_fare"
                       value="{% if expense %}{{ expense.air_fare.amount }}{% endif %}"
                     >
@@ -367,6 +441,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_hotel"
                       value="{% if expense %}{{ expense.hotel.amount }}{% endif %}"
                     >
@@ -375,6 +451,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_tolls_parking"
                       value="{% if expense %}{{ expense.tolls_parking.amount }}{% endif %}"
                     >
@@ -383,6 +461,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_rental_car_fuel"
                       value="{% if expense %}{{ expense.rental_car_fuel.amount }}{% endif %}"
                     >
@@ -391,6 +471,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_business_meals"
                       value="{% if expense %}{{ expense.business_meals.amount }}{% endif %}"
                     >
@@ -399,6 +481,8 @@
                   <td>
                     <input
                       class="form-control form-control-sm text-end"
+                      type="number"
+                      step="0.01"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_expense_other_expense"
                       value="{% if expense %}{{ expense.other_expense.amount }}{% endif %}"
                     >
@@ -411,15 +495,77 @@
                       value="{% if expense %}{{ expense.explanation_of_expenses }}{% endif %}"
                     >
                   </td>
+
                 </tr>
+
                 {% endwith %}
               {% endfor %}
+
             </tbody>
+
+            <tfoot>
+
+              <tr class="table-light fw-semibold">
+
+                <td colspan="2" class="text-end">
+                  Daily Totals
+                </td>
+
+                <td class="text-end">
+                  <span data-daily-expense-miles>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-mileage>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-per-diem>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-air-fare>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-hotel>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-tolls>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-rental>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-meals>0.00</span>
+                </td>
+
+                <td class="text-end">
+                  $<span data-daily-expense-other>0.00</span>
+                </td>
+
+                <td>
+                  Total Expenses:
+                  <strong>
+                    $<span data-daily-expense-total>0.00</span>
+                  </strong>
+                </td>
+
+              </tr>
+
+            </tfoot>
+
           </table>
+
         </div>
       </div>
     </div>
 
+
+    <!-- PARTS -->
     <div
       class="tab-pane fade"
       id="parts-pane"
@@ -427,13 +573,19 @@
       aria-labelledby="parts-tab"
       tabindex="0"
     >
+
       <div class="card shadow-sm border-0 rounded-4 mb-4">
+
         <div class="card-header bg-body-tertiary rounded-top-4">
-          <strong>Parts for {{ day.work_date|date:"l m/d/Y" }}</strong>
+          <strong>
+            Parts for {{ day.work_date|date:"l m/d/Y" }}
+          </strong>
         </div>
 
         <div class="table-responsive">
+
           <table class="table table-sm table-bordered align-middle mb-0 timesheet-parts-table">
+
             <thead>
               <tr>
                 <th style="width: 3rem">#</th>
@@ -447,10 +599,15 @@
             </thead>
 
             <tbody>
+
               {% for row in day.rows %}
                 {% with entry=row.entry part=row.entry.part_entry %}
+
                 <tr>
-                  <td>{{ row.row_order }}</td>
+
+                  <td>
+                    {{ row.row_order }}
+                  </td>
 
                   <td>
                     <input
@@ -500,14 +657,22 @@
                       {% if part and part.reorder_part %}checked{% endif %}
                     >
                   </td>
+
                 </tr>
+
                 {% endwith %}
               {% endfor %}
+
             </tbody>
+
           </table>
+
         </div>
       </div>
     </div>
+
+
+    <!-- RECEIPTS -->
     <div
       class="tab-pane fade"
       id="receipts-pane"
@@ -515,21 +680,29 @@
       aria-labelledby="receipts-tab"
       tabindex="0"
     >
+
       <div class="card shadow-sm border-0 rounded-4 mb-4">
+
         <div class="card-header bg-body-tertiary rounded-top-4">
-          <strong>Receipt Files</strong>
+          <strong>
+            Receipt Files
+          </strong>
         </div>
 
         <div class="card-body">
+
           <p class="text-muted">
             Upload receipts for the current week&apos;s timesheet.
           </p>
 
           <div class="row g-3 align-items-end mb-4">
+
             <div class="col-md-5">
+
               <label class="form-label" for="receipt_files">
                 Receipt files
               </label>
+
               <input
                 class="form-control"
                 type="file"
@@ -539,15 +712,19 @@
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif"
                 form="today-receipt-upload-form"
               >
+
               <div class="form-text">
                 You can upload multiple PDFs or images.
               </div>
+
             </div>
 
             <div class="col-md-5">
+
               <label class="form-label" for="receipt_description">
                 Description
               </label>
+
               <input
                 class="form-control"
                 id="receipt_description"
@@ -555,9 +732,11 @@
                 placeholder="Optional note for these receipt(s)"
                 form="today-receipt-upload-form"
               >
+
             </div>
 
             <div class="col-md-2">
+
               <button
                 class="btn btn-primary w-100"
                 type="submit"
@@ -565,11 +744,15 @@
               >
                 Upload
               </button>
+
             </div>
+
           </div>
 
           <div class="table-responsive">
+
             <table class="table table-sm table-bordered align-middle mb-0">
+
               <thead>
                 <tr>
                   <th>File</th>
@@ -581,17 +764,31 @@
               </thead>
 
               <tbody>
+
                 {% for receipt in timesheet.receipts.all %}
+
                   <tr>
-                    <td>{{ receipt.filename }}</td>
-                    <td>{{ receipt.description }}</td>
+
+                    <td>
+                      {{ receipt.filename }}
+                    </td>
+
+                    <td>
+                      {{ receipt.description }}
+                    </td>
+
                     <td>
                       {% if receipt.uploaded_by %}
                         {{ receipt.uploaded_by.get_full_name|default:receipt.uploaded_by.username }}
                       {% endif %}
                     </td>
-                    <td>{{ receipt.uploaded_at }}</td>
+
+                    <td>
+                      {{ receipt.uploaded_at }}
+                    </td>
+
                     <td class="text-end">
+
                       <a
                         class="btn btn-sm btn-outline-primary"
                         href="{% url 'timesheet_receipt_download' receipt.pk %}"
@@ -601,12 +798,15 @@
                       </a>
 
                       {% if timesheet.can_edit and timesheet.employee_id == request.user.id %}
+
                         <form
                           method="post"
                           action="{% url 'timesheet_receipt_delete' receipt.pk %}"
                           class="d-inline"
                         >
+
                           {% csrf_token %}
+
                           <button
                             class="btn btn-sm btn-outline-danger"
                             type="submit"
@@ -614,19 +814,29 @@
                           >
                             Delete
                           </button>
+
                         </form>
+
                       {% endif %}
+
                     </td>
+
                   </tr>
+
                 {% empty %}
+
                   <tr>
                     <td colspan="5" class="text-muted">
                       No receipts have been uploaded for this timesheet.
                     </td>
                   </tr>
+
                 {% endfor %}
+
               </tbody>
+
             </table>
+
           </div>
         </div>
       </div>
@@ -635,28 +845,20 @@
   </div>
 
   <div class="d-flex align-items-center gap-2">
-
-    <button class="btn btn-primary" type="button" data-live-form-save>
-      Save Now
-    </button>
-
     <span
-        class="small text-muted"
-        data-live-form-status>
-        Saved
+      class="small text-muted"
+      data-live-form-status
+    >
+      Week Saved
     </span>
-
-    <a class="btn btn-outline-secondary"
-      href="{{ timesheet.get_absolute_url }}">
-      Cancel
-    </a>
-
   </div>
 
 </form>
 
+
 <script>
 (function compactWorkCodeSelects() {
+
   function showCodesOnly(select) {
     Array.from(select.options).forEach(function(option) {
       if (option.dataset.code) {
@@ -674,6 +876,7 @@
   }
 
   document.querySelectorAll(".work-code-select-compact").forEach(function(select) {
+
     showCodesOnly(select);
 
     select.addEventListener("focus", function() {
@@ -693,98 +896,484 @@
     select.addEventListener("blur", function() {
       showCodesOnly(select);
     });
+
   });
+
 })();
 </script>
+
 
 <script>
 (function liveTodayTotals() {
-  const regularTotal = document.querySelector("[data-today-total-regular]");
-  const overtimeTotal = document.querySelector("[data-today-total-overtime]");
-  const doubletimeTotal = document.querySelector("[data-today-total-doubletime]");
-  const hoursTotal = document.querySelector("[data-today-total-hours]");
 
-  if (!regularTotal || !overtimeTotal || !doubletimeTotal || !hoursTotal) {
+  const dailyRegular =
+    document.querySelector("[data-daily-time-regular]");
+
+  const dailyOvertime =
+    document.querySelector("[data-daily-time-overtime]");
+
+  const dailyDoubletime =
+    document.querySelector("[data-daily-time-doubletime]");
+
+  const dailyHours =
+    document.querySelector("[data-daily-time-hours]");
+
+
+  function numericValue(input) {
+
+    const value = parseFloat(input.value);
+
+    return Number.isFinite(value)
+      ? value
+      : 0;
+
+  }
+
+
+  function sumInputs(suffix) {
+
+    return Array.from(
+      document.querySelectorAll(
+        'input[name$="' + suffix + '"]'
+      )
+    ).reduce(function(total, input) {
+
+      return total + numericValue(input);
+
+    }, 0);
+
+  }
+
+
+  function updateTotals() {
+
+    const regular =
+      sumInputs("_regular_hours");
+
+    const overtime =
+      sumInputs("_overtime_hours");
+
+    const doubletime =
+      sumInputs("_doubletime_hours");
+
+    const total =
+      regular +
+      overtime +
+      doubletime;
+
+
+    if (dailyRegular) {
+      dailyRegular.textContent =
+        regular.toFixed(2);
+    }
+
+    if (dailyOvertime) {
+      dailyOvertime.textContent =
+        overtime.toFixed(2);
+    }
+
+    if (dailyDoubletime) {
+      dailyDoubletime.textContent =
+        doubletime.toFixed(2);
+    }
+
+    if (dailyHours) {
+      dailyHours.textContent =
+        total.toFixed(2);
+    }
+
+  }
+
+
+  document.addEventListener(
+    "input",
+    function(event) {
+
+      const name =
+        event.target &&
+        event.target.name
+          ? event.target.name
+          : "";
+
+      if (
+        name.endsWith("_regular_hours") ||
+        name.endsWith("_overtime_hours") ||
+        name.endsWith("_doubletime_hours")
+      ) {
+        updateTotals();
+      }
+
+    }
+  );
+
+
+  updateTotals();
+
+})();
+</script>
+
+
+<script>
+(function liveTodayExpenseTotals() {
+
+  const table =
+    document.querySelector(
+      ".timesheet-expense-table"
+    );
+
+  if (!table) {
     return;
   }
 
+
   function numericValue(input) {
-    const value = parseFloat(input.value);
-    return Number.isFinite(value) ? value : 0;
+
+    const value =
+      parseFloat(
+        input && input.value
+          ? input.value
+          : "0"
+      );
+
+    return Number.isFinite(value)
+      ? value
+      : 0;
+
   }
+
 
   function sumInputs(suffix) {
+
     return Array.from(
-      document.querySelectorAll('input[name$="' + suffix + '"]')
+      table.querySelectorAll(
+        'input[name$="' + suffix + '"]'
+      )
     ).reduce(function(total, input) {
+
       return total + numericValue(input);
+
     }, 0);
+
   }
 
-  function formatHours(value) {
-    return value.toFixed(2);
+
+  function updateMileageRows() {
+
+    let mileageTotal = 0;
+
+    table
+      .querySelectorAll("tbody tr")
+      .forEach(function(row) {
+
+        const milesInput =
+          row.querySelector(
+            ".mileage-miles"
+          );
+
+        const mileageOutput =
+          row.querySelector(
+            ".mileage-amount"
+          );
+
+        if (
+          !milesInput ||
+          !mileageOutput
+        ) {
+          return;
+        }
+
+
+        const miles =
+          numericValue(milesInput);
+
+        const rate =
+          parseFloat(
+            milesInput.dataset.rate || "0"
+          ) || 0;
+
+        const amount =
+          miles * rate;
+
+
+        mileageOutput.value =
+          "$" + amount.toFixed(2);
+
+        mileageTotal += amount;
+
+      });
+
+
+    return mileageTotal;
+
   }
+
+
+  function setText(selector, value) {
+
+    document
+      .querySelectorAll(selector)
+      .forEach(function(element) {
+
+        element.textContent =
+          value.toFixed(2);
+
+      });
+
+  }
+
 
   function updateTotals() {
-    const regular = sumInputs("_regular_hours");
-    const overtime = sumInputs("_overtime_hours");
-    const doubletime = sumInputs("_doubletime_hours");
 
-    regularTotal.textContent = formatHours(regular);
-    overtimeTotal.textContent = formatHours(overtime);
-    doubletimeTotal.textContent = formatHours(doubletime);
-    hoursTotal.textContent = formatHours(regular + overtime + doubletime);
+    const miles =
+      sumInputs("_expense_miles");
+
+    const mileage =
+      updateMileageRows();
+
+    const perDiem =
+      sumInputs(
+        "_expense_per_diem_food"
+      );
+
+    const airFare =
+      sumInputs(
+        "_expense_air_fare"
+      );
+
+    const hotel =
+      sumInputs(
+        "_expense_hotel"
+      );
+
+    const tolls =
+      sumInputs(
+        "_expense_tolls_parking"
+      );
+
+    const rental =
+      sumInputs(
+        "_expense_rental_car_fuel"
+      );
+
+    const meals =
+      sumInputs(
+        "_expense_business_meals"
+      );
+
+    const other =
+      sumInputs(
+        "_expense_other_expense"
+      );
+
+
+    const total =
+      mileage +
+      perDiem +
+      airFare +
+      hotel +
+      tolls +
+      rental +
+      meals +
+      other;
+
+
+    setText(
+      "[data-daily-expense-miles]",
+      miles
+    );
+
+    setText(
+      "[data-daily-expense-mileage]",
+      mileage
+    );
+
+    setText(
+      "[data-daily-expense-per-diem]",
+      perDiem
+    );
+
+    setText(
+      "[data-daily-expense-air-fare]",
+      airFare
+    );
+
+    setText(
+      "[data-daily-expense-hotel]",
+      hotel
+    );
+
+    setText(
+      "[data-daily-expense-tolls]",
+      tolls
+    );
+
+    setText(
+      "[data-daily-expense-rental]",
+      rental
+    );
+
+    setText(
+      "[data-daily-expense-meals]",
+      meals
+    );
+
+    setText(
+      "[data-daily-expense-other]",
+      other
+    );
+
+    setText(
+      "[data-daily-expense-total]",
+      total
+    );
+
   }
 
-  document.addEventListener("input", function(event) {
-    const name = event.target && event.target.name ? event.target.name : "";
 
-    if (
-      name.endsWith("_regular_hours") ||
-      name.endsWith("_overtime_hours") ||
-      name.endsWith("_doubletime_hours")
-    ) {
-      updateTotals();
+  document.addEventListener(
+    "input",
+    function(event) {
+
+      const input =
+        event.target;
+
+      const name =
+        input &&
+        input.name
+          ? input.name
+          : "";
+
+      if (
+        name.indexOf("_expense_") !== -1
+      ) {
+        updateTotals();
+      }
+
     }
-  });
+  );
+
 
   updateTotals();
+
 })();
 </script>
+
 
 <script>
 (function projectJobWarnings() {
-  const optionList = Array.from(document.querySelectorAll('#job-options option'));
+
+  const optionList =
+    Array.from(
+      document.querySelectorAll(
+        "#job-options option"
+      )
+    );
+
 
   function findJob(value) {
-    const normalized = (value || '').trim().toLowerCase();
-    if (!normalized) return null;
-    return optionList.find(function(option) {
-      return (option.value || '').trim().toLowerCase() === normalized;
-    }) || null;
+
+    const normalized =
+      (value || "")
+        .trim()
+        .toLowerCase();
+
+    if (!normalized) {
+      return null;
+    }
+
+
+    return optionList.find(
+      function(option) {
+
+        return (
+          (option.value || "")
+            .trim()
+            .toLowerCase() === normalized
+        );
+
+      }
+    ) || null;
+
   }
+
 
   function updateWarning(input) {
-    const cell = input.closest('td');
-    const warning = cell ? cell.querySelector('.job-warning') : null;
-    if (!warning) return;
 
-    const option = findJob(input.value);
-    if (option && option.dataset.warning === '1') {
-      const status = option.dataset.status || 'Unknown Status';
-      warning.textContent = 'Warning: this job is currently marked as "' + status + '". Please verify time should be charged to this project.';
-      warning.classList.remove('d-none');
-    } else {
-      warning.textContent = '';
-      warning.classList.add('d-none');
+    const cell =
+      input.closest("td");
+
+    const warning =
+      cell
+        ? cell.querySelector(
+            ".job-warning"
+          )
+        : null;
+
+    if (!warning) {
+      return;
     }
+
+
+    const option =
+      findJob(input.value);
+
+
+    if (
+      option &&
+      option.dataset.warning === "1"
+    ) {
+
+      const status =
+        option.dataset.status ||
+        "Unknown Status";
+
+      warning.textContent =
+        'Warning: this job is currently marked as "' +
+        status +
+        '". Please verify time should be charged to this project.';
+
+      warning.classList.remove(
+        "d-none"
+      );
+
+    } else {
+
+      warning.textContent = "";
+
+      warning.classList.add(
+        "d-none"
+      );
+
+    }
+
   }
 
-  document.querySelectorAll('.job-input').forEach(updateWarning);
-  document.addEventListener('input', function(event) {
-    if (!event.target.classList.contains('job-input')) return;
-    updateWarning(event.target);
-  });
+
+  document
+    .querySelectorAll(".job-input")
+    .forEach(updateWarning);
+
+
+  document.addEventListener(
+    "input",
+    function(event) {
+
+      if (
+        !event.target.classList.contains(
+          "job-input"
+        )
+      ) {
+        return;
+      }
+
+      updateWarning(
+        event.target
+      );
+
+    }
+  );
+
 })();
 </script>
+
 {% endblock %}
