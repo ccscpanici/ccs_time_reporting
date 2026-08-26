@@ -49,11 +49,7 @@
 >
   {% csrf_token %}
 
-  <input
-    type="hidden"
-    name="work_date"
-    value="{{ day.work_date|date:'Y-m-d' }}"
-  >
+  <input type="hidden" name="work_date" value="{{ day.work_date|date:'Y-m-d' }}">
 
   <datalist id="job-options">
     {% for job in job_options %}
