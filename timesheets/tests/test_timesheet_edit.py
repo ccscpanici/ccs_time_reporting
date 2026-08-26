@@ -128,8 +128,8 @@ class TimesheetDayViewTests(TimesheetEditTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            'name="work_date" value="2026-07-27"',
-            html=False,
+            '<input type="hidden" name="work_date" value="2026-07-27">',
+            html=True,
         )
 
     @patch("timesheets.views.timezone.localdate", return_value=date(2026, 7, 27))
@@ -141,8 +141,8 @@ class TimesheetDayViewTests(TimesheetEditTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            'name="work_date" value="2026-07-26"',
-            html=False,
+            '<input type="hidden" name="work_date" value="2026-07-26">',
+            html=True,
         )
 
 
