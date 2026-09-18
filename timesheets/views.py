@@ -252,7 +252,15 @@ def _run_bulk_import_job(job_id, mark_submitted=False, mark_approved=False):
                             upload = TimesheetImport(employee=job.employee)
                             upload.uploaded_file.save(original_name, File(workbook_file), save=True)
 
-                        timesheet = import_timesheet_upload(upload)
+                        # Historical bulk imports that are immediately marked
+                        # submitted/approved may reference inactive jobs. The job
+                        # must still exist; only Draft imports require it to be active.
+                        require_active_jobs = not (mark_submitted or mark_approved)
+
+                        timesheet = import_timesheet_upload(
+                            upload,
+                            require_active_jobs=require_active_jobs,
+                        )
 
                         _apply_bulk_import_status(
                             timesheet,

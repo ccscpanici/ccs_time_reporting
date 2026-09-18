@@ -330,9 +330,39 @@ class ImporterJobValidationTests(AppTestCase):
         self.assertEqual(_resolve_import_job("BAD", {"BAD": "26001"}), ("26001", self.valid_job))
         self.assertEqual(_resolve_import_job("BAD", {"BAD": ""}), ("", None))
 
-    def test_resolve_import_job_rejects_unavailable_job(self):
+    def test_resolve_import_job_rejects_inactive_job_when_active_is_required(self):
         with self.assertRaisesMessage(ValueError, "is not available for time entry"):
             _resolve_import_job("26003")
+
+    def test_resolve_import_job_allows_existing_inactive_job_for_historical_import(self):
+        job_number, job = _resolve_import_job(
+            "26003",
+            require_active_jobs=False,
+        )
+
+        self.assertEqual(job_number, "26003")
+        self.assertEqual(job.job_number, "26003")
+        self.assertFalse(job.active)
+
+    def test_resolve_import_job_still_rejects_unknown_job_for_historical_import(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "does not exist in the valid Job table",
+        ):
+            _resolve_import_job(
+                "DOES-NOT-EXIST",
+                require_active_jobs=False,
+            )
+
+    def test_resolve_import_job_still_rejects_blank_description_for_historical_import(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "does not exist in the valid Job table",
+        ):
+            _resolve_import_job(
+                "26002",
+                require_active_jobs=False,
+            )
 
 
 @override_settings(DEFAULT_FILE_STORAGE="django.core.files.storage.FileSystemStorage")
@@ -424,6 +454,56 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(entries[0].job_number, "26001")
         self.assertIsNone(entries[1].job)
         self.assertEqual(entries[1].job_number, "")
+
+    def test_historical_import_allows_existing_inactive_job(self):
+        inactive_job = self.make_job_record(
+            job_number="26003",
+            description="Historical inactive job",
+            active=False,
+        )
+        upload = self.create_upload(
+            time_rows=[
+                {
+                    "row": 20,
+                    "date": date(2026, 8, 2),
+                    "job_number": "26003",
+                    "regular": 8,
+                    "description": "Historical work",
+                }
+            ],
+        )
+
+        timesheet = import_timesheet_upload(
+            upload,
+            require_active_jobs=False,
+        )
+
+        entry = timesheet.entries.get()
+        self.assertEqual(entry.job, inactive_job)
+        self.assertEqual(entry.job_number, "26003")
+
+    def test_draft_import_rejects_existing_inactive_job(self):
+        self.make_job_record(
+            job_number="26003",
+            description="Inactive",
+            active=False,
+        )
+        upload = self.create_upload(
+            time_rows=[
+                {
+                    "row": 20,
+                    "date": date(2026, 8, 2),
+                    "job_number": "26003",
+                    "regular": 8,
+                }
+            ],
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "is not available for time entry",
+        ):
+            import_timesheet_upload(upload)
 
     def test_invalid_job_rolls_back_timesheet_and_upload_changes(self):
         upload = self.create_upload(

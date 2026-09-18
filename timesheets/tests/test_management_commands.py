@@ -277,10 +277,35 @@ class ImportTimesheetZipCommandTests(AppTestCase):
 
         self.assertEqual(importer.call_count, 2)
         self.assertEqual(apply_status.call_count, 2)
+        self.assertTrue(
+            all(
+                call.kwargs["require_active_jobs"] is False
+                for call in importer.call_args_list
+            )
+        )
         self.assertTrue(all(call.kwargs["mark_submitted"] for call in apply_status.call_args_list))
         self.assertTrue(all(call.kwargs["mark_approved"] for call in apply_status.call_args_list))
         self.assertIn("Found 2 XLSX files", out.getvalue())
         self.assertIn("Imported=2 Failed=0", out.getvalue())
+
+    @override_settings(DEFAULT_FILE_STORAGE="django.core.files.storage.FileSystemStorage")
+    def test_draft_import_requires_active_jobs(self):
+        path = self.make_zip(names=("one.xlsx",))
+        ts = make_timesheet(employee=self.user, week_start=date(2026, 8, 2))
+        out = StringIO()
+
+        with override_settings(MEDIA_ROOT=self.base / "media"), \
+             patch("timesheets.management.commands.import_timesheet_zip.import_timesheet_upload", return_value=ts) as importer, \
+             patch("timesheets.management.commands.import_timesheet_zip._apply_bulk_import_status"):
+            call_command(
+                "import_timesheet_zip",
+                str(path),
+                user="employee",
+                stdout=out,
+            )
+
+        importer.assert_called_once()
+        self.assertTrue(importer.call_args.kwargs["require_active_jobs"])
 
     def test_failed_member_does_not_stop_remaining_imports(self):
         path = self.make_zip(names=("one.xlsx", "two.xlsx"))

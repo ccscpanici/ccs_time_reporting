@@ -13,6 +13,7 @@ from timesheets.views import _apply_bulk_import_status
 
 User = get_user_model()
 
+
 class Command(BaseCommand):
     help = "Import a ZIP archive of XLSX timesheets"
 
@@ -79,7 +80,12 @@ class Command(BaseCommand):
                                 save=True,
                             )
 
-                        timesheet = import_timesheet_upload(upload)
+                        require_active_jobs = not (submitted or approved)
+
+                        timesheet = import_timesheet_upload(
+                            upload,
+                            require_active_jobs=require_active_jobs,
+                        )
 
                         _apply_bulk_import_status(
                             timesheet,
