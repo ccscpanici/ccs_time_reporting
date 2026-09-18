@@ -121,6 +121,109 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(mapping[25], (date(2026, 8, 3), 1))
         self.assertEqual(mapping[54], (date(2026, 8, 8), 5))
 
+    def test_variable_six_rows_per_day_are_mapped_without_duplicate_slots(self):
+        workbook = Workbook()
+
+        time_sheet = workbook.active
+        time_sheet.title = "Time Sheet"
+        time_sheet["F7"] = date(2026, 9, 6)
+
+        expense_sheet = workbook.create_sheet("Expense Report")
+        parts_sheet = workbook.create_sheet("Parts Report")
+
+        weekdays = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+
+        # Reproduce the structure of an Excel workbook where each day has
+        # six physical entry rows instead of the original five.
+        #
+        # Time Sheet entry groups:
+        #   Sunday    20-25
+        #   Monday    26-31
+        #   Tuesday   32-37
+        #   Wednesday 38-43
+        #   Thursday  44-49
+        #   Friday    50-55
+        #   Saturday  56-61
+        for day_index, weekday in enumerate(weekdays):
+            start_row = 20 + (day_index * 6)
+
+            # The real CCS workbook has the weekday/date marker three rows
+            # after the beginning of each physical entry group.
+            time_sheet[f"A{start_row + 2}"] = weekday
+
+            if day_index == 0:
+                time_sheet[f"A{start_row + 3}"] = date(2026, 9, 6)
+            else:
+                time_sheet[f"A{start_row + 3}"] = (
+                    f"=A{start_row - 3}+1"
+                )
+
+            # Expense Report formulas provide the authoritative physical
+            # Time Sheet row links.
+            for offset in range(6):
+                report_row = 9 + (day_index * 6) + offset
+                time_row = start_row + offset
+                expense_sheet[f"B{report_row}"] = (
+                    f'=IF(\'Time Sheet\'!B{time_row}<>0,'
+                    f'\'Time Sheet\'!B{time_row},"")'
+                )
+
+        # Put entries into rows that would have collided under the old
+        # fixed-five-row mapping.
+        time_sheet["G26"] = "Monday row one"
+        time_sheet["D26"] = 1
+
+        time_sheet["G31"] = "Monday row six"
+        time_sheet["D31"] = 1
+
+        time_sheet["G32"] = "Tuesday row one"
+        time_sheet["D32"] = 1
+
+        time_sheet["G37"] = "Tuesday row six"
+        time_sheet["D37"] = 1
+
+        workbook.save(self.path)
+
+        mapping = _time_row_to_date_and_order(self.path)
+
+        self.assertEqual(mapping[20], (date(2026, 9, 6), 1))
+        self.assertEqual(mapping[25], (date(2026, 9, 6), 6))
+
+        self.assertEqual(mapping[26], (date(2026, 9, 7), 1))
+        self.assertEqual(mapping[31], (date(2026, 9, 7), 6))
+
+        self.assertEqual(mapping[32], (date(2026, 9, 8), 1))
+        self.assertEqual(mapping[37], (date(2026, 9, 8), 6))
+
+        self.assertEqual(mapping[56], (date(2026, 9, 12), 1))
+        self.assertEqual(mapping[61], (date(2026, 9, 12), 6))
+
+        items = parse_time_entries(self.path)
+
+        self.assertEqual(len(items), 4)
+
+        slots = [(item.work_date, item.row_order) for item in items]
+
+        self.assertEqual(
+            slots,
+            [
+                (date(2026, 9, 7), 1),
+                (date(2026, 9, 7), 6),
+                (date(2026, 9, 8), 1),
+                (date(2026, 9, 8), 6),
+            ],
+        )
+
+        self.assertEqual(len(slots), len(set(slots)))
+
     def test_parse_expenses_reads_values_and_skips_blank_rows(self):
         write_timesheet_workbook(
             self.path,
@@ -386,6 +489,88 @@ class ImportTimesheetUploadTests(AppTestCase):
                 )
                 with self.assertRaisesMessage(ValueError, "cannot be replaced by upload"):
                     import_timesheet_upload(upload)
+
+    def test_import_variable_six_row_workbook_sets_entries_per_day_to_six(self):
+        source_path = Path(self.tmp.name) / "source_variable_six_rows.xlsx"
+
+        workbook = Workbook()
+        time_sheet = workbook.active
+        time_sheet.title = "Time Sheet"
+        time_sheet["F7"] = date(2026, 9, 6)
+
+        expense_sheet = workbook.create_sheet("Expense Report")
+        workbook.create_sheet("Parts Report")
+
+        weekdays = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+
+        for day_index, weekday in enumerate(weekdays):
+            start_row = 20 + (day_index * 6)
+
+            time_sheet[f"A{start_row + 2}"] = weekday
+
+            if day_index == 0:
+                time_sheet[f"A{start_row + 3}"] = date(2026, 9, 6)
+            else:
+                time_sheet[f"A{start_row + 3}"] = f"=A{start_row - 3}+1"
+
+            for offset in range(6):
+                report_row = 9 + (day_index * 6) + offset
+                time_row = start_row + offset
+                expense_sheet[f"B{report_row}"] = (
+                    f'=IF(\'Time Sheet\'!B{time_row}<>0,'
+                    f'\'Time Sheet\'!B{time_row},"")'
+                )
+
+        # Sixth physical row on Monday.
+        time_sheet["B31"] = "26001"
+        time_sheet["D31"] = 8
+        time_sheet["G31"] = "Sixth physical row"
+
+        # First physical row on Tuesday.
+        time_sheet["B32"] = "26001"
+        time_sheet["D32"] = 8
+        time_sheet["G32"] = "Next day first row"
+
+        workbook.save(source_path)
+
+        upload = TimesheetImport(employee=self.employee)
+        with source_path.open("rb") as source:
+            upload.uploaded_file.save(
+                "variable_six_rows.xlsx",
+                File(source),
+                save=True,
+            )
+
+        timesheet = import_timesheet_upload(upload)
+        timesheet.refresh_from_db()
+
+        self.assertEqual(timesheet.week_start, date(2026, 9, 6))
+        self.assertEqual(timesheet.entries_per_day, 6)
+
+        monday = timesheet.entries.get(
+            work_date=date(2026, 9, 7),
+            row_order=6,
+        )
+        self.assertEqual(monday.job_number, "26001")
+        self.assertEqual(monday.regular_hours, Decimal("8.00"))
+        self.assertEqual(monday.description, "Sixth physical row")
+
+        tuesday = timesheet.entries.get(
+            work_date=date(2026, 9, 8),
+            row_order=1,
+        )
+        self.assertEqual(tuesday.job_number, "26001")
+        self.assertEqual(tuesday.regular_hours, Decimal("8.00"))
+        self.assertEqual(tuesday.description, "Next day first row")
+
 
     def test_existing_work_code_is_reused(self):
         existing = WorkCode.objects.create(code="TEST", description="Existing")

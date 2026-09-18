@@ -73,6 +73,9 @@
               <div class="btn-group btn-group-sm">
 
                 {% if ts.is_editable %}
+                  <a class="btn btn-outline-primary timesheet-action-btn" href="{{ ts.get_absolute_url }}">
+                    View
+                  </a>
                   <a class="btn btn-primary timesheet-action-btn" href="{{ ts.open_url }}">
                     Edit
                   </a>
