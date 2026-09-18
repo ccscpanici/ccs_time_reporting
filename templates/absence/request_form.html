@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load absence_tags %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-8">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h1 class="h3 mb-1">{% if editing %}Edit Absence Request{% else %}New Absence Request{% endif %}</h1>
+        <div class="text-body-secondary">
+          {% if editing %}Update this draft before submitting it for approval.{% else %}Choose the dates and hours for each workday, then review the draft before submitting.{% endif %}
+        </div>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'absence_list' %}">Back</a>
+    </div>
+
+    {% if pto_account %}
+      <div class="alert alert-light border">
+        <div class="row g-2">
+          <div class="col-md-3"><strong>Vacation Balance:</strong> {{ pto_summary.vacation_balance_minutes|hhmm }}</div>
+          <div class="col-md-3"><strong>Approved Pending:</strong> {{ pto_summary.approved_vacation_pending_minutes|hhmm }}</div>
+          <div class="col-md-3"><strong>Projected Available:</strong> {{ pto_summary.projected_vacation_balance_minutes|hhmm }}</div>
+          <div class="col-md-3"><strong>Vacation Used:</strong> {{ pto_summary.vacation_used_minutes|hhmm }}</div>
+        </div>
+        {% if pto_account.balance_as_of %}
+          <div class="small text-body-secondary mt-2">Payroll PTO values as of {{ pto_account.balance_as_of|date:"m/d/Y" }}.</div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <form method="post" class="card shadow-sm">
+      {% csrf_token %}
+      <div class="card-body">
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.absence_type.id_for_label }}">Absence type</label>
+            {{ form.absence_type }}{{ form.absence_type.errors }}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.start_date.id_for_label }}">First date</label>
+            {{ form.start_date }}{{ form.start_date.errors }}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.end_date.id_for_label }}">Last date</label>
+            {{ form.end_date }}{{ form.end_date.errors }}
+          </div>
+        </div>
+
+        <div id="daily-hours-section" class="mt-4 d-none">
+          <div class="d-flex justify-content-between align-items-end mb-2">
+            <div>
+              <h2 class="h6 mb-1">Requested Hours by Workday</h2>
+              <div class="small text-body-secondary">Weekdays default to 8.00 hours. Use 4.00 for a half day. Hours may be entered in 0.25-hour increments.</div>
+            </div>
+            <div class="text-end"><span class="small text-body-secondary">Total</span><br><strong id="daily-hours-total">0.00 hours</strong></div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle mb-0">
+              <thead><tr><th>Date</th><th>Day</th><th style="width: 180px;">Hours</th></tr></thead>
+              <tbody id="daily-hours-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <hr>
+        <div class="form-check mb-3">
+          {{ form.calendar_acknowledged }}
+          <label class="form-check-label" for="{{ form.calendar_acknowledged.id_for_label }}">{{ form.calendar_acknowledged.label }}</label>
+          {{ form.calendar_acknowledged.errors }}
+        </div>
+
+        <div class="alert alert-info mb-3"><strong>Advance notice:</strong> Vacation and personal-time requests submitted less than two weeks before the first date are allowed to continue but will be flagged for the approver. Sick requests are exempt.</div>
+
+        <div class="card bg-body-tertiary border-0">
+          <div class="card-body">
+            <h2 class="h6">Negative Vacation Balance Exception</h2>
+            <p class="small text-body-secondary">Complete this section only if the requested vacation would take the projected vacation balance below -40:00. Projected balance includes vacation already approved and still pending. Unpaid dates must cover complete Monday-through-Friday employment week increments.</p>
+            <div class="form-check mb-3">
+              {{ form.negative_balance_acknowledged }}
+              <label class="form-check-label" for="{{ form.negative_balance_acknowledged.id_for_label }}">{{ form.negative_balance_acknowledged.label }}</label>
+              {{ form.negative_balance_acknowledged.errors }}
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label">{{ form.unpaid_start_date.label }}</label>{{ form.unpaid_start_date }}{{ form.unpaid_start_date.errors }}</div>
+              <div class="col-md-6"><label class="form-label">{{ form.unpaid_end_date.label }}</label>{{ form.unpaid_end_date }}{{ form.unpaid_end_date.errors }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer text-end"><button class="btn btn-primary" type="submit">{% if editing %}Save Draft{% else %}Create Draft{% endif %}</button></div>
+    </form>
+  </div>
+</div>
+{{ daily_hours|json_script:"absence-daily-hours" }}
+<script>
+(function () {
+  const startInput = document.getElementById('{{ form.start_date.id_for_label }}');
+  const endInput = document.getElementById('{{ form.end_date.id_for_label }}');
+  const section = document.getElementById('daily-hours-section');
+  const body = document.getElementById('daily-hours-body');
+  const total = document.getElementById('daily-hours-total');
+  const saved = JSON.parse(document.getElementById('absence-daily-hours').textContent || '{}');
+
+  function isoLocal(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  function updateTotal() {
+    let value = 0;
+    body.querySelectorAll('input[type="number"]').forEach((input) => value += Number(input.value || 0));
+    total.textContent = `${value.toFixed(2)} hours`;
+  }
+  function renderDays() {
+    body.innerHTML = '';
+    if (!startInput.value || !endInput.value) { section.classList.add('d-none'); return; }
+    const start = new Date(startInput.value + 'T12:00:00');
+    const end = new Date(endInput.value + 'T12:00:00');
+    if (end < start) { section.classList.add('d-none'); return; }
+    let count = 0;
+    for (let day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+      if (day.getDay() === 0 || day.getDay() === 6) continue;
+      const iso = isoLocal(day);
+      const tr = document.createElement('tr');
+      const value = Object.prototype.hasOwnProperty.call(saved, iso) ? saved[iso] : '8.00';
+      tr.innerHTML = `<td>${day.toLocaleDateString()}</td><td>${day.toLocaleDateString(undefined, {weekday:'long'})}</td><td><input class="form-control form-control-sm" type="number" min="0" max="8" step="0.25" name="day_hours_${iso}" value="${value}"></td>`;
+      body.appendChild(tr); count++;
+    }
+    section.classList.toggle('d-none', count === 0);
+    body.querySelectorAll('input').forEach((input) => input.addEventListener('input', updateTotal));
+    updateTotal();
+  }
+  startInput.addEventListener('change', renderDays);
+  endInput.addEventListener('change', renderDays);
+  renderDays();
+})();
+</script>
+{% endblock %}

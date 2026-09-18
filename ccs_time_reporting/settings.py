@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'reports',
     'jobgrid.apps.JobgridConfig',
     'ccs.apps.CcsConfig',
+    'absence.apps.AbsenceConfig',
 ]
 
 MIDDLEWARE = [
@@ -120,3 +121,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
 
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "https://timetrack.ccswi.us")
+
+# Finalized absence PDFs are written to this archive root. In production,
+# point ABSENCE_PDF_ROOT at the mounted CCS file-server share.
+ABSENCE_PDF_ROOT = Path(os.getenv("ABSENCE_PDF_ROOT", str(MEDIA_ROOT / "absence_requests")))

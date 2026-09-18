@@ -12,3 +12,5 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 MEDIA_ROOT = BASE_DIR / ".test_media"
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+ABSENCE_PDF_ROOT = MEDIA_ROOT / "absence_archive"

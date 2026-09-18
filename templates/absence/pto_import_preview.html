@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load absence_tags %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">PTO Import Preview</h1>
+    <div class="text-body-secondary">
+      {{ pto_import.source_name }}
+      {% if pto_import.report_date %}
+        · report date {{ pto_import.report_date|date:"m/d/Y" }}
+      {% endif %}
+    </div>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'pto_import_list' %}">Back</a>
+</div>
+
+{% if pto_import.status == 'failed' %}
+  <div class="alert alert-danger">
+    <strong>Import failed:</strong> {{ pto_import.error_message }}
+  </div>
+{% endif %}
+
+{% if has_problems %}
+  <div class="alert alert-warning">
+    <strong>{{ matched_count }}</strong> matched employee{{ matched_count|pluralize }} will be imported.
+    <strong>{{ skipped_count }}</strong> unmatched or ambiguous row{{ skipped_count|pluralize }} will be skipped.
+    You may optionally match additional employees before applying the import.
+  </div>
+{% endif %}
+
+<div class="card shadow-sm mb-3">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Report Employee</th>
+          <th>Matched Employee</th>
+          <th>Current Vacation Accrual</th>
+          <th>Imported Vacation Accrual</th>
+          <th>Current Vacation Used</th>
+          <th>Imported Vacation Used</th>
+          <th>Current Sick Available</th>
+          <th>Imported Sick Available</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row, account in preview_rows %}
+          <tr>
+            <td>{{ row.employee_name }}</td>
+            <td>
+              {% if row.employee %}
+                {{ row.employee.get_full_name|default:row.employee.username }}
+              {% else %}
+                <form class="d-flex gap-2" method="post" action="{% url 'pto_import_match' row.pk %}">
+                  {% csrf_token %}
+                  <select class="form-select form-select-sm" name="employee_id" required>
+                    <option value="">Choose employee…</option>
+                    {% for employee in all_employees %}
+                      <option value="{{ employee.pk }}">
+                        {{ employee.get_full_name|default:employee.username }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Match</button>
+                </form>
+              {% endif %}
+            </td>
+            <td>{% if account %}{{ account.vacation_accrual_minutes|hhmm }}{% else %}—{% endif %}</td>
+            <td>{{ row.vacation_available_minutes|hhmm }}</td>
+            <td>{% if account %}{{ account.vacation_used_minutes|hhmm }}{% else %}—{% endif %}</td>
+            <td>{{ row.vacation_used_minutes|hhmm }}</td>
+            <td>{% if account %}{{ account.sick_available_minutes|hhmm }}{% else %}—{% endif %}</td>
+            <td>{{ row.sick_available_minutes|hhmm }}</td>
+            <td>
+              {% if row.match_status == 'matched' %}
+                <span class="badge text-bg-success">Matched</span>
+              {% else %}
+                <span class="badge text-bg-warning">{{ row.get_match_status_display }}</span>
+                <div class="small text-body-secondary">{{ row.match_message }}</div>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="9" class="text-center text-body-secondary py-4">No rows were parsed.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pto_import.status == 'preview' %}
+  <form method="post" action="{% url 'pto_import_apply' pto_import.pk %}" class="text-end">
+    {% csrf_token %}
+    <button class="btn btn-success" type="submit" {% if matched_count == 0 %}disabled{% endif %}>
+      Apply {{ matched_count }} Matched Employee{{ matched_count|pluralize }}
+    </button>
+  </form>
+{% elif pto_import.status == 'applied' %}
+  <div class="alert alert-success">
+    This import was applied {{ pto_import.applied_at|date:"m/d/Y g:i A" }} by
+    {{ pto_import.applied_by.get_full_name|default:pto_import.applied_by.username }}.
+  </div>
+{% endif %}
+{% endblock %}

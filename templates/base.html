@@ -61,6 +61,24 @@
 		  {% endif %}
                 </ul>
               </li>
+              <li class="nav-item dropdown px-3" style="border-right: 1px solid rgba(255,255,255,.65);">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Absence
+                </a>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" href="{% url 'absence_list' %}">My Requests</a></li>
+                  <li><a class="dropdown-item" href="{% url 'absence_create' %}">New Request</a></li>
+                  {% if is_project_manager %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{% url 'absence_approvals' %}">Approvals</a></li>
+                    <li><a class="dropdown-item" href="{% url 'pto_balance_list' %}">PTO Balances</a></li>
+                  {% endif %}
+                  {% if is_management_staff %}
+                    <li><a class="dropdown-item" href="{% url 'pto_import_list' %}">PTO Imports</a></li>
+                  {% endif %}
+                </ul>
+              </li>
+
               <li class="nav-item">
                 <a class="nav-link px-3" style="border-right: 1px solid rgba(255,255,255,.65);" href="{% url 'reports_dashboard' %}">
                   Reports
