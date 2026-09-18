@@ -16,6 +16,7 @@ from timesheets.models import (
     Timesheet,
     TimesheetReceipt,
 )
+from timesheets.views import _run_bulk_import_job
 from .base import AppTestCase
 
 
@@ -478,3 +479,63 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         response = self.client.get(reverse("timesheet_bulk_zip_upload_status_api", args=[job.pk]))
 
         self.assertFalse(response.json()["completed"])
+
+    def _run_bulk_job_and_get_importer_call(
+        self,
+        *,
+        mark_submitted=False,
+        mark_approved=False,
+    ):
+        job = BulkImportJob.objects.create(
+            employee=self.employee,
+            uploaded_zip=SimpleUploadedFile(
+                "timesheets.zip",
+                self._zip_bytes(),
+                content_type="application/zip",
+            ),
+        )
+        timesheet = self.make_timesheet()
+
+        with patch(
+            "timesheets.views.import_timesheet_upload",
+            return_value=timesheet,
+        ) as importer, patch(
+            "timesheets.views._apply_bulk_import_status",
+        ):
+            _run_bulk_import_job(
+                job.pk,
+                mark_submitted=mark_submitted,
+                mark_approved=mark_approved,
+            )
+
+        self.assertEqual(importer.call_count, 1)
+        return importer.call_args
+
+    @staticmethod
+    def _zip_bytes():
+        from io import BytesIO
+        import zipfile
+
+        stream = BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("one.xlsx", b"dummy")
+        return stream.getvalue()
+
+    def test_bulk_draft_import_requires_active_jobs(self):
+        call = self._run_bulk_job_and_get_importer_call()
+
+        self.assertTrue(call.kwargs["require_active_jobs"])
+
+    def test_bulk_submitted_import_allows_inactive_jobs(self):
+        call = self._run_bulk_job_and_get_importer_call(
+            mark_submitted=True,
+        )
+
+        self.assertFalse(call.kwargs["require_active_jobs"])
+
+    def test_bulk_approved_import_allows_inactive_jobs(self):
+        call = self._run_bulk_job_and_get_importer_call(
+            mark_approved=True,
+        )
+
+        self.assertFalse(call.kwargs["require_active_jobs"])

@@ -581,11 +581,20 @@ def find_invalid_time_entry_job_numbers(path):
     return invalid
 
 
-def _resolve_import_job(job_number, job_corrections=None):
+def _resolve_import_job(
+    job_number,
+    job_corrections=None,
+    *,
+    require_active_jobs=True,
+):
     """Resolve a workbook job number to a valid Job or None.
 
     job_corrections maps original workbook job numbers to either a replacement
     job number or an empty string for internal/no-job work.
+
+    Normal/draft imports require the job to be available for time entry.
+    Historical submitted/approved bulk imports may reference inactive jobs,
+    but the job must still exist and have a description.
     """
     job_number = (job_number or "").strip()
     if not job_number:
@@ -598,16 +607,37 @@ def _resolve_import_job(job_number, job_corrections=None):
             return "", None
         job_number = replacement
 
-    job = valid_time_entry_job_qs().filter(job_number__iexact=job_number).first()
+    if require_active_jobs:
+        job_qs = valid_time_entry_job_qs()
+    else:
+        # Historical submitted/approved bulk imports may reference jobs that
+        # have since been made inactive. Blank-description placeholder jobs
+        # remain invalid.
+        job_qs = Job.objects.exclude(description="")
+
+    job = job_qs.filter(job_number__iexact=job_number).first()
+
     if job is None:
+        if not require_active_jobs:
+            raise ValueError(
+                f"Job '{job_number}' does not exist in the valid Job table. "
+                "Import stopped so the job number can be corrected."
+            )
+
         raise ValueError(
             f"Job '{job_number}' is not available for time entry. "
             "Import stopped so the job number can be corrected."
         )
+
     return job.job_number, job
 
 @transaction.atomic
-def import_timesheet_upload(upload, job_corrections=None):
+def import_timesheet_upload(
+    upload,
+    job_corrections=None,
+    *,
+    require_active_jobs=True,
+):
     path = upload.uploaded_file.path
     week_start = parse_week_start(path)
     timesheet, _ = Timesheet.objects.get_or_create(
@@ -624,7 +654,11 @@ def import_timesheet_upload(upload, job_corrections=None):
 
     entries_by_date_row = {}
     for item in parse_time_entries(path):
-        job_number, job = _resolve_import_job(item.job_number, job_corrections)
+        job_number, job = _resolve_import_job(
+            item.job_number,
+            job_corrections,
+            require_active_jobs=require_active_jobs,
+        )
         work_code = None
         if item.work_code:
             work_code, _ = WorkCode.objects.get_or_create(code=item.work_code, defaults={"description": item.work_code})
@@ -680,7 +714,11 @@ def import_timesheet_upload(upload, job_corrections=None):
         entry = entries_by_date_row.get((item.work_date, item.row_order))
         if entry is None:
             # Preserve parts entered on a row without time data.
-            part_job_number, part_job = _resolve_import_job(item.ee_stock_job_number, job_corrections)
+            part_job_number, part_job = _resolve_import_job(
+                item.ee_stock_job_number,
+                job_corrections,
+                require_active_jobs=require_active_jobs,
+            )
             entry = TimeEntry.objects.create(
                 timesheet=timesheet,
                 work_date=item.work_date,
