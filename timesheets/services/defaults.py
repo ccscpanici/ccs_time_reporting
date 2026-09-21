@@ -93,7 +93,7 @@ DEFAULT_MILEAGE_RATES = {
     2023: "0.655",
     2024: "0.670",
     2025: "0.700",
-    2026: "0.720",
+    2026: "0.760",
 }
 
 
@@ -103,52 +103,53 @@ DEFAULT_OVERNIGHT_RATES = {
 
 
 def seed_overnight_rates(*, stdout=None):
-    """Create/update yearly overnight reimbursement rates. Safe to repeat."""
+    """Create missing yearly overnight reimbursement rates without overwriting admin changes."""
     from decimal import Decimal
     from timesheets.models import OvernightRate
 
     created = 0
-    updated = 0
+    existing = 0
     for year, rate in DEFAULT_OVERNIGHT_RATES.items():
-        _, was_created = OvernightRate.objects.update_or_create(
+        _, was_created = OvernightRate.objects.get_or_create(
             year=year,
             defaults={"rate": Decimal(rate)},
         )
         if was_created:
             created += 1
         else:
-            updated += 1
+            existing += 1
 
     if stdout:
-        stdout.write(f"Overnight rates seeded: {created} created, {updated} updated.")
+        stdout.write(f"Overnight rates seeded: {created} created, {existing} existing.")
 
-    return created, updated
+    return created, existing
 
 
 def seed_mileage_rates(*, stdout=None):
-    """Create/update yearly mileage rates from 2000 through 2026.
+    """Create missing yearly mileage rates without overwriting admin changes.
 
-    Safe to run multiple times. Admins can edit rates from Django Admin after seeding.
+    Safe to run multiple times. Existing rates are authoritative and may be
+    maintained through Django Admin.
     """
     from decimal import Decimal
     from timesheets.models import MileageRate
 
     created = 0
-    updated = 0
+    existing = 0
     for year, rate in DEFAULT_MILEAGE_RATES.items():
-        _, was_created = MileageRate.objects.update_or_create(
+        _, was_created = MileageRate.objects.get_or_create(
             year=year,
             defaults={"rate": Decimal(rate)},
         )
         if was_created:
             created += 1
         else:
-            updated += 1
+            existing += 1
 
     if stdout:
-        stdout.write(f"Mileage rates seeded: {created} created, {updated} updated.")
+        stdout.write(f"Mileage rates seeded: {created} created, {existing} existing.")
 
-    return created, updated
+    return created, existing
 
 
 DEFAULT_OFFICE_LOCATIONS = [
