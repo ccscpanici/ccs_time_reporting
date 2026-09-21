@@ -103,18 +103,18 @@ class MileageRateDefaultsTests(AppTestCase):
         self.assertEqual(updated, 0)
         self.assertEqual(MileageRate.objects.count(), len(DEFAULT_MILEAGE_RATES))
         self.assertEqual(MileageRate.objects.get(year=2000).rate, Decimal("0.325"))
-        self.assertEqual(MileageRate.objects.get(year=2026).rate, Decimal("0.720"))
+        self.assertEqual(MileageRate.objects.get(year=2026).rate, Decimal("0.760"))
 
-    def test_seed_mileage_rates_updates_existing_rates_and_reports_counts(self):
-        MileageRate.objects.create(year=2026, rate=Decimal("0.111"))
+    def test_seed_mileage_rates_preserves_existing_admin_rate(self):
+        MileageRate.objects.create(year=2026, rate=Decimal("0.760"))
         stdout = StringIO()
 
         created, updated = seed_mileage_rates(stdout=stdout)
 
         self.assertEqual(created, len(DEFAULT_MILEAGE_RATES) - 1)
         self.assertEqual(updated, 1)
-        self.assertEqual(MileageRate.objects.get(year=2026).rate, Decimal("0.720"))
-        self.assertIn("1 updated", stdout.getvalue())
+        self.assertEqual(MileageRate.objects.get(year=2026).rate, Decimal("0.760"))
+        self.assertIn("1 existing", stdout.getvalue())
 
 
 class OvernightRateDefaultsTests(AppTestCase):
@@ -128,15 +128,15 @@ class OvernightRateDefaultsTests(AppTestCase):
         self.assertEqual(updated, 0)
         self.assertEqual(OvernightRate.objects.get(year=2026).rate, Decimal("50.00"))
 
-    def test_seed_overnight_rates_updates_existing_rate_and_reports_counts(self):
+    def test_seed_overnight_rates_preserves_existing_admin_rate(self):
         OvernightRate.objects.create(year=2026, rate=Decimal("42.00"))
         stdout = StringIO()
 
         created, updated = seed_overnight_rates(stdout=stdout)
 
         self.assertEqual((created, updated), (0, 1))
-        self.assertEqual(OvernightRate.objects.get(year=2026).rate, Decimal("50.00"))
-        self.assertIn("0 created, 1 updated", stdout.getvalue())
+        self.assertEqual(OvernightRate.objects.get(year=2026).rate, Decimal("42.00"))
+        self.assertIn("0 created, 1 existing", stdout.getvalue())
 
 
 class OfficeLocationDefaultsTests(AppTestCase):
