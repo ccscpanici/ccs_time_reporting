@@ -94,6 +94,7 @@ def _smtp_backend(config):
         password=config.smtp_password or None,
         use_tls=config.use_tls,
         use_ssl=config.use_ssl,
+        timeout=60,
         fail_silently=False,
     )
 

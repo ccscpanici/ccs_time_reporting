@@ -18,22 +18,19 @@ from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
 from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm, TimesheetReopenRequestForm
-from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest
+from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest, EmailJob
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
 from .services.importer import find_invalid_time_entry_job_numbers, import_timesheet_upload, valid_time_entry_job_qs
 from .services.job_importer import apply_job_import, preview_job_import
 from .services.notifications import (
+    send_reopened_admin_notification,
     send_employee_reopen_approved_email,
     send_employee_reopen_rejected_email,
-    send_employee_timesheet_approved_email,
-    send_employee_timesheet_rejected_email,
-    send_reopened_admin_notification,
-    send_timesheet_approved_email,
     send_timesheet_reopen_request_email,
-    send_timesheet_submitted_supervisor_email,
 )
+from .services.email_queue import queue_email_job
 from .services.receipts_pdf import build_receipts_pdf_bytes, receipts_pdf_filename
 from .services.submission import create_timesheet_artifact, submit_timesheet
 from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
@@ -1796,15 +1793,16 @@ def timesheet_submit(request, pk):
             messages.error(request, f"Submit failed: {exc}")
             return redirect(timesheet)
 
-        try:
-            send_timesheet_submitted_supervisor_email(submitted_timesheet, request.user)
-        except Exception as exc:
-            messages.warning(
-                request,
-                f"Timesheet submitted, but the supervisor notification email could not be sent: {exc}",
-            )
+        queue_email_job(
+            job_type=EmailJob.JobType.TIMESHEET_SUBMITTED_SUPERVISOR,
+            timesheet=submitted_timesheet,
+            actor=request.user,
+        )
 
-        messages.success(request, "Timesheet submitted successfully. Your supervisor has been notified.")
+        messages.success(
+            request,
+            "Timesheet submitted successfully. Supervisor notification queued.",
+        )
         return redirect("timesheet_submitted", pk=submitted_timesheet.pk)
 
     return render(request, "timesheets/submit.html", {"timesheet": timesheet})
@@ -2265,32 +2263,22 @@ def timesheet_approve(request, pk):
     except Exception as exc:
         messages.error(request, f"Approve failed: {exc}")
     else:
-        admin_email_sent = True
-        employee_email_sent = True
+        queue_email_job(
+            job_type=EmailJob.JobType.TIMESHEET_APPROVED_ADMIN,
+            timesheet=approved_timesheet,
+            actor=request.user,
+        )
 
-        try:
-            send_timesheet_approved_email(approved_timesheet, request.user)
-        except Exception:
-            admin_email_sent = False
-            messages.warning(
-                request,
-                "Timesheet approved, but the approval email could not be sent. "
-                "Please download the Excel timesheet file and any receipts and manually email them to the admin team.",
-            )
+        queue_email_job(
+            job_type=EmailJob.JobType.TIMESHEET_APPROVED_EMPLOYEE,
+            timesheet=approved_timesheet,
+            actor=request.user,
+        )
 
-        try:
-            send_employee_timesheet_approved_email(approved_timesheet, request.user)
-        except Exception as exc:
-            employee_email_sent = False
-            messages.warning(
-                request,
-                f"Timesheet approved, but the employee approval email could not be sent: {exc}",
-            )
-
-        if admin_email_sent and employee_email_sent:
-            messages.success(request, "Timesheet approved and notification emails sent.")
-        elif admin_email_sent:
-            messages.success(request, "Timesheet approved and admin notification email sent.")
+        messages.success(
+            request,
+            "Timesheet approved. Notification emails queued.",
+        )
 
     return redirect("timesheet_approvals")
 
@@ -2313,19 +2301,19 @@ def timesheet_reject(request, pk):
             except Exception as exc:
                 messages.error(request, f"Reject failed: {exc}")
                 return redirect(timesheet)
-            try:
-                send_employee_timesheet_rejected_email(
-                    timesheet,
-                    request.user,
-                    form.cleaned_data["reason"],
-                )
-            except Exception as exc:
-                messages.warning(
-                    request,
-                    f"Timesheet rejected, but the employee rejection email could not be sent: {exc}",
-                )
-            else:
-                messages.success(request, "Timesheet rejected and employee notification email sent.")
+            queue_email_job(
+                job_type=EmailJob.JobType.TIMESHEET_REJECTED_EMPLOYEE,
+                timesheet=timesheet,
+                actor=request.user,
+                payload={
+                    "reason": form.cleaned_data["reason"],
+                },
+            )
+
+            messages.success(
+                request,
+                "Timesheet rejected. Employee notification queued.",
+            )
 
             return redirect("timesheet_approvals")
     else:
