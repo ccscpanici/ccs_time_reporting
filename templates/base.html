@@ -52,6 +52,11 @@
                       Yesterday
                     </a>
                   </li>
+                  <li>
+                    <a class="dropdown-item" href="{% url 'timesheet_downloads' %}">
+                      Downloads
+                    </a>
+                  </li>
 	 	  {% if is_project_manager %}
 		  <li>
 		    <a class="dropdown-item" href="{% url 'timesheet_approvals' %}">
