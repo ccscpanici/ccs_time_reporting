@@ -144,9 +144,8 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         approve_mock.assert_called_once()
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
-    @patch("timesheets.views.send_employee_timesheet_approved_email", side_effect=RuntimeError("employee mail"))
-    @patch("timesheets.views.send_timesheet_approved_email", side_effect=RuntimeError("admin mail"))
-    def test_approval_remains_successful_when_both_emails_fail(self, _admin_email, _employee_email):
+    @patch("timesheets.views.queue_email_job")
+    def test_approval_queues_both_notification_emails(self, queue_email):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -154,6 +153,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
+        self.assertEqual(queue_email.call_count, 2)
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_reject_get_renders_form_for_submitted_timesheet(self):
@@ -189,8 +189,8 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertEqual(timesheet.status, Timesheet.Status.SUBMITTED)
         self.assertTrue(response.context["form"].errors)
 
-    @patch("timesheets.views.send_employee_timesheet_rejected_email", side_effect=RuntimeError("mail down"))
-    def test_rejection_persists_when_employee_email_fails(self, _send_email):
+    @patch("timesheets.views.queue_email_job")
+    def test_rejection_queues_employee_notification(self, queue_email):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -201,6 +201,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.REJECTED)
+        queue_email.assert_called_once()
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_regular_employee_cannot_mark_timesheet_invoiced(self):

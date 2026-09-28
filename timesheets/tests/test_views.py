@@ -163,7 +163,7 @@ class TimesheetCreateTests(TimesheetViewTestBase):
 
 
 class TimesheetSubmissionTests(TimesheetViewTestBase):
-    @patch("timesheets.views.send_timesheet_submitted_supervisor_email")
+    @patch("timesheets.views.queue_email_job")
     def test_owner_can_submit_nonempty_draft(self, send_email):
         timesheet = self.make_timesheet(with_entry=True)
         self.client.force_login(self.employee)
@@ -177,7 +177,7 @@ class TimesheetSubmissionTests(TimesheetViewTestBase):
         send_email.assert_called_once()
         self.assertRedirects(response, reverse("timesheet_submitted", args=[timesheet.pk]))
 
-    @patch("timesheets.views.send_timesheet_submitted_supervisor_email")
+    @patch("timesheets.views.queue_email_job")
     def test_empty_timesheet_remains_draft(self, send_email):
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
@@ -215,9 +215,8 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         self.assertIn(direct_report_sheet, response.context["timesheets"])
         self.assertNotIn(unrelated_sheet, response.context["timesheets"])
 
-    @patch("timesheets.views.send_employee_timesheet_approved_email")
-    @patch("timesheets.views.send_timesheet_approved_email")
-    def test_assigned_project_manager_can_approve_submitted_timesheet(self, send_admin_email, send_employee_email):
+    @patch("timesheets.views.queue_email_job")
+    def test_assigned_project_manager_can_approve_submitted_timesheet(self, queue_email):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.client.force_login(self.project_manager)
 
@@ -226,8 +225,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
         self.assertEqual(timesheet.approved_by, self.project_manager)
-        send_admin_email.assert_called_once()
-        send_employee_email.assert_called_once()
+        self.assertEqual(queue_email.call_count, 2)
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_unassigned_project_manager_cannot_approve_timesheet(self):
@@ -246,7 +244,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(timesheet.status, Timesheet.Status.SUBMITTED)
 
-    @patch("timesheets.views.send_employee_timesheet_rejected_email")
+    @patch("timesheets.views.queue_email_job")
     def test_assigned_project_manager_can_reject_with_reason(self, send_email):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.client.force_login(self.project_manager)

@@ -36,3 +36,6 @@ media/
 __pycache__/
 *.pyc
 .env
+
+# Local Django test database
+test.sqlite3
