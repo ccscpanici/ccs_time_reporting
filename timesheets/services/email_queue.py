@@ -6,9 +6,13 @@ from django.utils import timezone
 
 from ..models import EmailJob
 from .notifications import (
+    send_employee_reopen_approved_email,
+    send_employee_reopen_rejected_email,
     send_employee_timesheet_approved_email,
     send_employee_timesheet_rejected_email,
+    send_reopened_admin_notification,
     send_timesheet_approved_email,
+    send_timesheet_reopen_request_email,
     send_timesheet_submitted_supervisor_email,
 )
 
@@ -82,6 +86,58 @@ def _dispatch_job(job):
             job.timesheet,
             job.actor,
         )
+        return
+
+    if job.job_type == EmailJob.JobType.TIMESHEET_REOPEN_REQUEST:
+        reopen_request_id = job.payload.get("reopen_request_id")
+        if not reopen_request_id:
+            raise ValueError(
+                "Missing reopen_request_id for reopen request email job."
+            )
+
+        from ..models import TimesheetReopenRequest
+
+        reopen_request = TimesheetReopenRequest.objects.get(
+            pk=reopen_request_id
+        )
+        send_timesheet_reopen_request_email(reopen_request)
+        return
+
+    if job.job_type == EmailJob.JobType.TIMESHEET_REOPENED_ADMIN:
+        send_reopened_admin_notification(
+            job.timesheet,
+            job.actor,
+        )
+        return
+
+    if job.job_type == EmailJob.JobType.TIMESHEET_REOPEN_APPROVED_EMPLOYEE:
+        reopen_request_id = job.payload.get("reopen_request_id")
+        if not reopen_request_id:
+            raise ValueError(
+                "Missing reopen_request_id for reopen approved email job."
+            )
+
+        from ..models import TimesheetReopenRequest
+
+        reopen_request = TimesheetReopenRequest.objects.get(
+            pk=reopen_request_id
+        )
+        send_employee_reopen_approved_email(reopen_request)
+        return
+
+    if job.job_type == EmailJob.JobType.TIMESHEET_REOPEN_REJECTED_EMPLOYEE:
+        reopen_request_id = job.payload.get("reopen_request_id")
+        if not reopen_request_id:
+            raise ValueError(
+                "Missing reopen_request_id for reopen rejected email job."
+            )
+
+        from ..models import TimesheetReopenRequest
+
+        reopen_request = TimesheetReopenRequest.objects.get(
+            pk=reopen_request_id
+        )
+        send_employee_reopen_rejected_email(reopen_request)
         return
 
     raise ValueError(f"Unknown email job type: {job.job_type}")
