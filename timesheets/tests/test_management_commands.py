@@ -23,7 +23,7 @@ from timesheets.management.commands.import_jobs import (
 )
 from timesheets.management.commands.invalid_jobs import Command as InvalidJobsCommand
 from timesheets.management.commands.link_job_users import Command as LinkJobUsersCommand, normalize_name
-from timesheets.models import Customer, Job, TimeEntry, Timesheet, TimesheetImport, WorkCode
+from timesheets.models import Customer, Job, JobUserAlias, TimeEntry, Timesheet, TimesheetImport, WorkCode
 from timesheets.tests.base import AppTestCase
 from timesheets.tests.factories import make_job, make_time_entry, make_timesheet, make_user, write_job_workbook
 
@@ -241,6 +241,91 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertIsNone(job.lead_user)
         self.assertIsNone(job.engineer_01_user)
         self.assertEqual(job.engineer_users.count(), 0)
+
+
+    def test_automatically_matches_generated_username(self):
+        user = make_user(
+            username="cpanici",
+            first_name="Chris",
+            last_name="Panici",
+        )
+        job = make_job(
+            job_number="26001",
+            lead="Christopher Panici",
+        )
+
+        call_command("link_job_users")
+
+        job.refresh_from_db()
+        self.assertEqual(job.lead_user, user)
+
+    def test_existing_manual_link_is_not_overwritten(self):
+        manual_user = make_user(
+            username="manual",
+            first_name="Manual",
+            last_name="Person",
+        )
+        make_user(
+            username="cpanici",
+            first_name="Chris",
+            last_name="Panici",
+        )
+        job = make_job(
+            job_number="26001",
+            lead="Christopher Panici",
+            lead_user=manual_user,
+        )
+
+        call_command("link_job_users")
+
+        job.refresh_from_db()
+        self.assertEqual(job.lead_user, manual_user)
+
+    def test_saved_alias_is_reused(self):
+        user = make_user(
+            username="cpanici",
+            first_name="Chris",
+            last_name="Panici",
+        )
+        JobUserAlias.objects.create(
+            source_name="Chris P.",
+            user=user,
+        )
+        job = make_job(
+            job_number="26001",
+            lead="Chris P.",
+        )
+
+        call_command("link_job_users")
+
+        job.refresh_from_db()
+        self.assertEqual(job.lead_user, user)
+
+    def test_compound_name_is_not_automatically_guessed(self):
+        make_user(
+            username="cpanici",
+            first_name="Chris",
+            last_name="Panici",
+        )
+        make_user(
+            username="fwylie",
+            first_name="Fulton",
+            last_name="Wylie",
+        )
+        job = make_job(
+            job_number="26001",
+            lead="Chris Panici/Fulton Wylie",
+        )
+        out = StringIO()
+
+        call_command("link_job_users", stdout=out)
+
+        job.refresh_from_db()
+        self.assertIsNone(job.lead_user)
+        self.assertIn(
+            "Chris Panici/Fulton Wylie",
+            out.getvalue(),
+        )
 
 
 class ImportTimesheetZipCommandTests(AppTestCase):
