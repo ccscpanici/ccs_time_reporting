@@ -879,3 +879,29 @@ class EmailJob(models.Model):
             f"for timesheet {self.timesheet_id} "
             f"({self.status})"
         )
+
+
+class JobUserAlias(models.Model):
+    """
+    Maps a name found in the imported job list to a Django user.
+
+    These mappings are learned by the interactive link_job_users command
+    and reused on future runs.
+    """
+
+    source_name = models.CharField(max_length=255, unique=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="job_user_aliases",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["source_name"]
+        verbose_name = "job user alias"
+        verbose_name_plural = "job user aliases"
+
+    def __str__(self):
+        return f"{self.source_name} -> {self.user.username}"
