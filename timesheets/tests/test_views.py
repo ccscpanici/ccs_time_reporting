@@ -7,7 +7,7 @@ from django.urls import reverse
 from .base import AppTestCase
 
 from accounts.models import EmployeeProfile
-from timesheets.models import TimeEntry, Timesheet, TimesheetReopenRequest
+from timesheets.models import EmailJob, TimeEntry, Timesheet, TimesheetReopenRequest
 
 
 User = get_user_model()
@@ -274,40 +274,64 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
 
 
 class ReopenRequestTests(TimesheetViewTestBase):
-    @patch("timesheets.views.send_timesheet_reopen_request_email")
-    def test_employee_request_is_pending_when_supervisor_is_assigned(self, send_email):
+    def test_employee_request_is_pending_when_supervisor_is_assigned(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.client.force_login(self.employee)
 
-        response = self.client.post(
-            reverse("timesheet_reopen_request", args=[timesheet.pk]),
-            {"reason": "I need to correct Thursday.", "priority": "medium"},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("timesheet_reopen_request", args=[timesheet.pk]),
+                {"reason": "I need to correct Thursday.", "priority": "medium"},
+            )
 
         reopen_request = TimesheetReopenRequest.objects.get(timesheet=timesheet)
         self.assertEqual(reopen_request.status, "pending")
         self.assertEqual(reopen_request.supervisor, self.project_manager)
         self.assertEqual(reopen_request.requested_by, self.employee)
-        send_email.assert_called_once_with(reopen_request)
+
+        job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPEN_REQUEST,
+            timesheet=timesheet,
+        )
+        self.assertEqual(job.actor, self.employee)
+        self.assertEqual(job.status, EmailJob.Status.PENDING)
+        self.assertEqual(job.payload["reopen_request_id"], reopen_request.pk)
+
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
-    @patch("timesheets.views.send_reopened_admin_notification")
-    @patch("timesheets.views.send_employee_reopen_approved_email")
-    def test_request_without_supervisor_is_automatically_approved(self, send_employee_email, send_admin_email):
+    def test_request_without_supervisor_is_automatically_approved(self):
         timesheet = self.make_timesheet(employee=self.other_employee, status=Timesheet.Status.APPROVED)
         self.client.force_login(self.other_employee)
 
-        response = self.client.post(
-            reverse("timesheet_reopen_request", args=[timesheet.pk]),
-            {"reason": "Correction needed.", "priority": "low"},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("timesheet_reopen_request", args=[timesheet.pk]),
+                {"reason": "Correction needed.", "priority": "low"},
+            )
 
         reopen_request = TimesheetReopenRequest.objects.get(timesheet=timesheet)
         timesheet.refresh_from_db()
         self.assertEqual(reopen_request.status, "approved")
         self.assertEqual(timesheet.status, Timesheet.Status.REOPENED)
-        send_employee_email.assert_called_once()
-        send_admin_email.assert_called_once()
+
+        employee_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPEN_APPROVED_EMPLOYEE,
+            timesheet=timesheet,
+        )
+        self.assertEqual(employee_job.actor, self.other_employee)
+        self.assertEqual(employee_job.status, EmailJob.Status.PENDING)
+        self.assertEqual(
+            employee_job.payload["reopen_request_id"],
+            reopen_request.pk,
+        )
+
+        admin_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPENED_ADMIN,
+            timesheet=timesheet,
+        )
+        self.assertEqual(admin_job.actor, self.other_employee)
+        self.assertEqual(admin_job.status, EmailJob.Status.PENDING)
+
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_management_staff_can_open_reopen_request_list(self):
@@ -317,9 +341,7 @@ class ReopenRequestTests(TimesheetViewTestBase):
 
         self.assertEqual(response.status_code, 200)
 
-    @patch("timesheets.views.send_reopened_admin_notification")
-    @patch("timesheets.views.send_employee_reopen_approved_email")
-    def test_management_staff_can_approve_reopen_request(self, send_employee_email, send_admin_email):
+    def test_management_staff_can_approve_reopen_request(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         reopen_request = TimesheetReopenRequest.objects.create(
             timesheet=timesheet,
@@ -329,14 +351,33 @@ class ReopenRequestTests(TimesheetViewTestBase):
         )
         self.client.force_login(self.management_user)
 
-        response = self.client.post(
-            reverse("reopen_request_approve", args=[reopen_request.pk]),
-            {"decision_notes": "Approved."},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("reopen_request_approve", args=[reopen_request.pk]),
+                {"decision_notes": "Approved."},
+            )
 
         reopen_request.refresh_from_db()
         timesheet.refresh_from_db()
         self.assertEqual(reopen_request.status, "approved")
         self.assertEqual(reopen_request.decided_by, self.management_user)
+
+        employee_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPEN_APPROVED_EMPLOYEE,
+            timesheet=timesheet,
+        )
+        self.assertEqual(employee_job.actor, self.management_user)
+        self.assertEqual(employee_job.status, EmailJob.Status.PENDING)
+        self.assertEqual(
+            employee_job.payload["reopen_request_id"],
+            reopen_request.pk,
+        )
+
+        admin_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPENED_ADMIN,
+            timesheet=timesheet,
+        )
+        self.assertEqual(admin_job.actor, self.management_user)
+        self.assertEqual(admin_job.status, EmailJob.Status.PENDING)
         self.assertEqual(timesheet.status, Timesheet.Status.REOPENED)
         self.assertRedirects(response, reverse("reopen_request_list"))

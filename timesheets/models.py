@@ -812,6 +812,22 @@ class EmailJob(models.Model):
             "timesheet_submitted_supervisor",
             "Timesheet Submitted - Supervisor",
         )
+        TIMESHEET_REOPEN_REQUEST = (
+            "timesheet_reopen_request",
+            "Timesheet Reopen Request",
+        )
+        TIMESHEET_REOPENED_ADMIN = (
+            "timesheet_reopened_admin",
+            "Timesheet Reopened - Admin",
+        )
+        TIMESHEET_REOPEN_APPROVED_EMPLOYEE = (
+            "timesheet_reopen_approved_employee",
+            "Timesheet Reopen Approved - Employee",
+        )
+        TIMESHEET_REOPEN_REJECTED_EMPLOYEE = (
+            "timesheet_reopen_rejected_employee",
+            "Timesheet Reopen Rejected - Employee",
+        )
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

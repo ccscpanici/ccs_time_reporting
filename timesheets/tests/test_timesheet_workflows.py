@@ -12,6 +12,7 @@ from django.utils import timezone
 from accounts.models import EmployeeProfile
 from timesheets.models import (
     BulkImportJob,
+    EmailJob,
     TimeEntry,
     Timesheet,
     TimesheetReceipt,
@@ -380,22 +381,29 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
 
         self.assertRedirects(response, reverse("timesheet_detail", args=[draft.pk]))
 
-    @patch("timesheets.views.send_reopened_admin_notification")
-    def test_owner_can_reopen_submitted_timesheet(self, notify):
+    def test_owner_can_reopen_submitted_timesheet(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
-        response = self.client.post(
-            reverse("timesheet_reopen", args=[timesheet.pk]),
-            {"reason": "Correct overtime"},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("timesheet_reopen", args=[timesheet.pk]),
+                {"reason": "Correct overtime"},
+            )
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.REOPENED)
         self.assertEqual(timesheet.reopened_by, self.employee)
         self.assertEqual(timesheet.reopen_reason, "Correct overtime")
         self.assertIsNotNone(timesheet.reopened_at)
-        notify.assert_called_once()
+
+        job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPENED_ADMIN,
+            timesheet=timesheet,
+        )
+        self.assertEqual(job.actor, self.employee)
+        self.assertEqual(job.status, EmailJob.Status.PENDING)
+
         self.assertRedirects(response, reverse("timesheet_edit", args=[timesheet.pk]))
 
     def test_reopen_requires_reason(self):

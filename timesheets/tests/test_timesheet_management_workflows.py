@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.models import EmployeeProfile
 from timesheets.models import (
+    EmailJob,
     Job,
     TimeEntry,
     Timesheet,
@@ -303,22 +304,40 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertEqual(request_obj.status, "pending")
         self.assertRedirects(response, reverse("reopen_request_review", args=[request_obj.pk]))
 
-    @patch("timesheets.views.send_reopened_admin_notification", side_effect=RuntimeError("admin mail"))
-    @patch("timesheets.views.send_employee_reopen_approved_email", side_effect=RuntimeError("employee mail"))
-    def test_approve_persists_when_notifications_fail(self, _employee_email, _admin_email):
+    def test_approve_persists_and_queues_notifications(self):
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
-        response = self.client.post(
-            reverse("reopen_request_approve", args=[request_obj.pk]),
-            {"decision_notes": "Approved despite mail errors."},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("reopen_request_approve", args=[request_obj.pk]),
+                {"decision_notes": "Approved despite mail errors."},
+            )
 
         request_obj.refresh_from_db()
         request_obj.timesheet.refresh_from_db()
         self.assertEqual(request_obj.status, "approved")
         self.assertEqual(request_obj.decision_notes, "Approved despite mail errors.")
         self.assertEqual(request_obj.timesheet.status, Timesheet.Status.REOPENED)
+
+        employee_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPEN_APPROVED_EMPLOYEE,
+            timesheet=request_obj.timesheet,
+        )
+        self.assertEqual(employee_job.actor, self.management)
+        self.assertEqual(employee_job.status, EmailJob.Status.PENDING)
+        self.assertEqual(
+            employee_job.payload["reopen_request_id"],
+            request_obj.pk,
+        )
+
+        admin_job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPENED_ADMIN,
+            timesheet=request_obj.timesheet,
+        )
+        self.assertEqual(admin_job.actor, self.management)
+        self.assertEqual(admin_job.status, EmailJob.Status.PENDING)
+
         self.assertRedirects(response, reverse("reopen_request_list"))
 
     def test_approve_only_accepts_pending_request(self):
@@ -339,21 +358,33 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertEqual(request_obj.status, "pending")
         self.assertRedirects(response, reverse("reopen_request_review", args=[request_obj.pk]))
 
-    @patch("timesheets.views.send_employee_reopen_rejected_email", side_effect=RuntimeError("mail down"))
-    def test_reject_persists_when_notification_fails(self, _send_email):
+    def test_reject_persists_and_queues_notification(self):
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
-        response = self.client.post(
-            reverse("reopen_request_reject", args=[request_obj.pk]),
-            {"decision_notes": "Not approved."},
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("reopen_request_reject", args=[request_obj.pk]),
+                {"decision_notes": "Not approved."},
+            )
 
         request_obj.refresh_from_db()
         request_obj.timesheet.refresh_from_db()
         self.assertEqual(request_obj.status, "denied")
         self.assertEqual(request_obj.decision_notes, "Not approved.")
         self.assertEqual(request_obj.timesheet.status, Timesheet.Status.APPROVED)
+
+        job = EmailJob.objects.get(
+            job_type=EmailJob.JobType.TIMESHEET_REOPEN_REJECTED_EMPLOYEE,
+            timesheet=request_obj.timesheet,
+        )
+        self.assertEqual(job.actor, self.management)
+        self.assertEqual(job.status, EmailJob.Status.PENDING)
+        self.assertEqual(
+            job.payload["reopen_request_id"],
+            request_obj.pk,
+        )
+
         self.assertRedirects(response, reverse("reopen_request_list"))
 
     def test_reject_only_accepts_pending_request(self):
