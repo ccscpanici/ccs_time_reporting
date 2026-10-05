@@ -1,3 +1,8 @@
+"""Service-layer operations for defaults workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 DEFAULT_WORK_CODES = [
     ("1000", "Office"),
     ("1200", "Vacation"),
@@ -49,6 +54,7 @@ def seed_work_codes(*, stdout=None):
 
 
 def seed_management_group(*, stdout=None):
+    """Ensure the default management group records exist without overwriting administrator changes."""
     from django.contrib.auth.models import Group
 
     _, created = Group.objects.get_or_create(name="Management Staff")
@@ -58,6 +64,7 @@ def seed_management_group(*, stdout=None):
 
 
 def seed_business_admin_group(*, stdout=None):
+    """Ensure the default business admin group records exist without overwriting administrator changes."""
     from django.contrib.auth.models import Group
 
     _, created = Group.objects.get_or_create(name="Business Admin")
@@ -67,6 +74,7 @@ def seed_business_admin_group(*, stdout=None):
 
 
 def seed_project_managers_group(*, stdout=None):
+    """Ensure the default project managers group records exist without overwriting administrator changes."""
     from django.contrib.auth.models import Group
 
     _, created = Group.objects.get_or_create(name="ProjectManagers")

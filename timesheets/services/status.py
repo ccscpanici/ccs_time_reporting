@@ -1,3 +1,8 @@
+"""Service-layer operations for status workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from django.db import transaction
 from django.utils import timezone
 from ..models import Timesheet
@@ -6,6 +11,7 @@ from ..permissions import can_approve_timesheet
 
 @transaction.atomic
 def reopen_timesheet(timesheet, user, reason):
+    """Provide the reopen timesheet operation used by the application service layer."""
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be reopened.")
@@ -26,6 +32,7 @@ def reopen_timesheet(timesheet, user, reason):
 
 @transaction.atomic
 def approve_timesheet(timesheet, user):
+    """Provide the approve timesheet operation used by the application service layer."""
     timesheet = Timesheet.objects.select_for_update().select_related("employee").get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be approved.")
@@ -43,6 +50,7 @@ def approve_timesheet(timesheet, user):
 
 @transaction.atomic
 def reject_timesheet(timesheet, user, reason):
+    """Provide the reject timesheet operation used by the application service layer."""
     timesheet = Timesheet.objects.select_for_update().select_related("employee").get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be rejected.")
@@ -63,6 +71,7 @@ def reject_timesheet(timesheet, user, reason):
 
 @transaction.atomic
 def mark_timesheet_exported_to_quickbooks(timesheet, user):
+    """Advance the record through the mark timesheet exported to quickbooks workflow transition."""
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
 
     if timesheet.deleted_at:
@@ -87,6 +96,7 @@ def mark_timesheet_exported_to_quickbooks(timesheet, user):
 
 @transaction.atomic
 def mark_timesheet_invoiced(timesheet, user):
+    """Advance the record through the mark timesheet invoiced workflow transition."""
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be marked invoiced.")

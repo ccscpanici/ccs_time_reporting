@@ -1,3 +1,8 @@
+"""HTTP request handlers for this Django application.
+
+Views coordinate permissions, forms, service-layer operations, messages, and responses.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,6 +42,7 @@ User = get_user_model()
 
 
 def _posted_daily_hours(data):
+    """Build or validate internal data used by the posted daily hours workflow."""
     values = {}
     for key, value in data.items():
         if key.startswith("day_hours_") and value not in (None, ""):
@@ -45,6 +51,7 @@ def _posted_daily_hours(data):
 
 
 def _archive_final_request(request_obj, actor, request=None):
+    """Build or validate internal data used by the archive final request workflow."""
     try:
         return ensure_final_pdf(request_obj, generated_by=actor)
     except Exception as exc:
@@ -58,6 +65,7 @@ def _archive_final_request(request_obj, actor, request=None):
 
 @login_required
 def absence_list(request):
+    """Handle the absence list request and enforce the workflow rules for this operation."""
     requests = AbsenceRequest.objects.filter(employee=request.user).select_related("manager")
     pto_account = PTOAccount.objects.filter(employee=request.user).first()
     pto_summary = vacation_summary(pto_account) if pto_account else None
@@ -74,6 +82,7 @@ def absence_list(request):
 
 @login_required
 def absence_create(request):
+    """Handle the absence create request and enforce the workflow rules for this operation."""
     account = PTOAccount.objects.filter(employee=request.user).first()
     if request.method == "POST":
         form = AbsenceRequestForm(request.POST, employee=request.user)
@@ -104,6 +113,7 @@ def absence_create(request):
 
 @login_required
 def absence_edit(request, pk):
+    """Handle the absence edit request and enforce the workflow rules for this operation."""
     absence = get_object_or_404(AbsenceRequest, pk=pk, employee=request.user, status=AbsenceRequest.Status.DRAFT)
     account = PTOAccount.objects.filter(employee=request.user).first()
     if request.method == "POST":
@@ -143,6 +153,7 @@ def absence_edit(request, pk):
 
 @login_required
 def absence_detail(request, pk):
+    """Handle the absence detail request and enforce the workflow rules for this operation."""
     absence = get_object_or_404(
         AbsenceRequest.objects.select_related(
             "employee", "manager", "submitted_by", "supervisor_approved_by", "supervisor_denied_by",
@@ -172,6 +183,7 @@ def absence_detail(request, pk):
 @login_required
 @transaction.atomic
 def absence_submit(request, pk):
+    """Handle the absence submit request and enforce the workflow rules for this operation."""
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
     absence = get_object_or_404(AbsenceRequest, pk=pk, employee=request.user)
@@ -236,6 +248,7 @@ def absence_submit(request, pk):
 
 @login_required
 def absence_approvals(request):
+    """Handle the absence approvals request and enforce the workflow rules for this operation."""
     if not (is_project_manager(request.user) or is_management_staff(request.user)):
         return HttpResponseForbidden("Supervisor access required.")
 
@@ -250,6 +263,7 @@ def absence_approvals(request):
 @login_required
 @transaction.atomic
 def absence_approve(request, pk):
+    """Handle the absence approve request and enforce the workflow rules for this operation."""
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
     absence = get_object_or_404(AbsenceRequest, pk=pk)
@@ -279,6 +293,7 @@ def absence_approve(request, pk):
 @login_required
 @transaction.atomic
 def absence_deny(request, pk):
+    """Handle the absence deny request and enforce the workflow rules for this operation."""
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
     absence = get_object_or_404(AbsenceRequest, pk=pk)
@@ -303,6 +318,7 @@ def absence_deny(request, pk):
 @login_required
 @transaction.atomic
 def exception_approve(request, pk):
+    """Handle the exception approve request and enforce the workflow rules for this operation."""
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
     absence = get_object_or_404(AbsenceRequest, pk=pk)
@@ -326,6 +342,7 @@ def exception_approve(request, pk):
 @login_required
 @transaction.atomic
 def exception_deny(request, pk):
+    """Handle the exception deny request and enforce the workflow rules for this operation."""
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
     absence = get_object_or_404(AbsenceRequest, pk=pk)
@@ -348,6 +365,7 @@ def exception_deny(request, pk):
 
 @login_required
 def pto_balance_list(request):
+    """Handle the pto balance list request and enforce the workflow rules for this operation."""
     employees = employees_manageable_by(request.user)
     if not (is_project_manager(request.user) or is_management_staff(request.user)):
         return HttpResponseForbidden("Supervisor access required.")
@@ -369,6 +387,7 @@ def pto_balance_list(request):
 @login_required
 @transaction.atomic
 def pto_balance_edit(request, user_id):
+    """Handle the pto balance edit request and enforce the workflow rules for this operation."""
     employee = get_object_or_404(User, pk=user_id, is_active=True)
     if not can_manage_pto_account(request.user, employee):
         raise Http404
@@ -388,6 +407,7 @@ def pto_balance_edit(request, user_id):
 
 @login_required
 def pto_import_list(request):
+    """Handle the pto import list request and enforce the workflow rules for this operation."""
     if not can_import_pto(request.user):
         return HttpResponseForbidden("Management Staff access required.")
     imports = PTOImport.objects.select_related("uploaded_by", "applied_by")
@@ -396,6 +416,7 @@ def pto_import_list(request):
 
 @login_required
 def pto_import_upload(request):
+    """Handle the pto import upload request and enforce the workflow rules for this operation."""
     if not can_import_pto(request.user):
         return HttpResponseForbidden("Management Staff access required.")
     if request.method == "POST":
@@ -421,6 +442,7 @@ def pto_import_upload(request):
 
 @login_required
 def pto_import_preview(request, pk):
+    """Handle the pto import preview request and enforce the workflow rules for this operation."""
     if not can_import_pto(request.user):
         return HttpResponseForbidden("Management Staff access required.")
 
@@ -485,6 +507,7 @@ def pto_import_preview(request, pk):
 
 @login_required
 def pto_import_match(request, row_id):
+    """Handle the pto import match request and enforce the workflow rules for this operation."""
     if not can_import_pto(request.user):
         return HttpResponseForbidden("Management Staff access required.")
     if request.method != "POST":
@@ -502,6 +525,7 @@ def pto_import_match(request, row_id):
 @login_required
 @transaction.atomic
 def pto_import_apply(request, pk):
+    """Handle the pto import apply request and enforce the workflow rules for this operation."""
     if not can_import_pto(request.user):
         return HttpResponseForbidden("Management Staff access required.")
     if request.method != "POST":
@@ -521,6 +545,7 @@ def pto_import_apply(request, pk):
 
 @login_required
 def absence_artifact_download(request, artifact_id):
+    """Handle the absence artifact download request and enforce the workflow rules for this operation."""
     artifact = get_object_or_404(AbsenceArtifact.objects.select_related("request__employee", "request__manager"), pk=artifact_id)
     if not can_view_absence_request(request.user, artifact.request):
         raise Http404

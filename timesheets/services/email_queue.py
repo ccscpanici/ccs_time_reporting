@@ -1,3 +1,8 @@
+"""Service-layer operations for email queue workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 import logging
 from datetime import timedelta
 
@@ -38,6 +43,7 @@ def queue_email_job(*, job_type, timesheet, actor=None, payload=None):
     payload = payload or {}
 
     def create_job():
+        """Create job for the current workflow."""
         job = EmailJob.objects.create(
             job_type=job_type,
             timesheet=timesheet,

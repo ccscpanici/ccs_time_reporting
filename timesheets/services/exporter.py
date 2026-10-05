@@ -1,3 +1,8 @@
+"""Service-layer operations for exporter workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from pathlib import Path
 from decimal import Decimal
 from datetime import timedelta
@@ -12,6 +17,7 @@ from .workbook_mapping import *
 TEMPLATE_PATH = Path(settings.BASE_DIR) / "templates_excel" / "2026_Timesheet.xlsx"
 
 def _export_initials_filename(timesheet, extension):
+    """Internal helper used to export initials filename."""
     employee = timesheet.employee
     user = getattr(employee, "user", employee)
 
@@ -26,6 +32,7 @@ def _export_initials_filename(timesheet, extension):
     return f"{timesheet.week_start:%Y%m%d}_{initials}.{extension}"
 
 def _money_amount(value):
+    """Internal helper used to money amount."""
     if value is None:
         return Decimal("0")
     return getattr(value, "amount", value) or Decimal("0")
@@ -33,6 +40,7 @@ def _money_amount(value):
 
 
 def _excel_number(value):
+    """Internal helper used to excel number."""
     amount = _money_amount(value)
     if amount in (None, "", 0, Decimal("0")):
         return ""
@@ -40,6 +48,7 @@ def _excel_number(value):
 
 
 def _display_number(value):
+    """Internal helper used to display number."""
     amount = _money_amount(value)
     if amount in (None, "", 0, Decimal("0")):
         return ""
@@ -47,6 +56,7 @@ def _display_number(value):
 
 
 def _display_money(value):
+    """Internal helper used to display money."""
     amount = _money_amount(value)
     if amount in (None, "", 0, Decimal("0")):
         return ""
@@ -54,6 +64,7 @@ def _display_money(value):
 
 
 def _employee_profile(user):
+    """Internal helper used to employee profile."""
     return getattr(user, "employee_profile", None)
 
 
@@ -91,6 +102,7 @@ def _write_employee_header(ws, user, timesheet):
 
 
 def _has_part_entry(part_entry):
+    """Internal helper used to has part entry."""
     if not part_entry:
         return False
 
@@ -107,6 +119,7 @@ def _has_part_entry(part_entry):
 
 
 def _has_expense(expense):
+    """Internal helper used to has expense."""
     if not expense:
         return False
     return any([
@@ -123,6 +136,7 @@ def _has_expense(expense):
 
 
 def build_timesheet_excel(timesheet):
+    """Build timesheet excel data used by the surrounding workflow."""
     if not timesheet.can_export_excel:
         raise ValueError("Excel export only works when each date has 5 or fewer time entries. Use PDF Report instead.")
     if not TEMPLATE_PATH.exists():
@@ -330,6 +344,7 @@ def _append_pdf_receipts(report_path, timesheet):
 
 def build_timesheet_pdf(timesheet):
 
+    """Build timesheet pdf data used by the surrounding workflow."""
     employee = timesheet.employee
     user = getattr(employee, "user", employee)
     initials = (
@@ -773,6 +788,7 @@ def build_timesheet_pdf(timesheet):
 
 
 def build_submission_attachment(timesheet, export_format):
+    """Build submission attachment data used by the surrounding workflow."""
     if export_format == timesheet.ExportFormat.EXCEL:
         return build_timesheet_excel(timesheet)
     return build_timesheet_pdf(timesheet)

@@ -21,6 +21,7 @@ User = get_user_model()
 
 
 def make_user(*, username: str, password: str = "test-password", **overrides: Any):
+    """Provide the make user helper used by this test suite."""
     values = {
         "first_name": username.replace("_", " ").title(),
         "last_name": "User",
@@ -31,27 +32,32 @@ def make_user(*, username: str, password: str = "test-password", **overrides: An
 
 
 def get_group(name: str) -> Group:
+    """Provide the get group helper used by this test suite."""
     group, _ = Group.objects.get_or_create(name=name)
     return group
 
 
 def add_user_to_group(user, name: str) -> Group:
+    """Provide the add user to group helper used by this test suite."""
     group = get_group(name)
     user.groups.add(group)
     return group
 
 
 def make_employee_profile(*, user, supervisor=None, **overrides: Any) -> EmployeeProfile:
+    """Provide the make employee profile helper used by this test suite."""
     values = {"supervisor": supervisor}
     values.update(overrides)
     return EmployeeProfile.objects.create(user=user, **values)
 
 
 def make_customer(*, name: str = "Test Customer", **overrides: Any) -> Customer:
+    """Provide the make customer helper used by this test suite."""
     return Customer.objects.create(name=name, **overrides)
 
 
 def make_job(*, job_number: str = "26001", **overrides: Any) -> Job:
+    """Provide the make job helper used by this test suite."""
     values = {
         "description": f"Description for {job_number}",
         "year": 2026,
@@ -71,6 +77,7 @@ def make_timesheet(
     status: str = Timesheet.Status.DRAFT,
     **overrides: Any,
 ) -> Timesheet:
+    """Provide the make timesheet helper used by this test suite."""
     values = {
         "mileage_rate": Decimal("0.72"),
         "entries_per_day": 5,
@@ -92,6 +99,7 @@ def make_time_entry(
     row_order: int = 1,
     **overrides: Any,
 ) -> TimeEntry:
+    """Provide the make time entry helper used by this test suite."""
     values = {
         "job_number": "26001",
         "regular_hours": Decimal("0.00"),

@@ -1,3 +1,8 @@
+"""Service-layer operations for pto import workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 import re
@@ -32,6 +37,7 @@ DATE_SHORT_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2,4})\b")
 
 @dataclass(frozen=True)
 class ParsedPTORow:
+    """Provide parsed ptorow behavior for this module."""
     row_number: int
     employee_name: str
     sick_available_minutes: int
@@ -41,11 +47,13 @@ class ParsedPTORow:
 
 
 def extract_pdf_text(path_or_file) -> str:
+    """Provide the extract pdf text operation used by the application service layer."""
     reader = PdfReader(path_or_file)
     return "\n".join((page.extract_text() or "") for page in reader.pages)
 
 
 def parse_report_date(text: str):
+    """Parse report date data into the application representation."""
     long_match = DATE_LONG_RE.search(text)
     if long_match:
         return datetime.strptime(long_match.group(0), "%B %d, %Y").date()
@@ -59,6 +67,7 @@ def parse_report_date(text: str):
 
 
 def parse_pto_text(text: str) -> list[ParsedPTORow]:
+    """Parse pto text data into the application representation."""
     rows = []
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
         line = " ".join(raw_line.split())
@@ -85,6 +94,7 @@ def parse_pto_text(text: str) -> list[ParsedPTORow]:
 
 
 def _name_parts(report_name: str):
+    """Internal helper used to name parts."""
     report_name = " ".join(report_name.replace(".", " ").split())
     if "," not in report_name:
         return None, None
@@ -94,6 +104,7 @@ def _name_parts(report_name: str):
 
 
 def match_employee(report_name: str):
+    """Provide the match employee operation used by the application service layer."""
     User = get_user_model()
     first, last = _name_parts(report_name)
     if not first or not last:
@@ -108,6 +119,7 @@ def match_employee(report_name: str):
 
 
 def build_import_preview(pto_import: PTOImport) -> PTOImport:
+    """Build import preview data used by the surrounding workflow."""
     try:
         text = extract_pdf_text(pto_import.source_file.path)
         parsed_rows = parse_pto_text(text)
@@ -147,6 +159,7 @@ def build_import_preview(pto_import: PTOImport) -> PTOImport:
 
 
 def _snapshot(account: PTOAccount):
+    """Internal helper used to snapshot."""
     return {
         "vacation_weeks_per_year": account.vacation_weeks_per_year,
         "vacation_balance_minutes": account.vacation_balance_minutes,
@@ -158,6 +171,7 @@ def _snapshot(account: PTOAccount):
 
 
 def _record_change(account, old, new, *, user, pto_import=None, source, note=""):
+    """Internal helper used to record change."""
     return PTOAccountChange.objects.create(
         pto_account=account,
         pto_import=pto_import,
@@ -181,6 +195,7 @@ def _record_change(account, old, new, *, user, pto_import=None, source, note="")
 
 @transaction.atomic
 def apply_pto_import(pto_import: PTOImport, user):
+    """Provide the apply pto import operation used by the application service layer."""
     if pto_import.status != PTOImport.Status.PREVIEW:
         raise ValueError("Only an import in preview status can be applied.")
 
@@ -238,10 +253,12 @@ def apply_pto_import(pto_import: PTOImport, user):
 
 
 def account_snapshot(account: PTOAccount):
+    """Provide the account snapshot operation used by the application service layer."""
     return _snapshot(account)
 
 
 def record_manual_account_change(account: PTOAccount, old, user, *, note=""):
+    """Provide the record manual account change operation used by the application service layer."""
     new = _snapshot(account)
     if old == new:
         return None

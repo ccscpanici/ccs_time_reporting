@@ -1,3 +1,5 @@
+"""Regression tests for reports/views."""
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -14,10 +16,12 @@ User = get_user_model()
 
 
 class ReportViewTestBase(AppTestCase):
+    """Exercise the report view test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="employee",
             password="test-password",
@@ -65,6 +69,7 @@ class ReportViewTestBase(AppTestCase):
         week_start=None,
         deleted=False,
     ):
+        """Provide the make timesheet helper used by this test suite."""
         return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=week_start or self.week_start,
@@ -84,6 +89,7 @@ class ReportViewTestBase(AppTestCase):
         doubletime="0.00",
         description="Test work",
     ):
+        """Provide the make entry helper used by this test suite."""
         return self.make_time_entry_record(
             timesheet=timesheet,
             work_date=timesheet.week_start + timedelta(days=day_offset),
@@ -97,7 +103,9 @@ class ReportViewTestBase(AppTestCase):
 
 
 class ReportsDashboardTests(ReportViewTestBase):
+    """Exercise the reports dashboard workflow and protect its expected behavior from regressions."""
     def test_anonymous_user_is_redirected_to_login(self):
+        """Verify that anonymous user is redirected to login."""
         response = self.client.get(reverse("reports_dashboard"))
 
         self.assertRedirects(
@@ -106,6 +114,7 @@ class ReportsDashboardTests(ReportViewTestBase):
         )
 
     def test_authenticated_user_can_open_dashboard(self):
+        """Verify that authenticated user can open dashboard."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("reports_dashboard"))
@@ -115,7 +124,9 @@ class ReportsDashboardTests(ReportViewTestBase):
 
 
 class BillabilityReportTests(ReportViewTestBase):
+    """Exercise the billability report workflow and protect its expected behavior from regressions."""
     def test_regular_employee_cannot_open_company_billability_report(self):
+        """Verify that regular employee cannot open company billability report."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("billability_report"))
@@ -124,6 +135,7 @@ class BillabilityReportTests(ReportViewTestBase):
         self.assertIn(reverse("login"), response.url)
 
     def test_management_staff_can_open_report_without_running_it(self):
+        """Verify that management staff can open report without running it."""
         self.client.force_login(self.management_user)
 
         response = self.client.get(reverse("billability_report"))
@@ -133,6 +145,7 @@ class BillabilityReportTests(ReportViewTestBase):
         self.assertEqual(response.context["rows"], [])
 
     def test_report_calculates_billable_and_nonbillable_hours(self):
+        """Verify that report calculates billable and nonbillable hours."""
         timesheet = self.make_timesheet()
         self.make_entry(timesheet, row_order=1, job_number="26001", regular="6.00", overtime="2.00")
         self.make_entry(timesheet, row_order=2, job_number="", regular="2.00")
@@ -149,6 +162,7 @@ class BillabilityReportTests(ReportViewTestBase):
         self.assertEqual(employee_row["billability"], Decimal("80.0"))
 
     def test_report_excludes_management_and_superusers(self):
+        """Verify that report excludes management and superusers."""
         management_sheet = self.make_timesheet(employee=self.management_user)
         superuser_sheet = self.make_timesheet(employee=self.superuser)
         self.make_entry(management_sheet, regular="8.00")
@@ -164,6 +178,7 @@ class BillabilityReportTests(ReportViewTestBase):
         self.assertIn(self.other_employee, employees)
 
     def test_report_applies_date_and_status_filters(self):
+        """Verify that report applies date and status filters."""
         approved = self.make_timesheet(status=Timesheet.Status.APPROVED)
         submitted = self.make_timesheet(
             employee=self.other_employee,
@@ -190,6 +205,7 @@ class BillabilityReportTests(ReportViewTestBase):
         self.assertEqual(employee_rows[self.other_employee]["total_hours"], Decimal("0"))
 
     def test_report_ignores_entries_from_deleted_timesheets(self):
+        """Verify that report ignores entries from deleted timesheets."""
         deleted_sheet = self.make_timesheet(deleted=True)
         self.make_entry(deleted_sheet, regular="8.00")
         self.client.force_login(self.management_user)
@@ -204,7 +220,9 @@ class BillabilityReportTests(ReportViewTestBase):
 
 
 class MyBillabilityReportTests(ReportViewTestBase):
+    """Exercise the my billability report workflow and protect its expected behavior from regressions."""
     def test_anonymous_user_is_redirected_to_login(self):
+        """Verify that anonymous user is redirected to login."""
         response = self.client.get(reverse("my_billability_report"))
 
         self.assertRedirects(
@@ -213,6 +231,7 @@ class MyBillabilityReportTests(ReportViewTestBase):
         )
 
     def test_report_only_uses_logged_in_users_entries(self):
+        """Verify that report only uses logged in users entries."""
         own_sheet = self.make_timesheet()
         other_sheet = self.make_timesheet(employee=self.other_employee)
         self.make_entry(own_sheet, regular="5.00")
@@ -225,6 +244,7 @@ class MyBillabilityReportTests(ReportViewTestBase):
         self.assertEqual(response.context["summary"]["entry_count"], 1)
 
     def test_report_splits_regular_overtime_doubletime_and_billability(self):
+        """Verify that report splits regular overtime doubletime and billability."""
         timesheet = self.make_timesheet()
         self.make_entry(
             timesheet,
@@ -254,6 +274,7 @@ class MyBillabilityReportTests(ReportViewTestBase):
         self.assertEqual(summary["billability"], Decimal("70.0"))
 
     def test_report_applies_date_and_status_filters(self):
+        """Verify that report applies date and status filters."""
         approved = self.make_timesheet(status=Timesheet.Status.APPROVED)
         submitted = self.make_timesheet(
             status=Timesheet.Status.SUBMITTED,
@@ -277,6 +298,7 @@ class MyBillabilityReportTests(ReportViewTestBase):
         self.assertEqual(response.context["summary"]["entry_count"], 1)
 
     def test_not_run_returns_zero_summary_and_no_detail_rows(self):
+        """Verify that not run returns zero summary and no detail rows."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("my_billability_report"))
@@ -287,7 +309,9 @@ class MyBillabilityReportTests(ReportViewTestBase):
 
 
 class ProjectHoursReportTests(ReportViewTestBase):
+    """Exercise the project hours report workflow and protect its expected behavior from regressions."""
     def test_regular_employee_cannot_open_project_report(self):
+        """Verify that regular employee cannot open project report."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("project_hours_report"))
@@ -296,6 +320,7 @@ class ProjectHoursReportTests(ReportViewTestBase):
         self.assertIn(reverse("login"), response.url)
 
     def test_project_manager_can_open_report(self):
+        """Verify that project manager can open report."""
         self.client.force_login(self.project_manager)
 
         response = self.client.get(reverse("project_hours_report"))
@@ -305,6 +330,7 @@ class ProjectHoursReportTests(ReportViewTestBase):
         self.assertIsNone(response.context["summary"])
 
     def test_project_report_aggregates_totals_and_employee_rows(self):
+        """Verify that project report aggregates totals and employee rows."""
         employee_sheet = self.make_timesheet(employee=self.employee)
         other_sheet = self.make_timesheet(employee=self.other_employee)
         self.make_entry(
@@ -336,6 +362,7 @@ class ProjectHoursReportTests(ReportViewTestBase):
         self.assertEqual(response.context["employee_rows"][0]["total_hours"], Decimal("8.00"))
 
     def test_project_report_matches_job_number_case_insensitively(self):
+        """Verify that project report matches job number case insensitively."""
         timesheet = self.make_timesheet()
         self.make_entry(timesheet, job_number="AbC-123", regular="6.00")
         self.client.force_login(self.project_manager)
@@ -349,6 +376,7 @@ class ProjectHoursReportTests(ReportViewTestBase):
         self.assertEqual(response.context["summary"]["entry_count"], 1)
 
     def test_project_report_filters_date_status_and_deleted_timesheets(self):
+        """Verify that project report filters date status and deleted timesheets."""
         approved = self.make_timesheet(status=Timesheet.Status.APPROVED)
         submitted = self.make_timesheet(
             employee=self.other_employee,
@@ -379,6 +407,7 @@ class ProjectHoursReportTests(ReportViewTestBase):
         self.assertEqual(response.context["summary"]["entry_count"], 1)
 
     def test_run_without_job_number_does_not_query_or_build_summary(self):
+        """Verify that run without job number does not query or build summary."""
         self.client.force_login(self.project_manager)
 
         response = self.client.get(

@@ -1,3 +1,8 @@
+"""Service-layer operations for job importer workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -38,10 +43,12 @@ for i in range(1, 11):
 
 
 def _norm(value: Any) -> str:
+    """Internal helper used to norm."""
     return re.sub(r"\s+", " ", str(value or "").strip()).lower()
 
 
 def _text(value: Any) -> str:
+    """Internal helper used to text."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
@@ -50,6 +57,7 @@ def _text(value: Any) -> str:
 
 
 def _date(value: Any):
+    """Internal helper used to date."""
     if value in (None, ""):
         return None
     if isinstance(value, datetime):
@@ -68,6 +76,7 @@ def _date(value: Any):
 
 
 def _int(value: Any):
+    """Internal helper used to int."""
     raw = _text(value)
     if not raw:
         return None
@@ -78,6 +87,7 @@ def _int(value: Any):
 
 
 def _user_map():
+    """Internal helper used to user map."""
     User = get_user_model()
     mapping = {}
     for user in User.objects.all():
@@ -91,6 +101,7 @@ def _user_map():
 
 
 def find_header_row(ws):
+    """Provide the find header row operation used by the application service layer."""
     for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 25)):
         values = [_norm(cell.value) for cell in row]
         if any(v in HEADER_ALIASES["job_number"] for v in values):
@@ -99,6 +110,7 @@ def find_header_row(ws):
 
 
 def build_header_map(ws, header_row):
+    """Build header map data used by the surrounding workflow."""
     aliases = {alias: key for key, values in HEADER_ALIASES.items() for alias in values}
     header_map = {}
     for cell in ws[header_row]:
@@ -109,6 +121,7 @@ def build_header_map(ws, header_row):
 
 
 def is_year_separator(row_values, job_number):
+    """Provide the is year separator operation used by the application service layer."""
     populated = [v for v in row_values if _text(v)]
     raw = _text(job_number)
     return bool(re.fullmatch(r"20\d{2}", raw)) and len(populated) <= 2
@@ -116,6 +129,7 @@ def is_year_separator(row_values, job_number):
 
 @dataclass
 class JobImportResult:
+    """Provide job import result behavior for this module."""
     added: int = 0
     updated: int = 0
     unchanged: int = 0
@@ -128,19 +142,23 @@ class JobImportResult:
 
     @property
     def total_changed(self):
+        """Provide the total changed operation used by the application service layer."""
         return self.added + self.updated
 
 
 def preview_job_import(path):
+    """Provide the preview job import operation used by the application service layer."""
     return import_job_list(path, apply=False)
 
 
 @transaction.atomic
 def apply_job_import(path, *, user=None, source_name=""):
+    """Provide the apply job import operation used by the application service layer."""
     return import_job_list(path, apply=True, user=user, source_name=source_name)
 
 
 def import_job_list(path, *, apply=False, user=None, source_name=""):
+    """Import job list data while enforcing the application business rules."""
     result = JobImportResult()
     wb = load_workbook(path, data_only=True, read_only=True)
     ws = wb["Jobs - Quotes"] if "Jobs - Quotes" in wb.sheetnames else wb.active
@@ -161,6 +179,7 @@ def import_job_list(path, *, apply=False, user=None, source_name=""):
             continue
 
         def value(key):
+            """Provide the value operation used by the application service layer."""
             col = header_map.get(key)
             if not col:
                 return None

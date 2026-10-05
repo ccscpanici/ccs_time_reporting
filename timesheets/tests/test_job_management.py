@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/job management."""
+
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -13,8 +15,10 @@ User = get_user_model()
 
 @override_settings(USE_TZ=True)
 class JobManagementTestBase(AppTestCase):
+    """Exercise the job management test base workflow and protect its expected behavior from regressions."""
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.user = User.objects.create_user(
             username="employee",
             password="test-password",
@@ -39,6 +43,7 @@ class JobManagementTestBase(AppTestCase):
         cls.customer = Customer.objects.create(name="Alpha Foods")
 
     def make_job(self, job_number, **overrides):
+        """Provide the make job helper used by this test suite."""
         values = {
             "customer": self.customer,
             "work_type": "Controls",
@@ -50,6 +55,7 @@ class JobManagementTestBase(AppTestCase):
         return self.make_job_record(job_number=job_number, **values)
 
     def valid_form_data(self, **overrides):
+        """Provide the valid form data helper used by this test suite."""
         data = {
             "job_number": "26010",
             "description": "New automation project",
@@ -75,7 +81,9 @@ class JobManagementTestBase(AppTestCase):
 
 
 class JobManagementPermissionTests(JobManagementTestBase):
+    """Exercise the job management permission workflow and protect its expected behavior from regressions."""
     def test_anonymous_user_is_redirected_from_all_job_pages(self):
+        """Verify that anonymous user is redirected from all job pages."""
         job = self.make_job("26001")
         urls = [
             reverse("job_list"),
@@ -89,6 +97,7 @@ class JobManagementPermissionTests(JobManagementTestBase):
                 self.assertRedirects(response, f"{reverse('login')}?next={url}")
 
     def test_any_authenticated_user_can_open_job_pages(self):
+        """Verify that any authenticated user can open job pages."""
         job = self.make_job("26001")
         self.client.force_login(self.user)
 
@@ -102,10 +111,13 @@ class JobManagementPermissionTests(JobManagementTestBase):
 
 
 class JobListTests(JobManagementTestBase):
+    """Exercise the job list workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.client.force_login(self.user)
 
     def test_default_filter_uses_current_year(self):
+        """Verify that default filter uses current year."""
         current_year = date.today().year
         current = self.make_job("26001", year=current_year)
         self.make_job("25001", year=current_year - 1)
@@ -117,6 +129,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(response.context["year_filter"], str(current_year))
 
     def test_year_all_returns_jobs_from_multiple_years(self):
+        """Verify that year all returns jobs from multiple years."""
         first = self.make_job("25001", year=2025)
         second = self.make_job("26001", year=2026)
 
@@ -125,6 +138,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(list(response.context["page_obj"].object_list), [first, second])
 
     def test_invalid_year_falls_back_to_all(self):
+        """Verify that invalid year falls back to all."""
         self.make_job("25001", year=2025)
         self.make_job("26001", year=2026)
 
@@ -134,6 +148,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(response.context["page_obj"].paginator.count, 2)
 
     def test_search_matches_job_number_description_customer_po_location_and_quote(self):
+        """Verify that search matches job number description customer po location and quote."""
         job_number_match = self.make_job(
             "26011",
             description="Packaging controls",
@@ -183,6 +198,7 @@ class JobListTests(JobManagementTestBase):
                     [expected],
                 )
     def test_status_filter(self):
+        """Verify that status filter."""
         active = self.make_job("26001", job_status=Job.STATUS_ACTIVE)
         self.make_job("26002", job_status=Job.STATUS_COMPLETE)
 
@@ -191,6 +207,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(list(response.context["page_obj"].object_list), [active])
 
     def test_active_and_inactive_filters(self):
+        """Verify that active and inactive filters."""
         active = self.make_job("26001", active=True)
         inactive = self.make_job("26002", active=False)
 
@@ -201,6 +218,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(list(inactive_response.context["page_obj"].object_list), [inactive])
 
     def test_default_job_sort_is_descending(self):
+        """Verify that default job sort is descending."""
         low = self.make_job("26001")
         high = self.make_job("26020")
 
@@ -211,6 +229,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(response.context["sort_dir"], "desc")
 
     def test_description_and_customer_sorting(self):
+        """Verify that description and customer sorting."""
         zulu = self.make_job("26001", description="Zulu", customer=Customer.objects.create(name="Beta"))
         alpha = self.make_job("26002", description="Alpha", customer=Customer.objects.create(name="Alpha"))
 
@@ -221,6 +240,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(list(by_customer.context["page_obj"].object_list), [alpha, zulu])
 
     def test_invalid_sort_and_direction_use_defaults(self):
+        """Verify that invalid sort and direction use defaults."""
         low = self.make_job("26001")
         high = self.make_job("26002")
 
@@ -231,6 +251,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(list(response.context["page_obj"].object_list), [high, low])
 
     def test_pagination_uses_fifty_jobs_per_page(self):
+        """Verify that pagination uses fifty jobs per page."""
         for number in range(1, 56):
             self.make_job(f"26{number:03d}")
 
@@ -242,6 +263,7 @@ class JobListTests(JobManagementTestBase):
         self.assertEqual(first_page.context["page_obj"].paginator.count, 55)
 
     def test_context_contains_distinct_statuses_and_years(self):
+        """Verify that context contains distinct statuses and years."""
         self.make_job("25001", year=2025, job_status=Job.STATUS_COMPLETE)
         self.make_job("26001", year=2026, job_status=Job.STATUS_ACTIVE)
 
@@ -253,10 +275,13 @@ class JobListTests(JobManagementTestBase):
 
 
 class JobCreateTests(JobManagementTestBase):
+    """Exercise the job create workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.client.force_login(self.user)
 
     def test_get_uses_unknown_status_and_active_defaults(self):
+        """Verify that get uses unknown status and active defaults."""
         response = self.client.get(reverse("job_create"))
 
         form = response.context["form"]
@@ -265,6 +290,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertIsNone(response.context["job"])
 
     def test_valid_post_creates_job_customer_and_user_assignments(self):
+        """Verify that valid post creates job customer and user assignments."""
         response = self.client.post(reverse("job_create"), self.valid_form_data())
 
         job = Job.objects.get(job_number="26010")
@@ -277,6 +303,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertRedirects(response, reverse("job_list"))
 
     def test_blank_customer_leaves_customer_null(self):
+        """Verify that blank customer leaves customer null."""
         response = self.client.post(reverse("job_create"), self.valid_form_data(customer_name=""))
 
         job = Job.objects.get(job_number="26010")
@@ -284,6 +311,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertRedirects(response, reverse("job_list"))
 
     def test_existing_customer_is_reused(self):
+        """Verify that existing customer is reused."""
         response = self.client.post(reverse("job_create"), self.valid_form_data(customer_name="Alpha Foods"))
 
         job = Job.objects.get(job_number="26010")
@@ -292,6 +320,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertRedirects(response, reverse("job_list"))
 
     def test_duplicate_job_number_is_rejected_case_insensitively(self):
+        """Verify that duplicate job number is rejected case insensitively."""
         self.make_job("ABC2601")
 
         response = self.client.post(reverse("job_create"), self.valid_form_data(job_number="abc2601"))
@@ -301,6 +330,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertEqual(Job.objects.filter(job_number__iexact="ABC2601").count(), 1)
 
     def test_blank_job_number_is_rejected(self):
+        """Verify that blank job number is rejected."""
         response = self.client.post(reverse("job_create"), self.valid_form_data(job_number=""))
 
         self.assertEqual(response.status_code, 200)
@@ -308,6 +338,7 @@ class JobCreateTests(JobManagementTestBase):
         self.assertFalse(Job.objects.filter(description="New automation project").exists())
 
     def test_year_and_month_are_inferred_from_numeric_and_support_job_numbers(self):
+        """Verify that year and month are inferred from numeric and support job numbers."""
         numeric_data = self.valid_form_data(job_number="27015", year="", job_month="", customer_name="")
         support_data = self.valid_form_data(job_number="SCL2804", year="", job_month="", customer_name="")
 
@@ -321,10 +352,13 @@ class JobCreateTests(JobManagementTestBase):
 
 
 class JobEditTests(JobManagementTestBase):
+    """Exercise the job edit workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.client.force_login(self.user)
 
     def test_get_loads_existing_job_and_customer_name(self):
+        """Verify that get loads existing job and customer name."""
         job = self.make_job("26001")
 
         response = self.client.get(reverse("job_edit", args=[job.pk]))
@@ -335,6 +369,7 @@ class JobEditTests(JobManagementTestBase):
         self.assertEqual(response.context["form"].fields["customer_name"].initial, "Alpha Foods")
 
     def test_valid_edit_updates_job_and_assignments(self):
+        """Verify that valid edit updates job and assignments."""
         job = self.make_job("26001", active=True)
         data = self.valid_form_data(
             job_number="26001",
@@ -354,6 +389,7 @@ class JobEditTests(JobManagementTestBase):
         self.assertRedirects(response, reverse("job_list"))
 
     def test_edit_allows_same_job_number_for_same_record(self):
+        """Verify that edit allows same job number for same record."""
         job = self.make_job("26001")
 
         response = self.client.post(
@@ -365,6 +401,7 @@ class JobEditTests(JobManagementTestBase):
         self.assertEqual(Job.objects.filter(job_number="26001").count(), 1)
 
     def test_edit_rejects_job_number_used_by_another_job(self):
+        """Verify that edit rejects job number used by another job."""
         first = self.make_job("26001")
         self.make_job("26002")
 
@@ -379,6 +416,7 @@ class JobEditTests(JobManagementTestBase):
         self.assertEqual(first.job_number, "26001")
 
     def test_edit_can_clear_customer_and_user_assignments(self):
+        """Verify that edit can clear customer and user assignments."""
         job = self.make_job("26001", lead_user=self.lead_user, engineer_01_user=self.engineer_user)
         data = self.valid_form_data(
             job_number="26001",
@@ -396,6 +434,7 @@ class JobEditTests(JobManagementTestBase):
         self.assertRedirects(response, reverse("job_list"))
 
     def test_missing_job_returns_404(self):
+        """Verify that missing job returns 404."""
         response = self.client.get(reverse("job_edit", args=[999999]))
 
         self.assertEqual(response.status_code, 404)

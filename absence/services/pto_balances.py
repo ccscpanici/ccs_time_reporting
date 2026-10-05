@@ -1,3 +1,8 @@
+"""Service-layer operations for pto balances workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,6 +23,7 @@ MINUTES_PER_WORKDAY = 8 * 60
 
 @dataclass(frozen=True)
 class VacationSummary:
+    """Provide vacation summary behavior for this module."""
     annual_entitlement_minutes: int
     vacation_accrual_minutes: int
     vacation_used_minutes: int
@@ -27,12 +33,14 @@ class VacationSummary:
 
 
 def annual_vacation_minutes(vacation_weeks_per_year) -> int:
+    """Provide the annual vacation minutes operation used by the application service layer."""
     weeks = Decimal(vacation_weeks_per_year or 0)
     minutes = weeks * MINUTES_PER_WEEK
     return int(minutes.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def pay_period_end_for(day: date) -> date:
+    """Provide the pay period end for operation used by the application service layer."""
     delta_days = (day - PAY_PERIOD_ANCHOR_END).days
     period_index = delta_days // PAY_PERIOD_DAYS
     period_end = PAY_PERIOD_ANCHOR_END + timedelta(days=period_index * PAY_PERIOD_DAYS)
@@ -48,6 +56,7 @@ def pending_expiration_for(day: date) -> date:
 
 
 def iter_workdays(start_date: date, end_date: date):
+    """Provide the iter workdays operation used by the application service layer."""
     day = start_date
     while day <= end_date:
         if day.weekday() < 5:
@@ -81,6 +90,7 @@ def approved_vacation_pending_minutes(employee, *, as_of: date | None = None) ->
 
 
 def vacation_summary(account: PTOAccount, *, as_of: date | None = None) -> VacationSummary:
+    """Provide the vacation summary operation used by the application service layer."""
     annual_minutes = annual_vacation_minutes(account.vacation_weeks_per_year)
     vacation_used = account.vacation_used_minutes
     vacation_balance = annual_minutes - vacation_used

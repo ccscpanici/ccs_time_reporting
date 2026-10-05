@@ -1,3 +1,8 @@
+"""HTTP request handlers for this Django application.
+
+Views coordinate permissions, forms, service-layer operations, messages, and responses.
+"""
+
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
@@ -10,6 +15,7 @@ from .services.account_notifications import send_new_account_notification
 
 @login_required
 def preferences(request):
+    """Handle the preferences request and enforce the workflow rules for this operation."""
     prefs, _ = UserPreference.objects.get_or_create(user=request.user)
 
     if request.method == "POST":
@@ -27,6 +33,7 @@ def preferences(request):
 
 @login_required
 def profile(request):
+    """Handle the profile request and enforce the workflow rules for this operation."""
     default_office = OfficeLocation.objects.filter(active=True).order_by("name").first()
 
     employee_profile, _ = EmployeeProfile.objects.get_or_create(
@@ -63,6 +70,7 @@ def profile(request):
 
 
 def signup(request):
+    """Handle the signup request and enforce the workflow rules for this operation."""
     if request.user.is_authenticated:
         return redirect("timesheet_list")
 

@@ -1,3 +1,8 @@
+"""Service-layer operations for workbook mapping workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 # Workbook mapping for the CCS timecard template.
 # Confirm cell positions against the final production template before going live.
 

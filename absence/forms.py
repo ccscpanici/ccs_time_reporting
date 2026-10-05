@@ -1,3 +1,5 @@
+"""Application support code for forms."""
+
 from __future__ import annotations
 
 from django import forms
@@ -10,11 +12,14 @@ from absence.services.time_values import format_hhmm, is_full_employment_week_ra
 
 
 class DateInput(forms.DateInput):
+    """Provide date input behavior for this module."""
     input_type = "date"
 
 
 class AbsenceRequestForm(forms.ModelForm):
+    """Provide absence request form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = AbsenceRequest
         fields = (
             "absence_type",
@@ -39,6 +44,7 @@ class AbsenceRequestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, employee=None, **kwargs):
+        """Provide the init operation for this module."""
         super().__init__(*args, **kwargs)
         self.employee = employee
         for field in self.fields.values():
@@ -53,6 +59,7 @@ class AbsenceRequestForm(forms.ModelForm):
         self.fields["calendar_acknowledged"].required = False
 
     def clean(self):
+        """Provide the clean operation for this module."""
         cleaned = super().clean()
         start = cleaned.get("start_date")
         end = cleaned.get("end_date")
@@ -87,6 +94,7 @@ class AbsenceRequestForm(forms.ModelForm):
 
 
 class PTOAccountForm(forms.Form):
+    """Provide ptoaccount form behavior for this module."""
     vacation_weeks_per_year = forms.DecimalField(min_value=0, max_digits=5, decimal_places=2, label="Vacation weeks / year")
     vacation_accrual = forms.CharField(
         label="Vacation accrual",
@@ -102,6 +110,7 @@ class PTOAccountForm(forms.Form):
     note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3}), help_text="Optional reason for the manual update.")
 
     def __init__(self, *args, account=None, **kwargs):
+        """Provide the init operation for this module."""
         super().__init__(*args, **kwargs)
         self.account = account
         for field in self.fields.values():
@@ -117,6 +126,7 @@ class PTOAccountForm(forms.Form):
             })
 
     def clean(self):
+        """Provide the clean operation for this module."""
         cleaned = super().clean()
         for field in ("vacation_accrual", "vacation_used", "sick_available", "sick_used"):
             value = cleaned.get(field)
@@ -129,6 +139,7 @@ class PTOAccountForm(forms.Form):
         return cleaned
 
     def save(self, *, updated_by):
+        """Provide the save operation for this module."""
         account = self.account
         account.vacation_weeks_per_year = self.cleaned_data["vacation_weeks_per_year"]
         account.vacation_balance_minutes = self.cleaned_data["vacation_accrual_minutes"]
@@ -142,9 +153,11 @@ class PTOAccountForm(forms.Form):
 
 
 class PTOImportUploadForm(forms.Form):
+    """Provide ptoimport upload form behavior for this module."""
     source_file = forms.FileField(label="Paid Time Off List PDF")
 
     def clean_source_file(self):
+        """Provide the clean source file operation for this module."""
         upload = self.cleaned_data["source_file"]
         if not upload.name.lower().endswith(".pdf"):
             raise forms.ValidationError("Upload the Paid Time Off List as a PDF file.")
@@ -152,4 +165,5 @@ class PTOImportUploadForm(forms.Form):
 
 
 class DecisionForm(forms.Form):
+    """Provide decision form behavior for this module."""
     notes = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}), label="Notes")

@@ -1,3 +1,5 @@
+"""Regression tests for absence/pdf."""
+
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,7 +15,9 @@ User = get_user_model()
 
 
 class AbsencePDFTests(TestCase):
+    """Exercise the absence pdftests workflow and protect its expected behavior from regressions."""
     def test_filename_uses_initials_and_first_absence_date_and_avoids_collision(self):
+        """Verify that filename uses initials and first absence date and avoids collision."""
         employee = User.objects.create_user(username="cpanici", first_name="Christopher", last_name="Panici")
         manager = User.objects.create_user(username="manager", first_name="Mandy", last_name="Manager")
         absence = AbsenceRequest.objects.create(

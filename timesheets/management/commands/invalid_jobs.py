@@ -1,3 +1,5 @@
+"""Django management command for invalid jobs."""
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
 from timesheets.models import Customer, Job
@@ -11,9 +13,11 @@ from timesheets.services.job_cleanup import (
 
 
 class Command(BaseCommand):
+    """Implement the ``invalid_jobs`` Django management command."""
     help = "Interactively clean up invalid job records with blank descriptions."
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``invalid_jobs`` command."""
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -33,6 +37,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Execute the ``invalid_jobs`` management command."""
         dry_run = options["dry_run"]
         limit = options["limit"]
         suggestion_count = options["suggestions"]
@@ -53,6 +58,7 @@ class Command(BaseCommand):
             self._process_job(job, dry_run=dry_run, suggestion_count=suggestion_count)
 
     def _process_job(self, job, dry_run=False, suggestion_count=5):
+        """Provide the process job helper used by the ``invalid_jobs`` management command."""
         entries = entries_for_invalid_job(job)
         entry_count = entries.count()
         first_date = entries.order_by("work_date").values_list("work_date", flat=True).first()
@@ -178,6 +184,7 @@ class Command(BaseCommand):
         )
 
     def _clear_job(self, job, entry_count, dry_run=False):
+        """Provide the clear job helper used by the ``invalid_jobs`` management command."""
         if dry_run:
             self.stdout.write(self.style.WARNING(f"Would clear {entry_count} entries and delete invalid job {job.job_number}."))
             return
@@ -186,6 +193,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Cleared {updated} entries and deleted invalid job {job.job_number}."))
 
     def _replace_job(self, job, replacement, entry_count, dry_run=False):
+        """Provide the replace job helper used by the ``invalid_jobs`` management command."""
         if dry_run:
             self.stdout.write(
                 self.style.WARNING(

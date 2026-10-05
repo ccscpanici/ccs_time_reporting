@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/timesheet workflows."""
+
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -22,10 +24,12 @@ from .base import AppTestCase
 
 
 class TimesheetWorkflowBase(AppTestCase):
+    """Exercise the timesheet workflow base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = cls.make_user(
             username="workflow_employee",
             first_name="Workflow",
@@ -55,6 +59,7 @@ class TimesheetWorkflowBase(AppTestCase):
         EmployeeProfile.objects.create(user=cls.management)
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.DRAFT, week_start=None, **overrides):
+        """Provide the make timesheet helper used by this test suite."""
         return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=week_start or self.week_start,
@@ -63,6 +68,7 @@ class TimesheetWorkflowBase(AppTestCase):
         )
 
     def add_entry(self, timesheet, *, work_date=None, row_order=1, regular="8.00", **overrides):
+        """Provide the add entry helper used by this test suite."""
         return self.make_time_entry_record(
             timesheet=timesheet,
             work_date=work_date or timesheet.week_start,
@@ -73,7 +79,9 @@ class TimesheetWorkflowBase(AppTestCase):
 
 
 class TimesheetListAndDetailTests(TimesheetWorkflowBase):
+    """Exercise the timesheet list and detail workflow and protect its expected behavior from regressions."""
     def test_list_only_contains_logged_in_users_non_deleted_timesheets(self):
+        """Verify that list only contains logged in users non deleted timesheets."""
         visible = self.make_timesheet()
         self.make_timesheet(week_start=self.week_start + timedelta(days=7), deleted_at=timezone.now())
         self.make_timesheet(employee=self.other_employee)
@@ -85,6 +93,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertEqual(list(response.context["page_obj"].object_list), [visible])
 
     def test_list_annotates_total_hours_and_orders_newest_first(self):
+        """Verify that list annotates total hours and orders newest first."""
         older = self.make_timesheet()
         newer = self.make_timesheet(week_start=self.week_start + timedelta(days=7))
         self.add_entry(older, regular="3.00", overtime_hours=Decimal("2.00"), doubletime_hours=Decimal("1.00"))
@@ -99,6 +108,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertEqual(rows[1].total_hours, Decimal("6.00"))
 
     def test_list_paginates_twenty_five_timesheets(self):
+        """Verify that list paginates twenty five timesheets."""
         for offset in range(26):
             self.make_timesheet(week_start=self.week_start + timedelta(days=offset * 7))
         self.login(self.employee)
@@ -109,6 +119,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertEqual(len(response.context["page_obj"].object_list), 1)
 
     def test_detail_contains_weekly_total_and_history(self):
+        """Verify that detail contains weekly total and history."""
         timesheet = self.make_timesheet()
         self.add_entry(timesheet, regular="8.00")
         self.add_entry(timesheet, work_date=self.week_start + timedelta(days=1), regular="4.00")
@@ -121,6 +132,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertIn("history", response.context)
 
     def test_detail_exposes_pending_reopen_request(self):
+        """Verify that detail exposes pending reopen request."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         request = timesheet.reopen_requests.create(
             requested_by=self.employee,
@@ -134,6 +146,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertEqual(response.context["pending_reopen_request"], request)
 
     def test_submitted_page_redirects_draft_to_detail(self):
+        """Verify that submitted page redirects draft to detail."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -142,6 +155,7 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_submitted_page_renders_for_submitted_timesheet(self):
+        """Verify that submitted page renders for submitted timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -152,7 +166,9 @@ class TimesheetListAndDetailTests(TimesheetWorkflowBase):
 
 
 class ReceiptWorkflowTests(TimesheetWorkflowBase):
+    """Exercise the receipt workflow workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.temp_media = TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=self.temp_media.name)
@@ -161,6 +177,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.addCleanup(self.temp_media.cleanup)
 
     def make_receipt(self, timesheet, *, owner=None, name="receipt.txt", content=b"receipt-data"):
+        """Provide the make receipt helper used by this test suite."""
         return TimesheetReceipt.objects.create(
             timesheet=timesheet,
             uploaded_by=owner or timesheet.employee,
@@ -170,6 +187,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         )
 
     def test_upload_requires_post(self):
+        """Verify that upload requires post."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -179,6 +197,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(timesheet.receipts.count(), 0)
 
     def test_upload_requires_at_least_one_file(self):
+        """Verify that upload requires at least one file."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -188,6 +207,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(timesheet.receipts.count(), 0)
 
     def test_owner_can_upload_multiple_receipts_with_description(self):
+        """Verify that owner can upload multiple receipts with description."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
         files = [
@@ -206,6 +226,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(set(timesheet.receipts.values_list("description", flat=True)), {"Travel receipts"})
 
     def test_receipt_upload_is_blocked_when_timesheet_locked(self):
+        """Verify that receipt upload is blocked when timesheet locked."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -218,6 +239,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(timesheet.receipts.count(), 0)
 
     def test_user_cannot_upload_to_another_employees_timesheet(self):
+        """Verify that user cannot upload to another employees timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.login(self.employee)
 
@@ -229,6 +251,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(response.status_code, 404)
 
     def test_owner_can_download_receipt_inline(self):
+        """Verify that owner can download receipt inline."""
         timesheet = self.make_timesheet()
         receipt = self.make_receipt(timesheet)
         self.login(self.employee)
@@ -240,6 +263,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(b"".join(response.streaming_content), b"receipt-data")
 
     def test_management_can_download_other_users_receipt(self):
+        """Verify that management can download other users receipt."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         receipt = self.make_receipt(timesheet)
         self.login(self.management)
@@ -249,6 +273,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(response.status_code, 200)
 
     def test_regular_user_cannot_download_other_users_receipt(self):
+        """Verify that regular user cannot download other users receipt."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         receipt = self.make_receipt(timesheet)
         self.login(self.employee)
@@ -260,6 +285,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
     @patch("timesheets.views.build_receipts_pdf_bytes", return_value=b"%PDF-test")
     @patch("timesheets.views.receipts_pdf_filename", return_value="receipts.pdf")
     def test_authorized_user_can_download_receipts_pdf(self, filename, build_pdf):
+        """Verify that authorized user can download receipts pdf."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -271,6 +297,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         build_pdf.assert_called_once_with(timesheet)
 
     def test_unauthorized_user_cannot_download_receipts_pdf(self):
+        """Verify that unauthorized user cannot download receipts pdf."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.login(self.employee)
 
@@ -279,6 +306,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(response.status_code, 404)
 
     def test_delete_requires_post(self):
+        """Verify that delete requires post."""
         timesheet = self.make_timesheet()
         receipt = self.make_receipt(timesheet)
         self.login(self.employee)
@@ -289,6 +317,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertTrue(TimesheetReceipt.objects.filter(pk=receipt.pk).exists())
 
     def test_owner_can_delete_receipt_and_file(self):
+        """Verify that owner can delete receipt and file."""
         timesheet = self.make_timesheet()
         receipt = self.make_receipt(timesheet)
         saved_path = Path(receipt.file.path)
@@ -302,6 +331,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertFalse(saved_path.exists())
 
     def test_receipt_delete_is_blocked_when_timesheet_locked(self):
+        """Verify that receipt delete is blocked when timesheet locked."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         receipt = self.make_receipt(timesheet)
         self.login(self.employee)
@@ -312,6 +342,7 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
         self.assertTrue(TimesheetReceipt.objects.filter(pk=receipt.pk).exists())
 
     def test_user_cannot_delete_another_users_receipt(self):
+        """Verify that user cannot delete another users receipt."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         receipt = self.make_receipt(timesheet)
         self.login(self.employee)
@@ -322,7 +353,9 @@ class ReceiptWorkflowTests(TimesheetWorkflowBase):
 
 
 class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
+    """Exercise the delete and reopen workflow workflow and protect its expected behavior from regressions."""
     def test_delete_get_renders_confirmation_form(self):
+        """Verify that delete get renders confirmation form."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -332,6 +365,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(response.context["timesheet"], timesheet)
 
     def test_draft_delete_soft_deletes_without_voiding(self):
+        """Verify that draft delete soft deletes without voiding."""
         timesheet = self.make_timesheet()
         self.login(self.employee)
 
@@ -345,6 +379,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertIsNotNone(timesheet.deleted_at)
 
     def test_submitted_delete_marks_timesheet_void(self):
+        """Verify that submitted delete marks timesheet void."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -355,6 +390,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertIsNotNone(timesheet.deleted_at)
 
     def test_regular_employee_cannot_delete_approved_timesheet(self):
+        """Verify that regular employee cannot delete approved timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.employee)
 
@@ -366,6 +402,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
 
     def test_user_cannot_delete_another_employees_timesheet(self):
+        """Verify that user cannot delete another employees timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.login(self.employee)
 
@@ -374,6 +411,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(response.status_code, 404)
 
     def test_reopen_get_only_allows_submitted_timesheet(self):
+        """Verify that reopen get only allows submitted timesheet."""
         draft = self.make_timesheet()
         self.login(self.employee)
 
@@ -382,6 +420,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[draft.pk]))
 
     def test_owner_can_reopen_submitted_timesheet(self):
+        """Verify that owner can reopen submitted timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -407,6 +446,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_edit", args=[timesheet.pk]))
 
     def test_reopen_requires_reason(self):
+        """Verify that reopen requires reason."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -417,6 +457,7 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
         self.assertEqual(timesheet.status, Timesheet.Status.SUBMITTED)
 
     def test_reopen_only_works_for_owner(self):
+        """Verify that reopen only works for owner."""
         timesheet = self.make_timesheet(employee=self.other_employee, status=Timesheet.Status.SUBMITTED)
         self.login(self.employee)
 
@@ -426,7 +467,9 @@ class DeleteAndReopenWorkflowTests(TimesheetWorkflowBase):
 
 
 class BulkUploadStatusTests(TimesheetWorkflowBase):
+    """Exercise the bulk upload status workflow and protect its expected behavior from regressions."""
     def make_job(self, *, employee=None, status="pending"):
+        """Provide the make job helper used by this test suite."""
         return BulkImportJob.objects.create(
             employee=employee or self.employee,
             uploaded_zip=SimpleUploadedFile("timesheets.zip", b"PK-test", content_type="application/zip"),
@@ -439,6 +482,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         )
 
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.temp_media = TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=self.temp_media.name)
@@ -447,6 +491,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         self.addCleanup(self.temp_media.cleanup)
 
     def test_owner_can_open_bulk_status_page(self):
+        """Verify that owner can open bulk status page."""
         job = self.make_job()
         self.login(self.employee)
 
@@ -456,6 +501,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         self.assertEqual(response.context["job"], job)
 
     def test_other_user_cannot_open_bulk_status_page(self):
+        """Verify that other user cannot open bulk status page."""
         job = self.make_job(employee=self.other_employee)
         self.login(self.employee)
 
@@ -464,6 +510,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         self.assertEqual(response.status_code, 404)
 
     def test_bulk_status_api_returns_progress_and_completion(self):
+        """Verify that bulk status api returns progress and completion."""
         job = self.make_job(status="completed")
         self.login(self.employee)
 
@@ -481,6 +528,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         })
 
     def test_bulk_status_api_marks_running_job_incomplete(self):
+        """Verify that bulk status api marks running job incomplete."""
         job = self.make_job(status="running")
         self.login(self.employee)
 
@@ -494,6 +542,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         mark_submitted=False,
         mark_approved=False,
     ):
+        """Provide the run bulk job and get importer call helper used by this test suite."""
         job = BulkImportJob.objects.create(
             employee=self.employee,
             uploaded_zip=SimpleUploadedFile(
@@ -521,6 +570,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
 
     @staticmethod
     def _zip_bytes():
+        """Provide the zip bytes helper used by this test suite."""
         from io import BytesIO
         import zipfile
 
@@ -530,11 +580,13 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         return stream.getvalue()
 
     def test_bulk_draft_import_requires_active_jobs(self):
+        """Verify that bulk draft import requires active jobs."""
         call = self._run_bulk_job_and_get_importer_call()
 
         self.assertTrue(call.kwargs["require_active_jobs"])
 
     def test_bulk_submitted_import_allows_inactive_jobs(self):
+        """Verify that bulk submitted import allows inactive jobs."""
         call = self._run_bulk_job_and_get_importer_call(
             mark_submitted=True,
         )
@@ -542,6 +594,7 @@ class BulkUploadStatusTests(TimesheetWorkflowBase):
         self.assertFalse(call.kwargs["require_active_jobs"])
 
     def test_bulk_approved_import_allows_inactive_jobs(self):
+        """Verify that bulk approved import allows inactive jobs."""
         call = self._run_bulk_job_and_get_importer_call(
             mark_approved=True,
         )

@@ -1,3 +1,8 @@
+"""Service-layer operations for importer workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -11,6 +16,7 @@ from .workbook_mapping import *
 
 @dataclass
 class ParsedTimeEntry:
+    """Provide parsed time entry behavior for this module."""
     work_date: date
     row_order: int
     job_number: str
@@ -24,6 +30,7 @@ class ParsedTimeEntry:
 
 @dataclass
 class ParsedExpenseEntry:
+    """Provide parsed expense entry behavior for this module."""
     time_sheet_row: int
     work_date: date
     row_order: int
@@ -40,6 +47,7 @@ class ParsedExpenseEntry:
 
 @dataclass
 class ParsedPartEntry:
+    """Provide parsed part entry behavior for this module."""
     time_sheet_row: int
     work_date: date
     row_order: int
@@ -51,10 +59,12 @@ class ParsedPartEntry:
 
 
 def _clean(value):
+    """Internal helper used to clean."""
     return str(value).strip() if value not in (None, "") else ""
 
 
 def _as_date(value):
+    """Internal helper used to as date."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -69,6 +79,7 @@ def _as_date(value):
 
 
 def _first_date_from_cells(ws, cells):
+    """Internal helper used to first date from cells."""
     for cell in cells:
         d = _as_date(ws[cell].value)
         if d:
@@ -78,6 +89,7 @@ def _first_date_from_cells(ws, cells):
 
 def _week_start(any_date):
     # Company timesheet weeks start on Sunday.
+    """Internal helper used to week start."""
     return any_date - timedelta(days=(any_date.weekday() + 1) % 7)
 
 
@@ -340,6 +352,7 @@ def _overnight_for_time_row(ws, time_row, row_map):
 
 
 def parse_time_entries(path):
+    """Parse time entries data into the application representation."""
     wb = load_workbook(path, data_only=True)
     ws = wb[TIME_SHEET_NAME]
     row_map = _time_row_to_date_and_order(path)
@@ -535,6 +548,7 @@ def parse_part_entries(path):
 
 
 def parse_week_start(path):
+    """Parse week start data into the application representation."""
     wb = load_workbook(path, data_only=True)
     ws = wb[TIME_SHEET_NAME]
     explicit = _first_date_from_cells(ws, WEEK_START_CELLS)
@@ -638,6 +652,7 @@ def import_timesheet_upload(
     *,
     require_active_jobs=True,
 ):
+    """Import timesheet upload data while enforcing the application business rules."""
     path = upload.uploaded_file.path
     week_start = parse_week_start(path)
     timesheet, _ = Timesheet.objects.get_or_create(

@@ -1,3 +1,8 @@
+"""Service-layer operations for time values workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 import re
@@ -19,6 +24,7 @@ def parse_hhmm(value: str) -> int:
 
 
 def format_hhmm(value: int | None) -> str:
+    """Provide the format hhmm operation used by the application service layer."""
     if value is None:
         return "—"
     sign = "-" if value < 0 else ""
@@ -28,6 +34,7 @@ def format_hhmm(value: int | None) -> str:
 
 
 def count_workdays(start: date, end: date) -> int:
+    """Provide the count workdays operation used by the application service layer."""
     if end < start:
         return 0
     current = start
@@ -40,6 +47,7 @@ def count_workdays(start: date, end: date) -> int:
 
 
 def is_full_employment_week_range(start: date | None, end: date | None) -> bool:
+    """Provide the is full employment week range operation used by the application service layer."""
     if not start or not end or end < start:
         return False
     if start.weekday() != 0 or end.weekday() != 4:  # Monday through Friday

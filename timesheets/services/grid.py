@@ -1,3 +1,8 @@
+"""Service-layer operations for grid workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from decimal import Decimal
 from .helpers import as_decimal
 
@@ -30,5 +35,6 @@ def build_timesheet_grid(timesheet):
 
 
 def is_blank_row(row):
+    """Provide the is blank row operation used by the application service layer."""
     keys = ["job_number", "work_code", "regular_hours", "overtime_hours", "doubletime_hours", "description"]
     return not any(row.get(key) for key in keys)

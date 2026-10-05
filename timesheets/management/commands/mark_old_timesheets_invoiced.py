@@ -1,3 +1,5 @@
+"""Django management command for mark old timesheets invoiced."""
+
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -8,9 +10,11 @@ from timesheets.models import Timesheet
 
 
 class Command(BaseCommand):
+    """Implement the ``mark_old_timesheets_invoiced`` Django management command."""
     help = "Mark timesheets exported to QuickBooks more than X days ago as invoiced."
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``mark_old_timesheets_invoiced`` command."""
         parser.add_argument(
             "--days",
             type=int,
@@ -32,6 +36,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Execute the ``mark_old_timesheets_invoiced`` management command."""
         days = options["days"]
         username = options["username"]
         dry_run = options["dry_run"]

@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/timesheet management workflows."""
+
 from datetime import date, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,10 +24,12 @@ from timesheets.tests.base import AppTestCase
 
 
 class ManagementWorkflowBase(AppTestCase):
+    """Exercise the management workflow base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = cls.make_user(
             username="employee",
             first_name="Test",
@@ -76,6 +80,7 @@ class ManagementWorkflowBase(AppTestCase):
         )
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.DRAFT, week_start=None, **kwargs):
+        """Provide the make timesheet helper used by this test suite."""
         return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=week_start or self.week_start,
@@ -84,6 +89,7 @@ class ManagementWorkflowBase(AppTestCase):
         )
 
     def make_entry(self, timesheet, *, job=None, job_number="26001", work_date=None, **kwargs):
+        """Provide the make entry helper used by this test suite."""
         return self.make_time_entry_record(
             timesheet=timesheet,
             work_date=work_date or timesheet.week_start,
@@ -93,6 +99,7 @@ class ManagementWorkflowBase(AppTestCase):
         )
 
     def make_upload(self, *, employee=None, filename="timesheet.xlsx"):
+        """Provide the make upload helper used by this test suite."""
         return TimesheetImport.objects.create(
             employee=employee or self.employee,
             uploaded_file=SimpleUploadedFile(
@@ -104,12 +111,15 @@ class ManagementWorkflowBase(AppTestCase):
 
 
 class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
+    """Exercise the approval queue and decision workflow and protect its expected behavior from regressions."""
     def test_regular_employee_cannot_open_approval_queue(self):
+        """Verify that regular employee cannot open approval queue."""
         self.login(self.employee)
         response = self.client.get(reverse("timesheet_approvals"))
         self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_management_sees_all_submitted_non_deleted_timesheets(self):
+        """Verify that management sees all submitted non deleted timesheets."""
         first = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         second = self.make_timesheet(
             employee=self.other_employee,
@@ -131,6 +141,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertEqual(list(response.context["timesheets"]), [second, first])
 
     def test_approve_get_redirects_without_changing_status(self):
+        """Verify that approve get redirects without changing status."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -142,6 +153,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.approve_timesheet", side_effect=ValueError("bad state"))
     def test_approve_service_error_leaves_timesheet_submitted(self, approve_mock):
+        """Verify that approve service error leaves timesheet submitted."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -154,6 +166,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.queue_email_job")
     def test_approval_queues_both_notification_emails(self, queue_email):
+        """Verify that approval queues both notification emails."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -165,6 +178,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_reject_get_renders_form_for_submitted_timesheet(self):
+        """Verify that reject get renders form for submitted timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -174,6 +188,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertEqual(response.context["timesheet"], timesheet)
 
     def test_reject_non_submitted_timesheet_redirects_without_change(self):
+        """Verify that reject non submitted timesheet redirects without change."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.manager)
 
@@ -187,6 +202,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_reject_requires_reason(self):
+        """Verify that reject requires reason."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -199,6 +215,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.queue_email_job")
     def test_rejection_queues_employee_notification(self, queue_email):
+        """Verify that rejection queues employee notification."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.manager)
 
@@ -213,6 +230,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_regular_employee_cannot_open_quickbooks_queue(self):
+        """Verify that regular employee cannot open quickbooks queue."""
         self.login(self.employee)
 
         response = self.client.get(reverse("quickbooks_timesheets"))
@@ -220,6 +238,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_business_admin_can_open_quickbooks_queue(self):
+        """Verify that business admin can open quickbooks queue."""
         approved = self.make_timesheet(status=Timesheet.Status.APPROVED)
         exported = self.make_timesheet(
             employee=self.other_employee,
@@ -236,6 +255,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertIn(exported, list(response.context["recently_exported"]))
 
     def test_business_admin_can_view_other_users_timesheet(self):
+        """Verify that business admin can view other users timesheet."""
         timesheet = self.make_timesheet(
             employee=self.other_employee,
             status=Timesheet.Status.APPROVED,
@@ -250,6 +270,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertEqual(response.context["timesheet"], timesheet)
 
     def test_regular_employee_cannot_mark_timesheet_exported_to_quickbooks(self):
+        """Verify that regular employee cannot mark timesheet exported to quickbooks."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.employee)
 
@@ -265,6 +286,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_business_admin_can_mark_approved_timesheet_exported_to_quickbooks(self):
+        """Verify that business admin can mark approved timesheet exported to quickbooks."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.business_admin)
 
@@ -288,6 +310,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_mark_exported_to_quickbooks_get_does_not_change_timesheet(self):
+        """Verify that mark exported to quickbooks get does not change timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.business_admin)
 
@@ -303,6 +326,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_business_admin_cannot_export_non_approved_timesheet(self):
+        """Verify that business admin cannot export non approved timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.business_admin)
 
@@ -318,6 +342,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_regular_employee_cannot_mark_timesheet_invoiced(self):
+        """Verify that regular employee cannot mark timesheet invoiced."""
         timesheet = self.make_timesheet(
             status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
             quickbooks_exported_at=timezone.now(),
@@ -337,6 +362,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_management_staff_can_mark_exported_timesheet_invoiced(self):
+        """Verify that management staff can mark exported timesheet invoiced."""
         timesheet = self.make_timesheet(
             status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
             quickbooks_exported_at=timezone.now(),
@@ -355,6 +381,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_management_staff_cannot_mark_approved_timesheet_invoiced(self):
+        """Verify that management staff cannot mark approved timesheet invoiced."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.management)
 
@@ -367,6 +394,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_mark_invoiced_get_does_not_change_timesheet(self):
+        """Verify that mark invoiced get does not change timesheet."""
         timesheet = self.make_timesheet(
             status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
             quickbooks_exported_at=timezone.now(),
@@ -386,6 +414,7 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_mark_invoiced_invalid_state_stays_unchanged(self):
+        """Verify that mark invoiced invalid state stays unchanged."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.management)
 
@@ -399,7 +428,9 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
 
 
 class ReopenRequestManagementTests(ManagementWorkflowBase):
+    """Exercise the reopen request management workflow and protect its expected behavior from regressions."""
     def make_reopen_request(self, *, timesheet=None, priority="low", status="pending"):
+        """Provide the make reopen request helper used by this test suite."""
         timesheet = timesheet or self.make_timesheet(status=Timesheet.Status.APPROVED)
         return TimesheetReopenRequest.objects.create(
             timesheet=timesheet,
@@ -411,6 +442,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         )
 
     def test_project_manager_without_management_group_cannot_manage_requests(self):
+        """Verify that project manager without management group cannot manage requests."""
         request_obj = self.make_reopen_request()
         self.login(self.manager)
 
@@ -425,6 +457,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
                 self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_list_contains_only_pending_requests_in_database_priority_order(self):
+        """Verify that list contains only pending requests in database priority order."""
         high = self.make_reopen_request(priority="high")
         low = self.make_reopen_request(
             timesheet=self.make_timesheet(
@@ -447,6 +480,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertEqual(list(response.context["requests"]), [high, low])
 
     def test_review_page_exposes_request_and_timesheet(self):
+        """Verify that review page exposes request and timesheet."""
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
@@ -457,6 +491,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertEqual(response.context["timesheet"], request_obj.timesheet)
 
     def test_approve_get_redirects_to_review(self):
+        """Verify that approve get redirects to review."""
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
@@ -467,6 +502,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("reopen_request_review", args=[request_obj.pk]))
 
     def test_approve_persists_and_queues_notifications(self):
+        """Verify that approve persists and queues notifications."""
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
@@ -503,6 +539,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("reopen_request_list"))
 
     def test_approve_only_accepts_pending_request(self):
+        """Verify that approve only accepts pending request."""
         request_obj = self.make_reopen_request(status="approved")
         self.login(self.management)
 
@@ -511,6 +548,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertEqual(response.status_code, 404)
 
     def test_reject_get_redirects_to_review(self):
+        """Verify that reject get redirects to review."""
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
@@ -521,6 +559,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("reopen_request_review", args=[request_obj.pk]))
 
     def test_reject_persists_and_queues_notification(self):
+        """Verify that reject persists and queues notification."""
         request_obj = self.make_reopen_request()
         self.login(self.management)
 
@@ -550,6 +589,7 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("reopen_request_list"))
 
     def test_reject_only_accepts_pending_request(self):
+        """Verify that reject only accepts pending request."""
         request_obj = self.make_reopen_request(status="denied")
         self.login(self.management)
 
@@ -559,7 +599,9 @@ class ReopenRequestManagementTests(ManagementWorkflowBase):
 
 
 class InvalidJobCleanupTests(ManagementWorkflowBase):
+    """Exercise the invalid job cleanup workflow and protect its expected behavior from regressions."""
     def make_invalid_job_with_entries(self):
+        """Provide the make invalid job with entries helper used by this test suite."""
         invalid = Job.objects.create(
             job_number="BAD-001",
             description="",
@@ -586,11 +628,13 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         return invalid, first, second
 
     def test_non_management_user_cannot_open_cleanup(self):
+        """Verify that non management user cannot open cleanup."""
         self.login(self.manager)
         response = self.client.get(reverse("invalid_job_cleanup"))
         self.assertRedirects(response, reverse("job_list"))
 
     def test_cleanup_lists_counts_and_date_range(self):
+        """Verify that cleanup lists counts and date range."""
         invalid, first, second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -604,6 +648,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertIn(self.valid_job, list(response.context["valid_jobs"]))
 
     def test_cleanup_apply_requires_post(self):
+        """Verify that cleanup apply requires post."""
         invalid, _first, _second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -613,6 +658,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("invalid_job_cleanup"))
 
     def test_clear_action_unlinks_entries_and_deletes_invalid_job(self):
+        """Verify that clear action unlinks entries and deletes invalid job."""
         invalid, first, second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -631,6 +677,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("invalid_job_cleanup"))
 
     def test_reassign_action_updates_entries_and_deletes_invalid_job(self):
+        """Verify that reassign action updates entries and deletes invalid job."""
         invalid, first, second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -648,6 +695,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("invalid_job_cleanup"))
 
     def test_reassign_rejects_invalid_replacement(self):
+        """Verify that reassign rejects invalid replacement."""
         invalid, _first, _second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -660,6 +708,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("invalid_job_cleanup"))
 
     def test_missing_action_keeps_invalid_job(self):
+        """Verify that missing action keeps invalid job."""
         invalid, _first, _second = self.make_invalid_job_with_entries()
         self.login(self.management)
 
@@ -669,6 +718,7 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
         self.assertRedirects(response, reverse("invalid_job_cleanup"))
 
     def test_apply_rejects_job_with_nonblank_description(self):
+        """Verify that apply rejects job with nonblank description."""
         self.login(self.management)
         response = self.client.post(
             reverse("invalid_job_cleanup_apply", args=[self.valid_job.pk]),
@@ -678,18 +728,22 @@ class InvalidJobCleanupTests(ManagementWorkflowBase):
 
 
 class TimesheetUploadViewTests(ManagementWorkflowBase):
+    """Exercise the timesheet upload view workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.media_dir = TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=self.media_dir.name)
         self.override.enable()
 
     def tearDown(self):
+        """Clean up resources created by the tests in this class."""
         self.override.disable()
         self.media_dir.cleanup()
         super().tearDown()
 
     def test_upload_get_renders_form(self):
+        """Verify that upload get renders form."""
         self.login(self.employee)
         response = self.client.get(reverse("timesheet_upload"))
         self.assertEqual(response.status_code, 200)
@@ -697,6 +751,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_upload_with_invalid_jobs_redirects_to_corrections(self, find_invalid):
+        """Verify that upload with invalid jobs redirects to corrections."""
         find_invalid.return_value = {"BAD": {"count": 1, "descriptions": ["Bad row"]}}
         self.login(self.employee)
 
@@ -716,6 +771,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
     @patch("timesheets.views.import_timesheet_upload")
     @patch("timesheets.views.find_invalid_time_entry_job_numbers", return_value={})
     def test_upload_success_redirects_to_imported_timesheet(self, _find_invalid, import_upload):
+        """Verify that upload success redirects to imported timesheet."""
         timesheet = self.make_timesheet()
         import_upload.return_value = timesheet
         self.login(self.employee)
@@ -730,6 +786,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
     @patch("timesheets.views.import_timesheet_upload", side_effect=ValueError("broken workbook"))
     @patch("timesheets.views.find_invalid_time_entry_job_numbers", return_value={})
     def test_upload_import_failure_marks_upload_failed(self, _find_invalid, _import_upload):
+        """Verify that upload import failure marks upload failed."""
         self.login(self.employee)
 
         response = self.client.post(
@@ -744,6 +801,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers", return_value={})
     def test_correction_page_without_invalid_jobs_continues_import(self, _find_invalid):
+        """Verify that correction page without invalid jobs continues import."""
         upload = self.make_upload()
         timesheet = self.make_timesheet()
         self.login(self.employee)
@@ -758,6 +816,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_correction_page_is_owner_only(self, find_invalid):
+        """Verify that correction page is owner only."""
         find_invalid.return_value = {"BAD": {"count": 1, "descriptions": []}}
         upload = self.make_upload(employee=self.other_employee)
         self.login(self.employee)
@@ -770,6 +829,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_correction_get_sorts_invalid_items(self, find_invalid):
+        """Verify that correction get sorts invalid items."""
         find_invalid.return_value = {
             "ZZZ": {"count": 1, "descriptions": ["Z"]},
             "AAA": {"count": 2, "descriptions": ["A"]},
@@ -788,6 +848,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_correction_post_requires_every_correction(self, find_invalid):
+        """Verify that correction post requires every correction."""
         find_invalid.return_value = {"BAD": {"count": 1, "descriptions": []}}
         upload = self.make_upload()
         self.login(self.employee)
@@ -801,6 +862,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_correction_post_rejects_unavailable_replacement(self, find_invalid):
+        """Verify that correction post rejects unavailable replacement."""
         find_invalid.return_value = {"BAD": {"count": 1, "descriptions": []}}
         upload = self.make_upload()
         self.login(self.employee)
@@ -814,6 +876,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_valid_corrections_are_passed_to_importer(self, find_invalid):
+        """Verify that valid corrections are passed to importer."""
         find_invalid.return_value = {
             "BAD1": {"count": 1, "descriptions": []},
             "BAD2": {"count": 1, "descriptions": []},
@@ -836,6 +899,7 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
     @patch("timesheets.views.find_invalid_time_entry_job_numbers")
     def test_correction_import_failure_marks_upload_failed(self, find_invalid):
+        """Verify that correction import failure marks upload failed."""
         find_invalid.return_value = {"BAD": {"count": 1, "descriptions": []}}
         upload = self.make_upload()
         self.login(self.employee)
@@ -853,18 +917,22 @@ class TimesheetUploadViewTests(ManagementWorkflowBase):
 
 
 class ArtifactIntermediatePageTests(ManagementWorkflowBase):
+    """Exercise the artifact intermediate page workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.media_dir = TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=self.media_dir.name)
         self.override.enable()
 
     def tearDown(self):
+        """Clean up resources created by the tests in this class."""
         self.override.disable()
         self.media_dir.cleanup()
         super().tearDown()
 
     def make_artifact(self, *, employee=None):
+        """Provide the make artifact helper used by this test suite."""
         timesheet = self.make_timesheet(employee=employee or self.employee)
         return TimesheetSubmissionArtifact.objects.create(
             timesheet=timesheet,
@@ -875,6 +943,7 @@ class ArtifactIntermediatePageTests(ManagementWorkflowBase):
         )
 
     def test_owner_can_open_both_intermediate_pages(self):
+        """Verify that owner can open both intermediate pages."""
         artifact = self.make_artifact()
         self.login(self.employee)
 
@@ -886,6 +955,7 @@ class ArtifactIntermediatePageTests(ManagementWorkflowBase):
                 self.assertEqual(response.context["timesheet"], artifact.timesheet)
 
     def test_management_can_open_other_users_intermediate_pages(self):
+        """Verify that management can open other users intermediate pages."""
         artifact = self.make_artifact(employee=self.other_employee)
         self.login(self.management)
 
@@ -897,6 +967,7 @@ class ArtifactIntermediatePageTests(ManagementWorkflowBase):
                 )
 
     def test_regular_user_cannot_open_other_users_intermediate_pages(self):
+        """Verify that regular user cannot open other users intermediate pages."""
         artifact = self.make_artifact(employee=self.other_employee)
         self.login(self.employee)
 
@@ -908,6 +979,7 @@ class ArtifactIntermediatePageTests(ManagementWorkflowBase):
                 )
 
     def test_missing_artifact_returns_404_on_all_artifact_pages(self):
+        """Verify that missing artifact returns 404 on all artifact pages."""
         self.login(self.management)
 
         for name in [

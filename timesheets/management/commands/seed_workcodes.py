@@ -1,11 +1,15 @@
+"""Django management command for seed workcodes."""
+
 from django.core.management.base import BaseCommand
 from timesheets.services.defaults import seed_management_group, seed_project_managers_group, seed_mileage_rates, seed_overnight_rates, seed_office_locations, seed_work_codes
 
 
 class Command(BaseCommand):
+    """Implement the ``seed_workcodes`` Django management command."""
     help = "Seed default CCS work codes, mileage rates, overnight rates, office locations, and the Management Staff group. Safe to run multiple times."
 
     def handle(self, *args, **options):
+        """Execute the ``seed_workcodes`` management command."""
         seed_work_codes(stdout=self.stdout)
         seed_mileage_rates(stdout=self.stdout)
         seed_overnight_rates(stdout=self.stdout)

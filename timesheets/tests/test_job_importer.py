@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/job importer."""
+
 from datetime import date, datetime, timezone as dt_timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,17 +27,21 @@ from timesheets.tests.factories import write_job_workbook
 
 
 class JobImporterHelperTests(AppTestCase):
+    """Exercise the job importer helper workflow and protect its expected behavior from regressions."""
     def test_norm_trims_collapses_and_lowercases(self):
+        """Verify that norm trims collapses and lowercases."""
         self.assertEqual(_norm("  Job   Number "), "job number")
         self.assertEqual(_norm(None), "")
 
     def test_text_handles_none_integer_float_and_strings(self):
+        """Verify that text handles none integer float and strings."""
         self.assertEqual(_text(None), "")
         self.assertEqual(_text(26001.0), "26001")
         self.assertEqual(_text(26001.5), "26001.5")
         self.assertEqual(_text("  ABC  "), "ABC")
 
     def test_date_parses_supported_values(self):
+        """Verify that date parses supported values."""
         expected = date(2026, 8, 6)
         self.assertEqual(_date(expected), expected)
         self.assertEqual(_date(datetime(2026, 8, 6, 10, 30)), expected)
@@ -44,11 +50,13 @@ class JobImporterHelperTests(AppTestCase):
         self.assertEqual(_date("2026-08-06"), expected)
 
     def test_date_returns_none_for_blank_na_and_invalid(self):
+        """Verify that date returns none for blank na and invalid."""
         for value in (None, "", "N/A", "not-a-date"):
             with self.subTest(value=value):
                 self.assertIsNone(_date(value))
 
     def test_int_parses_numeric_values_and_rejects_invalid(self):
+        """Verify that int parses numeric values and rejects invalid."""
         self.assertEqual(_int("2026"), 2026)
         self.assertEqual(_int(2026.0), 2026)
         self.assertEqual(_int("2026.9"), 2026)
@@ -56,12 +64,14 @@ class JobImporterHelperTests(AppTestCase):
         self.assertIsNone(_int("bad"))
 
     def test_user_map_contains_full_name_and_username(self):
+        """Verify that user map contains full name and username."""
         user = self.make_user(username="cpanici", first_name="Chris", last_name="Panici")
         mapping = _user_map()
         self.assertEqual(mapping["chris panici"], user)
         self.assertEqual(mapping["cpanici"], user)
 
     def test_header_detection_and_alias_mapping(self):
+        """Verify that header detection and alias mapping."""
         wb = Workbook()
         ws = wb.active
         ws.append(["CCS Jobs"])
@@ -75,23 +85,27 @@ class JobImporterHelperTests(AppTestCase):
         self.assertEqual(header_map["comments"], 4)
 
     def test_find_header_row_defaults_to_first_row(self):
+        """Verify that find header row defaults to first row."""
         wb = Workbook()
         ws = wb.active
         ws.append(["No useful headings"])
         self.assertEqual(find_header_row(ws), 1)
 
     def test_year_separator_detection(self):
+        """Verify that year separator detection."""
         self.assertTrue(is_year_separator([2026, None], 2026))
         self.assertTrue(is_year_separator(["2026", "Jobs"], "2026"))
         self.assertFalse(is_year_separator(["2026", "A", "B"], "2026"))
         self.assertFalse(is_year_separator(["26001"], "26001"))
 
     def test_result_total_changed(self):
+        """Verify that result total changed."""
         result = JobImportResult(added=2, updated=3, unchanged=4)
         self.assertEqual(result.total_changed, 5)
 
 
 class JobImporterWorkbookTests(AppTestCase):
+    """Exercise the job importer workbook workflow and protect its expected behavior from regressions."""
     headers = [
         "Quote/Job #", "Year", "Job Type", "CFR Job#", "Customer",
         "Job Status", "Invoice Status", "Work Type", "Location",
@@ -101,11 +115,13 @@ class JobImporterWorkbookTests(AppTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.lead = cls.make_user(username="leaduser", first_name="Chris", last_name="Lead")
         cls.engineer1 = cls.make_user(username="engineer1", first_name="Alice", last_name="Engineer")
         cls.engineer2 = cls.make_user(username="engineer2", first_name="Bob", last_name="Builder")
 
     def workbook(self, directory, rows, **kwargs):
+        """Provide the workbook helper used by this test suite."""
         return write_job_workbook(
             Path(directory) / "jobs.xlsx",
             headers=kwargs.pop("headers", self.headers),
@@ -114,6 +130,7 @@ class JobImporterWorkbookTests(AppTestCase):
         )
 
     def full_row(self, **overrides):
+        """Provide the full row helper used by this test suite."""
         values = {
             "job_number": "26001", "year": 2026, "job_type": "Project",
             "cfr": "CFR-1", "customer": "Acme Foods", "status": Job.STATUS_ACTIVE,
@@ -134,6 +151,7 @@ class JobImporterWorkbookTests(AppTestCase):
         ]
 
     def test_preview_reports_add_without_writing_database(self):
+        """Verify that preview reports add without writing database."""
         with TemporaryDirectory() as directory:
             path = self.workbook(directory, [self.full_row()])
             result = preview_job_import(path)
@@ -142,6 +160,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(Customer.objects.count(), 0)
 
     def test_apply_creates_full_job_customer_and_user_links(self):
+        """Verify that apply creates full job customer and user links."""
         with TemporaryDirectory() as directory:
             path = self.workbook(directory, [self.full_row()])
             result = apply_job_import(path, user=self.lead, source_name="master.xlsx")
@@ -169,6 +188,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(set(job.engineer_users.all()), {self.engineer1, self.engineer2})
 
     def test_apply_reuses_existing_customer(self):
+        """Verify that apply reuses existing customer."""
         customer = self.make_customer(name="Acme Foods")
         with TemporaryDirectory() as directory:
             result = apply_job_import(self.workbook(directory, [self.full_row()]))
@@ -177,6 +197,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(Job.objects.get().customer, customer)
 
     def test_missing_job_number_header_returns_error(self):
+        """Verify that missing job number header returns error."""
         with TemporaryDirectory() as directory:
             path = self.workbook(directory, [["Acme", "Description"]], headers=["Customer", "Description"])
             result = preview_job_import(path)
@@ -184,12 +205,14 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertIn("Could not find a Job Number column", result.errors[0])
 
     def test_preface_rows_and_active_sheet_fallback_are_supported(self):
+        """Verify that preface rows and active sheet fallback are supported."""
         with TemporaryDirectory() as directory:
             path = self.workbook(directory, [self.full_row()], sheet_title="Other", preface_rows=[["CCS Job Master"], []])
             result = preview_job_import(path)
         self.assertEqual(result.added, 1)
 
     def test_blank_year_separator_and_invalid_rows_are_counted(self):
+        """Verify that blank year separator and invalid rows are counted."""
         rows = [
             [None] * len(self.headers),
             [2026, None] + [None] * (len(self.headers) - 2),
@@ -204,6 +227,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(result.added, 1)
 
     def test_unknown_lead_and_engineers_are_reported(self):
+        """Verify that unknown lead and engineers are reported."""
         row = self.full_row(lead="Missing Lead", engineer1="Missing Engineer", engineer2="")
         with TemporaryDirectory() as directory:
             result = preview_job_import(self.workbook(directory, [row]))
@@ -211,11 +235,13 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(result.unknown_engineers, {"Missing Engineer"})
 
     def test_blank_status_defaults_to_unknown(self):
+        """Verify that blank status defaults to unknown."""
         with TemporaryDirectory() as directory:
             apply_job_import(self.workbook(directory, [self.full_row(status="")]))
         self.assertEqual(Job.objects.get().job_status, Job.STATUS_UNKNOWN)
 
     def test_existing_job_is_marked_unchanged_when_values_match(self):
+        """Verify that existing job is marked unchanged when values match."""
         fixed_now = datetime(2026, 8, 6, 12, 0, tzinfo=dt_timezone.utc)
         customer = self.make_customer(name="Acme Foods")
         job = self.make_job_record(
@@ -240,6 +266,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(result.updated, 0)
 
     def test_existing_job_updates_changed_fields_and_engineers(self):
+        """Verify that existing job updates changed fields and engineers."""
         customer = self.make_customer(name="Old Customer")
         job = self.make_job_record(job_number="26001", customer=customer, description="Old", lead_user=None)
         job.engineer_users.set([self.engineer1])
@@ -254,6 +281,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertEqual(job.import_source, "new.xlsx")
 
     def test_existing_job_can_clear_invoice_comments_and_lead(self):
+        """Verify that existing job can clear invoice comments and lead."""
         job = self.make_job_record(
             job_number="26001", invoice_status=Job.INVOICE_STATUS_PROGRESS,
             comments="Old comments", lead="Old Lead", lead_user=self.lead,
@@ -269,6 +297,7 @@ class JobImporterWorkbookTests(AppTestCase):
         self.assertIsNone(job.lead_user)
 
     def test_preview_wrapper_matches_direct_import(self):
+        """Verify that preview wrapper matches direct import."""
         with TemporaryDirectory() as directory:
             path = self.workbook(directory, [self.full_row()])
             direct = import_job_list(path, apply=False)

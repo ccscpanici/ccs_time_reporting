@@ -1,3 +1,8 @@
+"""HTTP request handlers for this Django application.
+
+Views coordinate permissions, forms, service-layer operations, messages, and responses.
+"""
+
 from decimal import Decimal
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth import get_user_model
@@ -8,16 +13,19 @@ from timesheets.permissions import is_management_staff, is_project_manager
 
 
 def _hours(entry):
+    """Build or validate internal data used by the hours workflow."""
     return (entry.regular_hours or Decimal("0")) + (entry.overtime_hours or Decimal("0")) + (entry.doubletime_hours or Decimal("0"))
 
 
 @login_required
 def reports_dashboard(request):
+    """Handle the reports dashboard request and enforce the workflow rules for this operation."""
     return render(request, "reports/dashboard.html")
 
 
 @user_passes_test(is_management_staff)
 def billability_report(request):
+    """Handle the billability report request and enforce the workflow rules for this operation."""
     report_ran = request.GET.get("run") == "1"
     start = request.GET.get("start") or ""
     end = request.GET.get("end") or ""
@@ -74,6 +82,7 @@ def billability_report(request):
 
 @user_passes_test(is_project_manager)
 def project_hours_report(request):
+    """Handle the project hours report request and enforce the workflow rules for this operation."""
     report_ran = request.GET.get("run") == "1"
     job_number = (request.GET.get("job_number") or "").strip()
     start = request.GET.get("start") or ""

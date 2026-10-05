@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/active projects."""
+
 from datetime import date
 from decimal import Decimal
 
@@ -14,10 +16,12 @@ User = get_user_model()
 
 
 class ActiveProjectTestBase(AppTestCase):
+    """Exercise the active project test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="employee",
             password="test-password",
@@ -78,6 +82,7 @@ class ActiveProjectTestBase(AppTestCase):
         created_by=None,
         updated_by=None,
     ):
+        """Provide the make project helper used by this test suite."""
         return ActiveProject.objects.create(
             job_number=job_number,
             budgeted_hours=budgeted_hours,
@@ -99,6 +104,7 @@ class ActiveProjectTestBase(AppTestCase):
         deleted=False,
         row_order=1,
     ):
+        """Provide the make entry helper used by this test suite."""
         employee = employee or self.employee
 
         existing_weeks = set(
@@ -131,7 +137,9 @@ class ActiveProjectTestBase(AppTestCase):
 
 
 class ActiveProjectPermissionTests(ActiveProjectTestBase):
+    """Exercise the active project permission workflow and protect its expected behavior from regressions."""
     def test_anonymous_user_is_redirected_to_login(self):
+        """Verify that anonymous user is redirected to login."""
         url = reverse("active_project_list")
 
         response = self.client.get(url)
@@ -139,6 +147,7 @@ class ActiveProjectPermissionTests(ActiveProjectTestBase):
         self.assertRedirects(response, f"{reverse('login')}?next={url}")
 
     def test_regular_employee_is_redirected_from_all_active_project_views(self):
+        """Verify that regular employee is redirected from all active project views."""
         project = self.make_project()
         self.client.force_login(self.employee)
         urls = [
@@ -155,6 +164,7 @@ class ActiveProjectPermissionTests(ActiveProjectTestBase):
                 self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_project_manager_can_open_all_read_and_form_pages(self):
+        """Verify that project manager can open all read and form pages."""
         project = self.make_project()
         self.client.force_login(self.manager)
         urls = [
@@ -170,7 +180,9 @@ class ActiveProjectPermissionTests(ActiveProjectTestBase):
 
 
 class ActiveProjectListTests(ActiveProjectTestBase):
+    """Exercise the active project list workflow and protect its expected behavior from regressions."""
     def test_list_only_shows_active_projects_in_job_number_order(self):
+        """Verify that list only shows active projects in job number order."""
         second = self.make_project(job_number="26002")
         first = self.make_project(job_number="26001")
         self.make_project(job_number="25001", active=False)
@@ -183,6 +195,7 @@ class ActiveProjectListTests(ActiveProjectTestBase):
         self.assertEqual(projects, [first, second])
 
     def test_list_calculates_billed_remaining_and_percent_used(self):
+        """Verify that list calculates billed remaining and percent used."""
         project = self.make_project(budgeted_hours=Decimal("40.00"))
         self.make_entry(
             regular=Decimal("8.00"),
@@ -206,6 +219,7 @@ class ActiveProjectListTests(ActiveProjectTestBase):
         self.assertEqual(row["percent_used"], Decimal("40.00"))
 
     def test_list_excludes_voided_and_deleted_timesheet_hours(self):
+        """Verify that list excludes voided and deleted timesheet hours."""
         self.make_project(budgeted_hours=Decimal("20.00"))
         self.make_entry(regular=Decimal("5.00"))
         self.make_entry(regular=Decimal("7.00"), status=Timesheet.Status.VOID, row_order=2)
@@ -219,6 +233,7 @@ class ActiveProjectListTests(ActiveProjectTestBase):
         self.assertEqual(row["remaining_hours"], Decimal("15.00"))
 
     def test_zero_budget_project_has_zero_percent_used(self):
+        """Verify that zero budget project has zero percent used."""
         self.make_project(budgeted_hours=Decimal("0.00"))
         self.make_entry(regular=Decimal("4.00"))
         self.client.force_login(self.manager)
@@ -231,7 +246,9 @@ class ActiveProjectListTests(ActiveProjectTestBase):
 
 
 class ActiveProjectDetailTests(ActiveProjectTestBase):
+    """Exercise the active project detail workflow and protect its expected behavior from regressions."""
     def test_detail_calculates_hour_totals_and_budget_statistics(self):
+        """Verify that detail calculates hour totals and budget statistics."""
         project = self.make_project(budgeted_hours=Decimal("50.00"))
         self.make_entry(
             regular=Decimal("8.00"),
@@ -256,6 +273,7 @@ class ActiveProjectDetailTests(ActiveProjectTestBase):
         self.assertEqual(response.context["percent_used"], Decimal("34.00"))
 
     def test_detail_aggregates_and_sorts_employee_rows_by_total_hours(self):
+        """Verify that detail aggregates and sorts employee rows by total hours."""
         project = self.make_project()
         self.make_entry(
             employee=self.employee,
@@ -278,6 +296,7 @@ class ActiveProjectDetailTests(ActiveProjectTestBase):
         self.assertEqual(employee_rows[1]["total_hours"], Decimal("5.00"))
 
     def test_detail_matches_direct_and_linked_job_numbers_case_insensitively(self):
+        """Verify that detail matches direct and linked job numbers case insensitively."""
         project = self.make_project(job_number="26001")
         self.make_entry(job_number="26001", regular=Decimal("3.00"))
         self.make_entry(
@@ -296,6 +315,7 @@ class ActiveProjectDetailTests(ActiveProjectTestBase):
         self.assertEqual(len(response.context["detail_rows"]), 2)
 
     def test_detail_excludes_voided_deleted_and_other_job_entries(self):
+        """Verify that detail excludes voided deleted and other job entries."""
         project = self.make_project()
         self.make_entry(regular=Decimal("5.00"))
         self.make_entry(regular=Decimal("7.00"), status=Timesheet.Status.VOID, row_order=2)
@@ -309,6 +329,7 @@ class ActiveProjectDetailTests(ActiveProjectTestBase):
         self.assertEqual(len(response.context["detail_rows"]), 1)
 
     def test_missing_project_returns_404_for_project_manager(self):
+        """Verify that missing project returns 404 for project manager."""
         self.client.force_login(self.manager)
 
         response = self.client.get(reverse("active_project_detail", args=[999999]))
@@ -317,7 +338,9 @@ class ActiveProjectDetailTests(ActiveProjectTestBase):
 
 
 class ActiveProjectCreateTests(ActiveProjectTestBase):
+    """Exercise the active project create workflow and protect its expected behavior from regressions."""
     def test_create_get_uses_active_initial_and_valid_job_options(self):
+        """Verify that create get uses active initial and valid job options."""
         self.client.force_login(self.manager)
 
         response = self.client.get(reverse("active_project_create"))
@@ -331,6 +354,7 @@ class ActiveProjectCreateTests(ActiveProjectTestBase):
         self.assertNotIn("26003", job_numbers)
 
     def test_valid_post_creates_project_and_sets_audit_fields(self):
+        """Verify that valid post creates project and sets audit fields."""
         self.client.force_login(self.manager)
 
         response = self.client.post(
@@ -350,6 +374,7 @@ class ActiveProjectCreateTests(ActiveProjectTestBase):
         self.assertRedirects(response, reverse("active_project_list"))
 
     def test_create_normalizes_job_number_to_stored_case(self):
+        """Verify that create normalizes job number to stored case."""
         self.client.force_login(self.manager)
 
         response = self.client.post(
@@ -361,6 +386,7 @@ class ActiveProjectCreateTests(ActiveProjectTestBase):
         self.assertTrue(ActiveProject.objects.filter(job_number=self.job_26001.job_number).exists())
 
     def test_invalid_inactive_or_blank_description_job_is_rejected(self):
+        """Verify that invalid inactive or blank description job is rejected."""
         self.client.force_login(self.manager)
 
         for job_number in ["DOES-NOT-EXIST", "25001", "26003"]:
@@ -375,6 +401,7 @@ class ActiveProjectCreateTests(ActiveProjectTestBase):
         self.assertEqual(ActiveProject.objects.count(), 0)
 
     def test_duplicate_active_project_is_rejected(self):
+        """Verify that duplicate active project is rejected."""
         self.make_project(job_number="26001")
         self.client.force_login(self.manager)
 
@@ -389,7 +416,9 @@ class ActiveProjectCreateTests(ActiveProjectTestBase):
 
 
 class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
+    """Exercise the active project edit and remove workflow and protect its expected behavior from regressions."""
     def test_edit_get_loads_existing_project(self):
+        """Verify that edit get loads existing project."""
         project = self.make_project(budgeted_hours=Decimal("80.00"))
         self.client.force_login(self.manager)
 
@@ -400,6 +429,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertEqual(response.context["form"].instance, project)
 
     def test_valid_edit_updates_fields_and_updated_by_only(self):
+        """Verify that valid edit updates fields and updated by only."""
         project = self.make_project(created_by=self.manager, updated_by=self.manager)
         self.client.force_login(self.other_manager)
 
@@ -419,6 +449,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertRedirects(response, reverse("active_project_list"))
 
     def test_edit_can_change_project_to_another_valid_unused_job(self):
+        """Verify that edit can change project to another valid unused job."""
         project = self.make_project(job_number="26001")
         self.client.force_login(self.manager)
 
@@ -432,6 +463,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertRedirects(response, reverse("active_project_list"))
 
     def test_edit_rejects_job_already_used_by_another_active_project(self):
+        """Verify that edit rejects job already used by another active project."""
         project = self.make_project(job_number="26001")
         self.make_project(job_number="26002")
         self.client.force_login(self.manager)
@@ -447,6 +479,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertEqual(project.job_number, "26001")
 
     def test_remove_get_does_not_delete_project(self):
+        """Verify that remove get does not delete project."""
         project = self.make_project()
         self.client.force_login(self.manager)
 
@@ -456,6 +489,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertRedirects(response, reverse("active_project_list"))
 
     def test_remove_post_deletes_project(self):
+        """Verify that remove post deletes project."""
         project = self.make_project()
         self.client.force_login(self.manager)
 
@@ -465,6 +499,7 @@ class ActiveProjectEditAndRemoveTests(ActiveProjectTestBase):
         self.assertRedirects(response, reverse("active_project_list"))
 
     def test_remove_missing_project_returns_404(self):
+        """Verify that remove missing project returns 404."""
         self.client.force_login(self.manager)
 
         response = self.client.post(reverse("active_project_remove", args=[999999]))

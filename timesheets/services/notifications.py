@@ -1,3 +1,8 @@
+"""Service-layer operations for notifications workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 import logging
 from pathlib import Path
 
@@ -21,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def _employee_initials(user):
+    """Internal helper used to employee initials."""
     full_name = user.get_full_name().strip()
     if full_name:
         return "".join(part[0].upper() for part in full_name.split() if part)
@@ -28,11 +34,13 @@ def _employee_initials(user):
 
 
 def _timesheet_url(timesheet):
+    """Internal helper used to timesheet url."""
     base_url = getattr(settings, "SITE_BASE_URL", "https://timetrack.ccswi.us").rstrip("/")
     return f"{base_url}{timesheet.get_absolute_url()}"
 
 
 def _send_basic_email(*, config, subject, body, to):
+    """Internal helper used to send basic email."""
     recipients = [email for email in to if email]
     if not recipients:
         return
@@ -50,6 +58,7 @@ def _send_basic_email(*, config, subject, body, to):
 
 
 def _approval_email_subject(timesheet):
+    """Internal helper used to approval email subject."""
     employee = timesheet.employee
     first_name = employee.first_name or ""
     last_name = employee.last_name or ""
@@ -63,6 +72,7 @@ def _approval_email_subject(timesheet):
 
 
 def _approval_email_body(timesheet):
+    """Internal helper used to approval email body."""
     employee_name = timesheet.employee.get_full_name() or timesheet.employee.get_username()
     approved_by = timesheet.approved_by.get_full_name() if timesheet.approved_by else ""
     if timesheet.approved_by and not approved_by:
@@ -87,6 +97,7 @@ def _approval_email_body(timesheet):
 
 
 def _smtp_backend(config):
+    """Internal helper used to smtp backend."""
     return EmailBackend(
         host=config.smtp_host,
         port=config.smtp_port,
@@ -100,6 +111,7 @@ def _smtp_backend(config):
 
 
 def send_test_email(config):
+    """Send the test email notification for this workflow."""
     if not config.test_recipient:
         raise ValueError("Test recipient is required.")
 
@@ -128,6 +140,7 @@ def send_test_email(config):
 
 
 def _save_generated_artifact(timesheet, generated_path, created_by, export_format):
+    """Internal helper used to save generated artifact."""
     generated_path = Path(generated_path)
     file_type = "xlsx" if generated_path.suffix.lower() == ".xlsx" else "pdf"
 
@@ -143,6 +156,7 @@ def _save_generated_artifact(timesheet, generated_path, created_by, export_forma
 
 
 def _save_receipts_artifact(timesheet, receipts_bytes, filename, created_by):
+    """Internal helper used to save receipts artifact."""
     artifact = TimesheetSubmissionArtifact(
         timesheet=timesheet,
         file_type=TimesheetSubmissionArtifact.FileType.PDF,
@@ -233,6 +247,7 @@ def send_timesheet_approved_email(timesheet, approved_by):
 
 
 def send_employee_timesheet_approved_email(timesheet, approved_by):
+    """Send the employee timesheet approved email notification for this workflow."""
     config = EmailConfiguration.active_config()
     if not config:
         raise ValueError("No active email configuration exists.")
@@ -260,6 +275,7 @@ def send_employee_timesheet_approved_email(timesheet, approved_by):
 
 
 def send_employee_timesheet_rejected_email(timesheet, rejected_by, reason):
+    """Send the employee timesheet rejected email notification for this workflow."""
     config = EmailConfiguration.active_config()
     if not config:
         raise ValueError("No active email configuration exists.")
@@ -292,6 +308,7 @@ def send_employee_timesheet_rejected_email(timesheet, rejected_by, reason):
 
 
 def send_timesheet_submitted_supervisor_email(timesheet, submitted_by):
+    """Send the timesheet submitted supervisor email notification for this workflow."""
     config = EmailConfiguration.active_config()
     if not config:
         raise ValueError("No active email configuration exists.")
@@ -327,6 +344,7 @@ def send_timesheet_submitted_supervisor_email(timesheet, submitted_by):
     )
 
 def send_reopened_admin_notification(timesheet, reopened_by):
+    """Send the reopened admin notification notification for this workflow."""
     config = EmailConfiguration.active_config()
     if not config:
         raise ValueError("No active email configuration exists.")
@@ -364,6 +382,7 @@ def send_reopened_admin_notification(timesheet, reopened_by):
 
 
 def _reopen_request_review_url(reopen_request):
+    """Internal helper used to reopen request review url."""
     base_url = getattr(settings, "SITE_BASE_URL", "https://timetrack.ccswi.us").rstrip("/")
     return f"{base_url}{reverse('reopen_request_review', kwargs={'pk': reopen_request.pk})}"
 

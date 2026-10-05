@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/job cleanup."""
+
 from datetime import date
 
 from timesheets.models import Job, TimeEntry
@@ -14,16 +16,21 @@ from .base import AppTestCase
 
 
 class JobCleanupNormalizationTests(AppTestCase):
+    """Exercise the job cleanup normalization workflow and protect its expected behavior from regressions."""
     def test_normalized_job_number_removes_punctuation_spaces_and_case(self):
+        """Verify that normalized job number removes punctuation spaces and case."""
         self.assertEqual(normalized_job_number(" 26-001 / a "), "26001A")
 
     def test_normalized_job_number_handles_blank_values(self):
+        """Verify that normalized job number handles blank values."""
         self.assertEqual(normalized_job_number(None), "")
         self.assertEqual(normalized_job_number(""), "")
 
 
 class InvalidJobQueryTests(AppTestCase):
+    """Exercise the invalid job query workflow and protect its expected behavior from regressions."""
     def test_invalid_job_qs_only_returns_blank_description_jobs_sorted(self):
+        """Verify that invalid job qs only returns blank description jobs sorted."""
         self.make_job_record(job_number="BAD-20", description="")
         self.make_job_record(job_number="BAD-10", description="")
         self.make_job_record(job_number="GOOD-1", description="Valid job")
@@ -34,6 +41,7 @@ class InvalidJobQueryTests(AppTestCase):
         )
 
     def test_valid_replacement_jobs_only_returns_active_described_jobs_sorted(self):
+        """Verify that valid replacement jobs only returns active described jobs sorted."""
         self.make_job_record(job_number="26020", active=True, description="Valid B")
         self.make_job_record(job_number="26010", active=True, description="Valid A")
         self.make_job_record(job_number="26030", active=False, description="Inactive")
@@ -46,7 +54,9 @@ class InvalidJobQueryTests(AppTestCase):
 
 
 class InvalidJobEntryTests(AppTestCase):
+    """Exercise the invalid job entry workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.user = self.make_user(username="cleanup_user")
         self.timesheet = self.make_timesheet_record(
             employee=self.user,
@@ -55,6 +65,7 @@ class InvalidJobEntryTests(AppTestCase):
         self.invalid_job = self.make_job_record(job_number="BAD-001", description="")
 
     def test_entries_for_invalid_job_matches_linked_and_free_text_case_insensitively(self):
+        """Verify that entries for invalid job matches linked and free text case insensitively."""
         linked = self.make_time_entry_record(
             timesheet=self.timesheet,
             row_order=1,
@@ -81,11 +92,14 @@ class InvalidJobEntryTests(AppTestCase):
 
 
 class SuggestReplacementJobTests(AppTestCase):
+    """Exercise the suggest replacement job workflow and protect its expected behavior from regressions."""
     def test_blank_invalid_job_number_returns_no_suggestions(self):
+        """Verify that blank invalid job number returns no suggestions."""
         self.make_job_record(job_number="26001")
         self.assertEqual(suggest_replacement_jobs("   "), [])
 
     def test_suggestions_ignore_invalid_replacement_candidates(self):
+        """Verify that suggestions ignore invalid replacement candidates."""
         valid = self.make_job_record(job_number="26001", description="Valid")
         self.make_job_record(job_number="26002", description="")
         self.make_job_record(job_number="26003", active=False, description="Inactive")
@@ -96,6 +110,7 @@ class SuggestReplacementJobTests(AppTestCase):
         self.assertEqual(suggested_ids, [valid.id])
 
     def test_suggestions_rank_exact_prefix_and_fuzzy_matches(self):
+        """Verify that suggestions rank exact prefix and fuzzy matches."""
         exact = self.make_job_record(job_number="26-001", description="Exact")
         prefix = self.make_job_record(job_number="260012", description="Prefix")
         shorter = self.make_job_record(job_number="2600", description="Shorter")
@@ -111,6 +126,7 @@ class SuggestReplacementJobTests(AppTestCase):
         self.assertNotIn("99999", [job.job_number for _, job in suggestions])
 
     def test_suggestions_are_sorted_by_job_number_when_scores_tie(self):
+        """Verify that suggestions are sorted by job number when scores tie."""
         first = self.make_job_record(job_number="ABC1234", description="First")
         second = self.make_job_record(job_number="ABC1235", description="Second")
 
@@ -119,6 +135,7 @@ class SuggestReplacementJobTests(AppTestCase):
         self.assertEqual([job for _, job in suggestions], [first, second])
 
     def test_suggestion_limit_is_applied(self):
+        """Verify that suggestion limit is applied."""
         for suffix in range(10):
             self.make_job_record(job_number=f"2600{suffix}", description=f"Job {suffix}")
 
@@ -126,7 +143,9 @@ class SuggestReplacementJobTests(AppTestCase):
 
 
 class CleanupInvalidJobTests(AppTestCase):
+    """Exercise the cleanup invalid job workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.user = self.make_user(username="cleanup_action_user")
         self.timesheet = self.make_timesheet_record(
             employee=self.user,
@@ -135,6 +154,7 @@ class CleanupInvalidJobTests(AppTestCase):
         self.invalid_job = self.make_job_record(job_number="BAD-100", description="")
 
     def test_cleanup_without_replacement_clears_entries_and_deletes_invalid_job(self):
+        """Verify that cleanup without replacement clears entries and deletes invalid job."""
         linked = self.make_time_entry_record(
             timesheet=self.timesheet,
             row_order=1,
@@ -168,6 +188,7 @@ class CleanupInvalidJobTests(AppTestCase):
         self.assertEqual(untouched.job_number, "26001")
 
     def test_cleanup_with_replacement_reassigns_entries_and_deletes_invalid_job(self):
+        """Verify that cleanup with replacement reassigns entries and deletes invalid job."""
         replacement = self.make_job_record(job_number="26055", description="Replacement")
         linked = self.make_time_entry_record(
             timesheet=self.timesheet,
@@ -192,6 +213,7 @@ class CleanupInvalidJobTests(AppTestCase):
             self.assertEqual(entry.job_number, replacement.job_number)
 
     def test_cleanup_with_no_matching_entries_still_deletes_invalid_job(self):
+        """Verify that cleanup with no matching entries still deletes invalid job."""
         count = cleanup_invalid_job(self.invalid_job)
 
         self.assertEqual(count, 0)

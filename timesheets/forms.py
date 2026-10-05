@@ -1,9 +1,13 @@
+"""Application support code for forms."""
+
 from datetime import date, timedelta
 from django import forms
 from .models import ActiveProject, Customer, Job, JobListImport, Timesheet, TimesheetImport, TimesheetReopenRequest
 
 class TimesheetCreateForm(forms.ModelForm):
+    """Provide timesheet create form behavior for this module."""
     def clean_week_start(self):
+        """Provide the clean week start operation for this module."""
         selected = self.cleaned_data["week_start"]
         # Timesheets are company work weeks starting on Sunday.
         # Python weekday(): Monday=0 ... Sunday=6.
@@ -12,10 +16,12 @@ class TimesheetCreateForm(forms.ModelForm):
         return selected
 
     def clean_entries_per_day(self):
+        """Provide the clean entries per day operation for this module."""
         value = self.cleaned_data.get("entries_per_day") or 5
         return max(5, min(value, 25))
 
     class Meta:
+        """Provide meta behavior for this module."""
         model = Timesheet
         fields = ["week_start", "entries_per_day"]
         widgets = {
@@ -29,7 +35,9 @@ class TimesheetCreateForm(forms.ModelForm):
 
 
 class TimesheetImportForm(forms.ModelForm):
+    """Provide timesheet import form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = TimesheetImport
         fields = ["uploaded_file"]
         widgets = {"uploaded_file": forms.FileInput(attrs={"class": "form-control", "accept": ".xlsx"})}
@@ -38,7 +46,9 @@ class TimesheetImportForm(forms.ModelForm):
 
 
 class JobListImportForm(forms.ModelForm):
+    """Provide job list import form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = JobListImport
         fields = ["uploaded_file"]
         widgets = {
@@ -48,6 +58,7 @@ class JobListImportForm(forms.ModelForm):
         help_texts = {"uploaded_file": "Download the SharePoint job list as .xlsx, then upload it here."}
 
     def clean_uploaded_file(self):
+        """Provide the clean uploaded file operation for this module."""
         uploaded = self.cleaned_data["uploaded_file"]
         if not uploaded.name.lower().endswith(".xlsx"):
             raise forms.ValidationError("Please upload an .xlsx file.")
@@ -55,6 +66,7 @@ class JobListImportForm(forms.ModelForm):
 
 
 class JobForm(forms.ModelForm):
+    """Provide job form behavior for this module."""
     customer_name = forms.CharField(
         required=False,
         label="Customer",
@@ -73,6 +85,7 @@ class JobForm(forms.ModelForm):
     )
 
     class Meta:
+        """Provide meta behavior for this module."""
         model = Job
         fields = [
             "job_number",
@@ -156,6 +169,7 @@ class JobForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        """Provide the init operation for this module."""
         super().__init__(*args, **kwargs)
         user_fields = ["lead_user"] + [f"engineer_{idx:02d}_user" for idx in range(1, 11)]
         for field_name in user_fields:
@@ -165,6 +179,7 @@ class JobForm(forms.ModelForm):
             self.fields["customer_name"].initial = self.instance.customer.name
 
     def clean_job_number(self):
+        """Provide the clean job number operation for this module."""
         job_number = (self.cleaned_data.get("job_number") or "").strip()
         if not job_number:
             raise forms.ValidationError("Job number is required.")
@@ -177,9 +192,11 @@ class JobForm(forms.ModelForm):
         return job_number
 
     def clean_job_status(self):
+        """Provide the clean job status operation for this module."""
         return (self.cleaned_data.get("job_status") or Job.STATUS_UNKNOWN).strip() or Job.STATUS_UNKNOWN
 
     def save(self, commit=True):
+        """Provide the save operation for this module."""
         job = super().save(commit=False)
         customer_name = (self.cleaned_data.get("customer_name") or "").strip()
         if customer_name:
@@ -193,6 +210,7 @@ class JobForm(forms.ModelForm):
         return job
 
 class TimesheetBulkZipImportForm(forms.Form):
+    """Provide timesheet bulk zip import form behavior for this module."""
     zip_file = forms.FileField(
         label="ZIP file",
         widget=forms.FileInput(attrs={"class": "form-control", "accept": ".zip"}),
@@ -212,6 +230,7 @@ class TimesheetBulkZipImportForm(forms.Form):
     )
 
     def clean_zip_file(self):
+        """Provide the clean zip file operation for this module."""
         uploaded = self.cleaned_data["zip_file"]
         if not uploaded.name.lower().endswith(".zip"):
             raise forms.ValidationError("Please upload a .zip file.")
@@ -219,6 +238,7 @@ class TimesheetBulkZipImportForm(forms.Form):
 
 
 class TimesheetSubmitForm(forms.Form):
+    """Provide timesheet submit form behavior for this module."""
     export_format = forms.ChoiceField(
         choices=Timesheet.ExportFormat.choices,
         widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
@@ -226,6 +246,7 @@ class TimesheetSubmitForm(forms.Form):
     )
 
     def __init__(self, *args, timesheet=None, **kwargs):
+        """Provide the init operation for this module."""
         super().__init__(*args, **kwargs)
         self.timesheet = timesheet
         if timesheet and not timesheet.can_export_excel:
@@ -233,6 +254,7 @@ class TimesheetSubmitForm(forms.Form):
             self.fields["export_format"].choices = [(Timesheet.ExportFormat.PDF, "PDF Report")]
 
     def clean_export_format(self):
+        """Provide the clean export format operation for this module."""
         export_format = self.cleaned_data["export_format"]
         if self.timesheet and export_format == Timesheet.ExportFormat.EXCEL and not self.timesheet.can_export_excel:
             raise forms.ValidationError("Excel export only works when each date has 5 or fewer time entries. Use PDF Report instead.")
@@ -240,13 +262,16 @@ class TimesheetSubmitForm(forms.Form):
 
 
 class TimesheetDeleteForm(forms.Form):
+    """Provide timesheet delete form behavior for this module."""
     reason = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Optional reason"}),
     )
 
 class TimesheetReopenRequestForm(forms.ModelForm):
+    """Provide timesheet reopen request form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = TimesheetReopenRequest
         fields = ["priority", "reason"]
         widgets = {
@@ -259,6 +284,7 @@ class TimesheetReopenRequestForm(forms.ModelForm):
         }
 
 class TimesheetReopenForm(forms.Form):
+    """Provide timesheet reopen form behavior for this module."""
     reason = forms.CharField(
         required=True,
         label="Reason for reopening",
@@ -271,6 +297,7 @@ class TimesheetReopenForm(forms.Form):
 
 
 class TimesheetRejectForm(forms.Form):
+    """Provide timesheet reject form behavior for this module."""
     reason = forms.CharField(
         required=True,
         label="Rejection notes",
@@ -283,7 +310,9 @@ class TimesheetRejectForm(forms.Form):
 
 
 class ActiveProjectForm(forms.ModelForm):
+    """Provide active project form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = ActiveProject
         fields = ["job_number", "budgeted_hours", "active"]
         labels = {"active": "Available for Time Entry", "job_number": "Job Number"}
@@ -302,6 +331,7 @@ class ActiveProjectForm(forms.ModelForm):
         }
 
     def clean_job_number(self):
+        """Provide the clean job number operation for this module."""
         job_number = (self.cleaned_data.get("job_number") or "").strip()
         if not job_number:
             raise forms.ValidationError("Job number is required.")

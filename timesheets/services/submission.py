@@ -1,3 +1,8 @@
+"""Service-layer operations for submission workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from pathlib import Path
 from django.core.files.base import ContentFile
 from django.db import transaction

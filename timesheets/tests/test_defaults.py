@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/defaults."""
+
 from decimal import Decimal
 from io import StringIO
 
@@ -21,10 +23,13 @@ from timesheets.tests.base import AppTestCase
 
 
 class WorkCodeDefaultsTests(AppTestCase):
+    """Exercise the work code defaults workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         WorkCode.objects.all().delete()
 
     def test_seed_work_codes_creates_complete_default_set(self):
+        """Verify that seed work codes creates complete default set."""
         created, updated = seed_work_codes()
 
         self.assertEqual(created, len(DEFAULT_WORK_CODES))
@@ -37,6 +42,7 @@ class WorkCodeDefaultsTests(AppTestCase):
             self.assertTrue(work_code.active)
 
     def test_seed_work_codes_updates_managed_fields_but_preserves_other_fields(self):
+        """Verify that seed work codes updates managed fields but preserves other fields."""
         WorkCode.objects.create(
             code="1000",
             description="Old description",
@@ -56,6 +62,7 @@ class WorkCodeDefaultsTests(AppTestCase):
         self.assertFalse(work_code.allows_overtime)
 
     def test_seed_work_codes_is_idempotent_and_reports_counts(self):
+        """Verify that seed work codes is idempotent and reports counts."""
         seed_work_codes()
         stdout = StringIO()
 
@@ -67,7 +74,9 @@ class WorkCodeDefaultsTests(AppTestCase):
 
 
 class GroupDefaultsTests(AppTestCase):
+    """Exercise the group defaults workflow and protect its expected behavior from regressions."""
     def test_management_group_create_then_existing_paths(self):
+        """Verify that management group create then existing paths."""
         Group.objects.filter(name="Management Staff").delete()
         created_out = StringIO()
         existing_out = StringIO()
@@ -80,6 +89,7 @@ class GroupDefaultsTests(AppTestCase):
         self.assertIn("already exists", existing_out.getvalue())
 
     def test_project_managers_group_create_then_existing_paths(self):
+        """Verify that project managers group create then existing paths."""
         Group.objects.filter(name="ProjectManagers").delete()
         created_out = StringIO()
         existing_out = StringIO()
@@ -93,10 +103,13 @@ class GroupDefaultsTests(AppTestCase):
 
 
 class MileageRateDefaultsTests(AppTestCase):
+    """Exercise the mileage rate defaults workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         MileageRate.objects.all().delete()
 
     def test_seed_mileage_rates_creates_all_years_with_decimal_values(self):
+        """Verify that seed mileage rates creates all years with decimal values."""
         created, updated = seed_mileage_rates()
 
         self.assertEqual(created, len(DEFAULT_MILEAGE_RATES))
@@ -106,6 +119,7 @@ class MileageRateDefaultsTests(AppTestCase):
         self.assertEqual(MileageRate.objects.get(year=2026).rate, Decimal("0.760"))
 
     def test_seed_mileage_rates_preserves_existing_admin_rate(self):
+        """Verify that seed mileage rates preserves existing admin rate."""
         MileageRate.objects.create(year=2026, rate=Decimal("0.760"))
         stdout = StringIO()
 
@@ -118,10 +132,13 @@ class MileageRateDefaultsTests(AppTestCase):
 
 
 class OvernightRateDefaultsTests(AppTestCase):
+    """Exercise the overnight rate defaults workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         OvernightRate.objects.all().delete()
 
     def test_seed_overnight_rates_creates_defaults(self):
+        """Verify that seed overnight rates creates defaults."""
         created, updated = seed_overnight_rates()
 
         self.assertEqual(created, len(DEFAULT_OVERNIGHT_RATES))
@@ -129,6 +146,7 @@ class OvernightRateDefaultsTests(AppTestCase):
         self.assertEqual(OvernightRate.objects.get(year=2026).rate, Decimal("50.00"))
 
     def test_seed_overnight_rates_preserves_existing_admin_rate(self):
+        """Verify that seed overnight rates preserves existing admin rate."""
         OvernightRate.objects.create(year=2026, rate=Decimal("42.00"))
         stdout = StringIO()
 
@@ -140,10 +158,13 @@ class OvernightRateDefaultsTests(AppTestCase):
 
 
 class OfficeLocationDefaultsTests(AppTestCase):
+    """Exercise the office location defaults workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         OfficeLocation.objects.all().delete()
 
     def test_seed_office_locations_creates_complete_default_set(self):
+        """Verify that seed office locations creates complete default set."""
         created, updated = seed_office_locations()
 
         self.assertEqual(created, len(DEFAULT_OFFICE_LOCATIONS))
@@ -159,6 +180,7 @@ class OfficeLocationDefaultsTests(AppTestCase):
         self.assertTrue(appleton.active)
 
     def test_seed_office_locations_updates_existing_location_and_reports_counts(self):
+        """Verify that seed office locations updates existing location and reports counts."""
         OfficeLocation.objects.create(
             name="Mosinee Office",
             address_1="Old",
@@ -182,6 +204,7 @@ class OfficeLocationDefaultsTests(AppTestCase):
         self.assertIn("1 updated", stdout.getvalue())
 
     def test_seed_office_locations_is_idempotent(self):
+        """Verify that seed office locations is idempotent."""
         seed_office_locations()
 
         created, updated = seed_office_locations()

@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/management commands."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -29,13 +31,16 @@ from timesheets.tests.factories import make_job, make_time_entry, make_timesheet
 
 
 class ImportJobsCommandTests(AppTestCase):
+    """Exercise the import jobs command workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.temp_dir = TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.base = Path(self.temp_dir.name)
 
     def workbook(self, *, headers=None, rows=None, sheet_title="Jobs - Quotes"):
+        """Provide the workbook helper used by this test suite."""
         headers = headers or [
             "Quote/Job #", "Year", "Customer", "Job Status", "Description",
             "Lead", "Engineer01", "Quote Date", "Accepted Date",
@@ -49,6 +54,7 @@ class ImportJobsCommandTests(AppTestCase):
         )
 
     def test_cleaning_helpers(self):
+        """Verify that cleaning helpers."""
         self.assertEqual(clean_text(12.0), "12")
         self.assertEqual(clean_text("  abc  "), "abc")
         self.assertEqual(clean_job_number(26001.0), "26001")
@@ -58,6 +64,7 @@ class ImportJobsCommandTests(AppTestCase):
         self.assertIsNone(clean_date("bad"))
 
     def test_user_name_helpers(self):
+        """Verify that user name helpers."""
         user = make_user(username="cpanici", first_name="Chris", last_name="Panici")
         key = user_full_name_key(user)
         self.assertEqual(key, "chris panici")
@@ -65,25 +72,30 @@ class ImportJobsCommandTests(AppTestCase):
         self.assertIsNone(resolve_user_by_full_name("", {key: user}))
 
     def test_year_separator_detection(self):
+        """Verify that year separator detection."""
         self.assertTrue(is_year_separator_row("2026", {}, ""))
         self.assertFalse(is_year_separator_row("2026", {"description": "Real job"}, ""))
         self.assertFalse(is_year_separator_row("26001", {}, ""))
 
     def test_missing_workbook_raises_command_error(self):
+        """Verify that missing workbook raises command error."""
         with self.assertRaisesMessage(CommandError, "Workbook not found"):
             call_command("import_jobs", str(self.base / "missing.xlsx"))
 
     def test_missing_sheet_raises_command_error(self):
+        """Verify that missing sheet raises command error."""
         path = self.workbook(sheet_title="Other")
         with self.assertRaisesMessage(CommandError, "was not found"):
             call_command("import_jobs", str(path))
 
     def test_missing_job_number_header_raises_command_error(self):
+        """Verify that missing job number header raises command error."""
         path = self.workbook(headers=["Description"], rows=[["No number"]])
         with self.assertRaisesMessage(CommandError, "Quote/Job #"):
             call_command("import_jobs", str(path))
 
     def test_apply_import_creates_jobs_customer_and_user_links(self):
+        """Verify that apply import creates jobs customer and user links."""
         lead = make_user(username="lead", first_name="Chris", last_name="Panici")
         engineer = make_user(username="eng", first_name="Jane", last_name="Engineer")
         path = self.workbook(rows=[[
@@ -104,6 +116,7 @@ class ImportJobsCommandTests(AppTestCase):
         self.assertIn("blank_status_as_unknown=1", out.getvalue())
 
     def test_import_updates_existing_and_skips_blank_and_year_rows(self):
+        """Verify that import updates existing and skips blank and year rows."""
         make_job(job_number="26001", description="Old")
         path = self.workbook(rows=[
             ["", "", "", "", "", "", "", "", ""],
@@ -119,6 +132,7 @@ class ImportJobsCommandTests(AppTestCase):
         self.assertIn("skipped=2", out.getvalue())
 
     def test_dry_run_reports_but_rolls_back_database_changes(self):
+        """Verify that dry run reports but rolls back database changes."""
         path = self.workbook(rows=[["26099", "2026", "Acme", "Active", "Dry run", "", "", "", ""]])
         out = StringIO()
 
@@ -130,7 +144,9 @@ class ImportJobsCommandTests(AppTestCase):
 
 
 class MergeWorkCodeCommandTests(AppTestCase):
+    """Exercise the merge work code command workflow and protect its expected behavior from regressions."""
     def test_merge_updates_entries_and_deletes_bad_code(self):
+        """Verify that merge updates entries and deletes bad code."""
         user = make_user(username="worker")
         ts = make_timesheet(employee=user, week_start=date(2026, 8, 2))
         bad = WorkCode.objects.create(code="BAD", description="Bad")
@@ -146,6 +162,7 @@ class MergeWorkCodeCommandTests(AppTestCase):
         self.assertIn("Updated 1 time entries", out.getvalue())
 
     def test_same_or_missing_codes_raise_command_errors(self):
+        """Verify that same or missing codes raise command errors."""
         WorkCode.objects.create(code="GOOD", description="Good")
         with self.assertRaisesMessage(CommandError, "cannot be the same"):
             call_command("merge_work_code", "GOOD", "GOOD")
@@ -157,12 +174,15 @@ class MergeWorkCodeCommandTests(AppTestCase):
 
 
 class MarkOldTimesheetsInvoicedCommandTests(AppTestCase):
+    """Exercise the mark old timesheets invoiced command workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.actor = make_user(username="cpanici")
         self.employee = make_user(username="employee")
 
     def test_marks_only_old_exported_non_deleted_timesheets(self):
+        """Verify that marks only old exported non deleted timesheets."""
         now = timezone.now()
 
         old_exported = make_timesheet(
@@ -218,6 +238,7 @@ class MarkOldTimesheetsInvoicedCommandTests(AppTestCase):
         self.assertIn("Marked 1 timesheets", out.getvalue())
 
     def test_dry_run_and_missing_user_make_no_changes(self):
+        """Verify that dry run and missing user make no changes."""
         old = make_timesheet(
             employee=self.employee,
             week_start=timezone.localdate() - timedelta(days=30),
@@ -251,7 +272,9 @@ class MarkOldTimesheetsInvoicedCommandTests(AppTestCase):
 
 
 class LinkJobUsersCommandTests(AppTestCase):
+    """Exercise the link job users command workflow and protect its expected behavior from regressions."""
     def test_normalize_and_duplicate_lookup_behavior(self):
+        """Verify that normalize and duplicate lookup behavior."""
         self.assertEqual(normalize_name("  Chris   Panici "), "chris panici")
         make_user(username="one", first_name="Same", last_name="Name")
         make_user(username="two", first_name="Same", last_name="Name")
@@ -260,6 +283,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertNotIn("same name", lookup)
 
     def test_links_lead_engineer_fks_and_many_to_many(self):
+        """Verify that links lead engineer fks and many to many."""
         lead = make_user(username="lead", first_name="Lead", last_name="Person")
         engineer = make_user(username="eng", first_name="Engineer", last_name="Person")
         job = make_job(job_number="26001", lead="Lead Person", engineer_01="Engineer Person")
@@ -274,6 +298,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertIn("Jobs changed: 1", out.getvalue())
 
     def test_active_only_dry_run_and_missing_name_reporting(self):
+        """Verify that active only dry run and missing name reporting."""
         user = make_user(username="person", first_name="Known", last_name="Person")
         active = make_job(job_number="26001", lead="Known Person")
         inactive = make_job(job_number="25001", active=False, lead="Known Person")
@@ -290,6 +315,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertIn("Missing Person", out.getvalue())
 
     def test_clear_missing_removes_stale_links_and_m2m(self):
+        """Verify that clear missing removes stale links and m2m."""
         stale = make_user(username="stale", first_name="Stale", last_name="User")
         job = make_job(job_number="26001", lead="", lead_user=stale, engineer_01="", engineer_01_user=stale)
         job.engineer_users.add(stale)
@@ -303,6 +329,7 @@ class LinkJobUsersCommandTests(AppTestCase):
 
 
     def test_automatically_matches_generated_username(self):
+        """Verify that automatically matches generated username."""
         user = make_user(
             username="cpanici",
             first_name="Chris",
@@ -319,6 +346,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertEqual(job.lead_user, user)
 
     def test_existing_manual_link_is_not_overwritten(self):
+        """Verify that existing manual link is not overwritten."""
         manual_user = make_user(
             username="manual",
             first_name="Manual",
@@ -341,6 +369,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertEqual(job.lead_user, manual_user)
 
     def test_saved_alias_is_reused(self):
+        """Verify that saved alias is reused."""
         user = make_user(
             username="cpanici",
             first_name="Chris",
@@ -361,6 +390,7 @@ class LinkJobUsersCommandTests(AppTestCase):
         self.assertEqual(job.lead_user, user)
 
     def test_compound_name_is_not_automatically_guessed(self):
+        """Verify that compound name is not automatically guessed."""
         make_user(
             username="cpanici",
             first_name="Chris",
@@ -388,7 +418,9 @@ class LinkJobUsersCommandTests(AppTestCase):
 
 
 class ImportTimesheetZipCommandTests(AppTestCase):
+    """Exercise the import timesheet zip command workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.temp_dir = TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
@@ -396,6 +428,7 @@ class ImportTimesheetZipCommandTests(AppTestCase):
         self.user = make_user(username="employee")
 
     def make_zip(self, names=("one.xlsx", "nested/two.xlsx", "ignore.txt")):
+        """Provide the make zip helper used by this test suite."""
         path = self.base / "timesheets.zip"
         with zipfile.ZipFile(path, "w") as archive:
             for name in names:
@@ -403,6 +436,7 @@ class ImportTimesheetZipCommandTests(AppTestCase):
         return path
 
     def test_missing_zip_and_user_raise_command_errors(self):
+        """Verify that missing zip and user raise command errors."""
         with self.assertRaisesMessage(CommandError, "ZIP file does not exist"):
             call_command("import_timesheet_zip", str(self.base / "missing.zip"), user="employee")
         path = self.make_zip()
@@ -411,6 +445,7 @@ class ImportTimesheetZipCommandTests(AppTestCase):
 
     @override_settings(DEFAULT_FILE_STORAGE="django.core.files.storage.FileSystemStorage")
     def test_imports_xlsx_members_and_applies_requested_status(self):
+        """Verify that imports xlsx members and applies requested status."""
         path = self.make_zip()
         ts = make_timesheet(employee=self.user, week_start=date(2026, 8, 2))
         out = StringIO()
@@ -434,6 +469,7 @@ class ImportTimesheetZipCommandTests(AppTestCase):
 
     @override_settings(DEFAULT_FILE_STORAGE="django.core.files.storage.FileSystemStorage")
     def test_draft_import_requires_active_jobs(self):
+        """Verify that draft import requires active jobs."""
         path = self.make_zip(names=("one.xlsx",))
         ts = make_timesheet(employee=self.user, week_start=date(2026, 8, 2))
         out = StringIO()
@@ -452,6 +488,7 @@ class ImportTimesheetZipCommandTests(AppTestCase):
         self.assertTrue(importer.call_args.kwargs["require_active_jobs"])
 
     def test_failed_member_does_not_stop_remaining_imports(self):
+        """Verify that failed member does not stop remaining imports."""
         path = self.make_zip(names=("one.xlsx", "two.xlsx"))
         ts = make_timesheet(employee=self.user, week_start=date(2026, 8, 2))
         out = StringIO()
@@ -465,12 +502,15 @@ class ImportTimesheetZipCommandTests(AppTestCase):
 
 
 class InvalidJobsCommandTests(AppTestCase):
+    """Exercise the invalid jobs command workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         super().setUp()
         self.user = make_user(username="employee")
         self.timesheet = make_timesheet(employee=self.user, week_start=date(2026, 8, 2))
 
     def test_no_invalid_jobs_and_limit_output(self):
+        """Verify that no invalid jobs and limit output."""
         out = StringIO()
         call_command("invalid_jobs", stdout=out)
         self.assertIn("No invalid jobs found", out.getvalue())
@@ -483,6 +523,7 @@ class InvalidJobsCommandTests(AppTestCase):
         self.assertIn("Found 1 invalid job", out.getvalue())
 
     def test_clear_and_replace_actions(self):
+        """Verify that clear and replace actions."""
         invalid = make_job(job_number="BAD1", description="")
         replacement = make_job(job_number="26001", description="Valid")
         entry = make_time_entry(timesheet=self.timesheet, job=invalid, job_number="BAD1")
@@ -503,6 +544,7 @@ class InvalidJobsCommandTests(AppTestCase):
         self.assertEqual(entry2.job_number, "")
 
     def test_dry_run_actions_do_not_change_database(self):
+        """Verify that dry run actions do not change database."""
         invalid = make_job(job_number="BAD1", description="")
         replacement = make_job(job_number="26001", description="Valid")
         entry = make_time_entry(timesheet=self.timesheet, job=invalid, job_number="BAD1")
@@ -514,6 +556,7 @@ class InvalidJobsCommandTests(AppTestCase):
         self.assertTrue(Job.objects.filter(pk=invalid.pk).exists())
 
     def test_complete_invalid_job_updates_record_and_entries(self):
+        """Verify that complete invalid job updates record and entries."""
         invalid = make_job(job_number="BAD1", description="")
         entry = make_time_entry(timesheet=self.timesheet, job=invalid, job_number="BAD1")
         command = InvalidJobsCommand(); command.stdout = StringIO()
@@ -530,6 +573,7 @@ class InvalidJobsCommandTests(AppTestCase):
         self.assertEqual(entry.job_number, "26055")
 
     def test_quit_raises_command_error(self):
+        """Verify that quit raises command error."""
         invalid = make_job(job_number="BAD1", description="")
         command = InvalidJobsCommand(); command.stdout = StringIO()
         with patch("builtins.input", return_value="quit"):
@@ -538,7 +582,9 @@ class InvalidJobsCommandTests(AppTestCase):
 
 
 class SeedWorkcodesCommandTests(AppTestCase):
+    """Exercise the seed workcodes command workflow and protect its expected behavior from regressions."""
     def test_command_calls_all_seeders_and_prints_completion(self):
+        """Verify that command calls all seeders and prints completion."""
         out = StringIO()
         targets = [
             "seed_work_codes", "seed_mileage_rates", "seed_overnight_rates",

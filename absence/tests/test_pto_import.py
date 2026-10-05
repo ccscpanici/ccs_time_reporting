@@ -1,3 +1,5 @@
+"""Regression tests for absence/pto import."""
+
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -22,7 +24,9 @@ September 8, 2026
 
 
 class PTOImportParsingTests(TestCase):
+    """Exercise the ptoimport parsing workflow and protect its expected behavior from regressions."""
     def test_parses_report_rows_and_date(self):
+        """Verify that parses report rows and date."""
         rows = parse_pto_text(SAMPLE_TEXT)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0].employee_name, "Beyer, Joshua A")
@@ -31,6 +35,7 @@ class PTOImportParsingTests(TestCase):
         self.assertEqual(parse_report_date(SAMPLE_TEXT), date(2026, 9, 8))
 
     def test_matches_report_last_first_name_to_active_user(self):
+        """Verify that matches report last first name to active user."""
         user = User.objects.create_user(username="jbeyer", first_name="Joshua", last_name="Beyer")
         EmployeeProfile.objects.create(user=user)
         matched, status, message = match_employee("Beyer, Joshua A")
@@ -40,7 +45,9 @@ class PTOImportParsingTests(TestCase):
 
 
 class PTOImportApplyTests(TestCase):
+    """Exercise the ptoimport apply workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.manager = User.objects.create_user(username="manager", first_name="Manager", last_name="User")
         self.employee = User.objects.create_user(username="employee", first_name="Joshua", last_name="Beyer")
         self.pto_import = PTOImport.objects.create(
@@ -62,6 +69,7 @@ class PTOImportApplyTests(TestCase):
         )
 
     def test_apply_updates_account_but_preserves_manual_entitlement(self):
+        """Verify that apply updates account but preserves manual entitlement."""
         PTOAccount.objects.create(employee=self.employee, vacation_weeks_per_year=3, vacation_balance_minutes=0)
 
         apply_pto_import(self.pto_import, self.manager)
@@ -76,6 +84,7 @@ class PTOImportApplyTests(TestCase):
         self.assertEqual(self.pto_import.status, PTOImport.Status.APPLIED)
 
     def test_apply_skips_unmatched_rows(self):
+        """Verify that apply skips unmatched rows."""
         PTOImportRow.objects.create(
             pto_import=self.pto_import,
             row_number=2,
@@ -95,6 +104,7 @@ class PTOImportApplyTests(TestCase):
         self.assertEqual(account.vacation_accrual_minutes, -1576)
 
     def test_apply_refuses_import_with_no_matched_rows(self):
+        """Verify that apply refuses import with no matched rows."""
         row = self.pto_import.rows.get()
         row.match_status = PTOImportRow.MatchStatus.UNMATCHED
         row.employee = None
@@ -107,6 +117,7 @@ class PTOImportApplyTests(TestCase):
             apply_pto_import(self.pto_import, self.manager)
 
     def test_apply_refuses_duplicate_matched_employee_rows(self):
+        """Verify that apply refuses duplicate matched employee rows."""
         PTOImportRow.objects.create(
             pto_import=self.pto_import,
             row_number=2,

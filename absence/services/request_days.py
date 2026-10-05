@@ -1,3 +1,8 @@
+"""Service-layer operations for request days workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -7,6 +12,7 @@ from absence.models import AbsenceRequest, AbsenceRequestDay
 
 
 def weekdays_between(start_date: date, end_date: date):
+    """Provide the weekdays between operation used by the application service layer."""
     day = start_date
     while day <= end_date:
         if day.weekday() < 5:
@@ -15,6 +21,7 @@ def weekdays_between(start_date: date, end_date: date):
 
 
 def parse_daily_hours(data, start_date: date, end_date: date):
+    """Parse daily hours data into the application representation."""
     result = []
     found_explicit = False
     for day in weekdays_between(start_date, end_date):
@@ -44,6 +51,7 @@ def parse_daily_hours(data, start_date: date, end_date: date):
 
 
 def save_request_days(request: AbsenceRequest, daily_values):
+    """Provide the save request days operation used by the application service layer."""
     request.days.all().delete()
     rows = [
         AbsenceRequestDay(request=request, work_date=day, requested_minutes=minutes)
@@ -57,6 +65,7 @@ def save_request_days(request: AbsenceRequest, daily_values):
 
 
 def request_day_minutes(request: AbsenceRequest):
+    """Provide the request day minutes operation used by the application service layer."""
     rows = list(request.days.all())
     if rows:
         return [(row.work_date, row.requested_minutes) for row in rows]

@@ -1,3 +1,5 @@
+"""Application support code for models."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -40,11 +42,13 @@ class PTOAccount(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("employee__last_name", "employee__first_name", "employee__username")
         verbose_name = "PTO Account"
         verbose_name_plural = "PTO Accounts"
 
     def __str__(self):
+        """Provide the str operation for this module."""
         name = self.employee.get_full_name() or self.employee.get_username()
         return f"PTO - {name}"
 
@@ -66,20 +70,24 @@ class PTOAccount(models.Model):
 
     @property
     def annual_vacation_minutes(self):
+        """Provide the annual vacation minutes operation for this module."""
         from absence.services.pto_balances import annual_vacation_minutes
 
         return annual_vacation_minutes(self.vacation_weeks_per_year)
 
     @property
     def calculated_vacation_balance_minutes(self):
+        """Provide the calculated vacation balance minutes operation for this module."""
         return self.annual_vacation_minutes - self.vacation_used_minutes
 
     def approved_vacation_pending_minutes(self, *, as_of=None):
+        """Provide the approved vacation pending minutes operation for this module."""
         from absence.services.pto_balances import approved_vacation_pending_minutes
 
         return approved_vacation_pending_minutes(self.employee, as_of=as_of)
 
     def projected_vacation_balance_minutes(self, *, as_of=None):
+        """Provide the projected vacation balance minutes operation for this module."""
         return (
             self.calculated_vacation_balance_minutes
             - self.approved_vacation_pending_minutes(as_of=as_of)
@@ -87,7 +95,9 @@ class PTOAccount(models.Model):
 
 
 class PTOImport(models.Model):
+    """Provide ptoimport behavior for this module."""
     class Status(models.TextChoices):
+        """Provide status behavior for this module."""
         PREVIEW = "preview", "Preview"
         APPLIED = "applied", "Applied"
         FAILED = "failed", "Failed"
@@ -113,14 +123,18 @@ class PTOImport(models.Model):
     error_message = models.TextField(blank=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("-uploaded_at",)
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.source_name} ({self.get_status_display()})"
 
 
 class PTOImportRow(models.Model):
+    """Provide ptoimport row behavior for this module."""
     class MatchStatus(models.TextChoices):
+        """Provide match status behavior for this module."""
         MATCHED = "matched", "Matched"
         UNMATCHED = "unmatched", "Unmatched"
         AMBIGUOUS = "ambiguous", "Ambiguous"
@@ -144,17 +158,21 @@ class PTOImportRow(models.Model):
     vacation_used_minutes = models.IntegerField(default=0)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("row_number",)
         constraints = [
             models.UniqueConstraint(fields=("pto_import", "row_number"), name="absence_unique_pto_import_row")
         ]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.employee_name} - {self.get_match_status_display()}"
 
 
 class PTOAccountChange(models.Model):
+    """Provide ptoaccount change behavior for this module."""
     class Source(models.TextChoices):
+        """Provide source behavior for this module."""
         MANUAL = "manual", "Manual"
         IMPORT = "import", "PTO Report Import"
 
@@ -191,22 +209,27 @@ class PTOAccountChange(models.Model):
     note = models.TextField(blank=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("-changed_at",)
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.pto_account} - {self.get_source_display()} - {self.changed_at:%Y-%m-%d}"
 
 
 class AbsenceRequest(models.Model):
+    """Provide absence request behavior for this module."""
     MIN_VACATION_BALANCE_MINUTES = -40 * 60
     WORKDAY_MINUTES = 8 * 60
 
     class AbsenceType(models.TextChoices):
+        """Provide absence type behavior for this module."""
         VACATION = "vacation", "Vacation"
         SICK = "sick", "Sick"
         PERSONAL = "personal", "Personal Time"
 
     class Status(models.TextChoices):
+        """Provide status behavior for this module."""
         DRAFT = "draft", "Draft"
         SUBMITTED = "submitted", "Pending Supervisor Approval"
         PENDING_EXCEPTION = "pending_exception", "Pending Negative Balance Exception Approval"
@@ -295,6 +318,7 @@ class AbsenceRequest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("-start_date", "-created_at")
         indexes = [
             models.Index(fields=("status", "manager"), name="absence_status_mgr_idx"),
@@ -302,25 +326,30 @@ class AbsenceRequest(models.Model):
         ]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         employee = self.employee.get_full_name() or self.employee.get_username()
         return f"{employee} - {self.get_absence_type_display()} - {self.start_date:%Y-%m-%d}"
 
     @property
     def is_final(self):
+        """Provide the is final operation for this module."""
         return self.status in {self.Status.APPROVED, self.Status.DENIED}
 
     @property
     def annual_vacation_snapshot_minutes(self):
+        """Provide the annual vacation snapshot minutes operation for this module."""
         from absence.services.pto_balances import annual_vacation_minutes
 
         return annual_vacation_minutes(self.vacation_weeks_per_year_snapshot)
 
     @property
     def vacation_used_snapshot_minutes(self):
+        """Provide the vacation used snapshot minutes operation for this module."""
         return self.annual_vacation_snapshot_minutes - self.vacation_balance_snapshot_minutes
 
     @property
     def approved_vacation_pending_snapshot_minutes(self):
+        """Provide the approved vacation pending snapshot minutes operation for this module."""
         if self.projected_vacation_balance_minutes is None:
             return 0
         return max(
@@ -332,6 +361,7 @@ class AbsenceRequest(models.Model):
 
 
 class AbsenceRequestDay(models.Model):
+    """Provide absence request day behavior for this module."""
     request = models.ForeignKey(
         AbsenceRequest,
         on_delete=models.CASCADE,
@@ -341,6 +371,7 @@ class AbsenceRequestDay(models.Model):
     requested_minutes = models.PositiveIntegerField(default=AbsenceRequest.WORKDAY_MINUTES)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("work_date",)
         constraints = [
             models.UniqueConstraint(
@@ -350,11 +381,14 @@ class AbsenceRequestDay(models.Model):
         ]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.request} - {self.work_date:%Y-%m-%d}"
 
 
 class AbsenceArtifact(models.Model):
+    """Provide absence artifact behavior for this module."""
     class ArtifactType(models.TextChoices):
+        """Provide artifact type behavior for this module."""
         FINAL_PDF = "final_pdf", "Final PDF"
 
     request = models.ForeignKey(AbsenceRequest, on_delete=models.CASCADE, related_name="artifacts")
@@ -371,11 +405,14 @@ class AbsenceArtifact(models.Model):
     sha256 = models.CharField(max_length=64, blank=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ("-generated_at",)
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.filename
 
     @property
     def path(self):
+        """Provide the path operation for this module."""
         return Path(self.file_path)

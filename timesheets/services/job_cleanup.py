@@ -1,3 +1,8 @@
+"""Service-layer operations for job cleanup workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from difflib import SequenceMatcher
 from django.db.models import Q
 from ..models import Job, TimeEntry
@@ -5,6 +10,7 @@ from .importer import valid_time_entry_job_qs
 
 
 def normalized_job_number(value):
+    """Provide the normalized job number operation used by the application service layer."""
     return "".join(ch for ch in (value or "").upper() if ch.isalnum())
 
 
@@ -17,10 +23,12 @@ def invalid_job_qs():
 
 
 def entries_for_invalid_job(job):
+    """Provide the entries for invalid job operation used by the application service layer."""
     return TimeEntry.objects.filter(Q(job=job) | Q(job_number__iexact=job.job_number))
 
 
 def valid_replacement_jobs():
+    """Provide the valid replacement jobs operation used by the application service layer."""
     return valid_time_entry_job_qs().order_by("job_number")
 
 

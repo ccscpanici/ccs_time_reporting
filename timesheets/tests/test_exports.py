@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/exports."""
+
 import base64
 import tempfile
 import zipfile
@@ -52,10 +54,12 @@ User = get_user_model()
 
 
 class TimesheetExportTestBase(AppTestCase):
+    """Exercise the timesheet export test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="export.employee",
             password="test-password",
@@ -90,6 +94,7 @@ class TimesheetExportTestBase(AppTestCase):
         )
 
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.media_dir = tempfile.TemporaryDirectory()
         self.settings_override = override_settings(MEDIA_ROOT=self.media_dir.name)
         self.settings_override.enable()
@@ -97,6 +102,7 @@ class TimesheetExportTestBase(AppTestCase):
         self.addCleanup(self.media_dir.cleanup)
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.APPROVED, template_entries_per_day=5):
+        """Provide the make timesheet helper used by this test suite."""
         return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=self.week_start,
@@ -107,6 +113,7 @@ class TimesheetExportTestBase(AppTestCase):
         )
 
     def make_entry(self, timesheet, *, day_offset=0, row_order=1, **overrides):
+        """Provide the make entry helper used by this test suite."""
         values = {
             "timesheet": timesheet,
             "work_date": timesheet.week_start + timedelta(days=day_offset),
@@ -130,6 +137,7 @@ class TimesheetExportTestBase(AppTestCase):
         )
 
     def make_artifact(self, timesheet, *, employee=None, suffix="pdf", content=b"test artifact"):
+        """Provide the make artifact helper used by this test suite."""
         artifact = TimesheetSubmissionArtifact(
             timesheet=timesheet,
             file_type=suffix,
@@ -142,17 +150,21 @@ class TimesheetExportTestBase(AppTestCase):
 
 
 class ExporterServiceTests(TimesheetExportTestBase):
+    """Exercise the exporter service workflow and protect its expected behavior from regressions."""
     def test_export_filename_uses_week_and_employee_initials(self):
+        """Verify that export filename uses week and employee initials."""
         timesheet = self.make_timesheet()
         self.assertEqual(_export_initials_filename(timesheet, "pdf"), "20260802_EE.pdf")
 
     def test_export_filename_falls_back_to_username(self):
+        """Verify that export filename falls back to username."""
         user = User.objects.create_user(username="xyuser", password="test-password")
         EmployeeProfile.objects.create(user=user)
         timesheet = self.make_timesheet(employee=user)
         self.assertEqual(_export_initials_filename(timesheet, "xlsx"), "20260802_XY.xlsx")
 
     def test_excel_export_writes_header_and_time_entry(self):
+        """Verify that excel export writes header and time entry."""
         timesheet = self.make_timesheet()
         self.make_entry(timesheet)
 
@@ -170,6 +182,7 @@ class ExporterServiceTests(TimesheetExportTestBase):
         self.assertEqual(worksheet[f"{DESCRIPTION_COL}{first_row}"].value, "Export test work")
 
     def test_excel_export_rejects_timesheet_over_template_limit(self):
+        """Verify that excel export rejects timesheet over template limit."""
         timesheet = self.make_timesheet(template_entries_per_day=5)
         for row_order in range(1, 7):
             self.make_entry(timesheet, row_order=row_order)
@@ -178,6 +191,7 @@ class ExporterServiceTests(TimesheetExportTestBase):
             build_timesheet_excel(timesheet)
 
     def test_pdf_export_creates_readable_pdf_with_expense_and_parts_pages(self):
+        """Verify that pdf export creates readable pdf with expense and parts pages."""
         timesheet = self.make_timesheet()
         entry = self.make_entry(timesheet, overnight_stay=True)
 
@@ -224,6 +238,7 @@ class ExporterServiceTests(TimesheetExportTestBase):
         self.assertIn("No receipts were submitted for this timesheet.", pdf_text)
 
     def test_pdf_export_always_includes_expense_and_receipt_pages(self):
+        """Verify that pdf export always includes expense and receipt pages."""
         timesheet = self.make_timesheet()
         self.make_entry(timesheet)
 
@@ -238,11 +253,13 @@ class ExporterServiceTests(TimesheetExportTestBase):
         self.assertIn("No receipts were submitted for this timesheet.", pdf_text)
         
     def test_overnight_rate_uses_exact_year_and_fallback(self):
+        """Verify that overnight rate uses exact year and fallback."""
         OvernightRate.objects.update_or_create(year=2026, defaults={"rate": Decimal("50.00")})
         self.assertEqual(OvernightRate.rate_for_date(date(2026, 8, 2)), Decimal("50.00"))
         self.assertEqual(OvernightRate.rate_for_date(date(2027, 8, 1)), Decimal("50.00"))
 
     def test_create_artifact_persists_generated_pdf(self):
+        """Verify that create artifact persists generated pdf."""
         timesheet = self.make_timesheet()
         self.make_entry(timesheet)
 
@@ -263,13 +280,16 @@ class ExporterServiceTests(TimesheetExportTestBase):
 
 
 class ReceiptPdfTests(TimesheetExportTestBase):
+    """Exercise the receipt pdf workflow and protect its expected behavior from regressions."""
     def test_receipts_pdf_without_receipts_creates_one_page_pdf(self):
+        """Verify that receipts pdf without receipts creates one page pdf."""
         timesheet = self.make_timesheet()
         pdf_bytes = build_receipts_pdf_bytes(timesheet)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertEqual(len(PdfReader(BytesIO(pdf_bytes)).pages), 1)
 
     def test_receipts_pdf_includes_uploaded_pdf_pages(self):
+        """Verify that receipts pdf includes uploaded pdf pages."""
         timesheet = self.make_timesheet()
         source_pdf = build_receipts_pdf_bytes(timesheet)
         TimesheetReceipt.objects.create(
@@ -285,6 +305,7 @@ class ReceiptPdfTests(TimesheetExportTestBase):
         self.assertEqual(len(PdfReader(BytesIO(combined_bytes)).pages), 1)
 
     def test_receipts_pdf_includes_uploaded_image(self):
+        """Verify that receipts pdf includes uploaded image."""
         timesheet = self.make_timesheet()
         png_bytes = base64.b64decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlqQAAAAASUVORK5CYII="
@@ -303,13 +324,16 @@ class ReceiptPdfTests(TimesheetExportTestBase):
         self.assertEqual(len(PdfReader(BytesIO(pdf_bytes)).pages), 1)
 
     def test_receipts_filename_uses_initials_and_week_start(self):
+        """Verify that receipts filename uses initials and week start."""
         timesheet = self.make_timesheet()
         self.assertEqual(receipts_pdf_filename(timesheet), "EE_20260802_receipts.pdf")
 
 
 class ExportDownloadViewTests(TimesheetExportTestBase):
+    """Exercise the export download view workflow and protect its expected behavior from regressions."""
     @patch("timesheets.views.create_timesheet_artifact")
     def test_download_defaults_to_excel_and_redirects_to_ready_page(self, create_artifact):
+        """Verify that download defaults to excel and redirects to ready page."""
         timesheet = self.make_timesheet(status=Timesheet.Status.DRAFT)
         artifact = self.make_artifact(timesheet, suffix="xlsx", content=b"xlsx")
         create_artifact.return_value = artifact
@@ -327,6 +351,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
 
     @patch("timesheets.views.create_timesheet_artifact")
     def test_download_falls_back_to_pdf_when_excel_overflows(self, create_artifact):
+        """Verify that download falls back to pdf when excel overflows."""
         timesheet = self.make_timesheet(status=Timesheet.Status.DRAFT)
         for row_order in range(1, 7):
             self.make_entry(timesheet, row_order=row_order)
@@ -343,6 +368,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         self.assertEqual(create_artifact.call_args.kwargs["export_format"], Timesheet.ExportFormat.PDF)
 
     def test_owner_can_download_saved_artifact(self):
+        """Verify that owner can download saved artifact."""
         timesheet = self.make_timesheet()
         artifact = self.make_artifact(timesheet, suffix="pdf", content=b"%PDF-owner")
         self.client.force_login(self.employee)
@@ -354,6 +380,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         self.assertIn("20260802_EE.pdf", response["Content-Disposition"])
 
     def test_other_employee_cannot_download_saved_artifact(self):
+        """Verify that other employee cannot download saved artifact."""
         timesheet = self.make_timesheet()
         artifact = self.make_artifact(timesheet)
         self.client.force_login(self.other_employee)
@@ -363,6 +390,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         self.assertEqual(response.status_code, 404)
 
     def test_management_staff_can_download_saved_artifact(self):
+        """Verify that management staff can download saved artifact."""
         timesheet = self.make_timesheet()
         artifact = self.make_artifact(timesheet, suffix="xlsx", content=b"xlsx")
         self.client.force_login(self.management_user)
@@ -382,6 +410,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         build_submission_attachment,
         build_receipts,
     ):
+        """Verify that package download contains excel pdf and receipts."""
         timesheet = self.make_timesheet()
 
         excel_path = Path(tempfile.gettempdir()) / "package.xlsx"
@@ -447,6 +476,7 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         build_submission_attachment,
         build_receipts,
     ):
+        """Verify that package download excel overflow contains pdf and receipts."""
         timesheet = self.make_timesheet()
 
         for row_order in range(1, 7):

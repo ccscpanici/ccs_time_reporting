@@ -1,3 +1,8 @@
+"""Service-layer operations for account notifications workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 import logging
 
 from django.conf import settings

@@ -1,3 +1,5 @@
+"""Regression tests for absence/forms."""
+
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -10,10 +12,13 @@ User = get_user_model()
 
 
 class AbsenceRequestFormTests(TestCase):
+    """Exercise the absence request form workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.employee = User.objects.create_user(username="employee", first_name="Test", last_name="Employee")
 
     def test_vacation_requires_outlook_calendar_confirmation(self):
+        """Verify that vacation requires outlook calendar confirmation."""
         PTOAccount.objects.create(employee=self.employee, vacation_balance_minutes=4800)
         form = AbsenceRequestForm(
             data={
@@ -27,6 +32,7 @@ class AbsenceRequestFormTests(TestCase):
         self.assertIn("calendar_acknowledged", form.errors)
 
     def test_negative_balance_requires_ack_and_full_unpaid_week(self):
+        """Verify that negative balance requires ack and full unpaid week."""
         PTOAccount.objects.create(employee=self.employee, vacation_weeks_per_year=1, vacation_used_minutes=7200)
         form = AbsenceRequestForm(
             data={
@@ -56,6 +62,7 @@ class AbsenceRequestFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_sick_request_does_not_require_calendar_confirmation(self):
+        """Verify that sick request does not require calendar confirmation."""
         form = AbsenceRequestForm(
             data={
                 "absence_type": AbsenceRequest.AbsenceType.SICK,

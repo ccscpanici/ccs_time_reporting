@@ -1,3 +1,5 @@
+"""Regression tests for accounts/account notifications."""
+
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -19,7 +21,9 @@ User = get_user_model()
 )
 class AccountNotificationTests(TestCase):
 
+    """Exercise the account notification workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.user = User.objects.create_user(
             username="jdoe",
             email="jdoe@gotoccs.com",
@@ -29,6 +33,7 @@ class AccountNotificationTests(TestCase):
         )
 
     def test_active_recipient_receives_notification(self):
+        """Verify that active recipient receives notification."""
         AccountNotificationRecipient.objects.create(
             name="Chris",
             email="chris@gotoccs.com",
@@ -48,6 +53,7 @@ class AccountNotificationTests(TestCase):
         self.assertIn("Email: jdoe@gotoccs.com", email.body)
 
     def test_all_active_recipients_receive_notification(self):
+        """Verify that all active recipients receive notification."""
         AccountNotificationRecipient.objects.create(
             email="first@gotoccs.com",
             active=True,
@@ -70,6 +76,7 @@ class AccountNotificationTests(TestCase):
         )
 
     def test_inactive_recipient_does_not_receive_notification(self):
+        """Verify that inactive recipient does not receive notification."""
         AccountNotificationRecipient.objects.create(
             email="active@gotoccs.com",
             active=True,
@@ -88,6 +95,7 @@ class AccountNotificationTests(TestCase):
         )
 
     def test_no_recipients_does_not_send_email(self):
+        """Verify that no recipients does not send email."""
         result = send_new_account_notification(self.user)
 
         self.assertFalse(result)
@@ -95,6 +103,7 @@ class AccountNotificationTests(TestCase):
 
     @patch("accounts.services.account_notifications.send_mail")
     def test_email_failure_does_not_raise_exception(self, mock_send_mail):
+        """Verify that email failure does not raise exception."""
         AccountNotificationRecipient.objects.create(
             email="admin@gotoccs.com",
             active=True,
@@ -107,6 +116,7 @@ class AccountNotificationTests(TestCase):
         self.assertFalse(result)
 
     def test_notification_contains_user_information(self):
+        """Verify that notification contains user information."""
         AccountNotificationRecipient.objects.create(
             email="admin@gotoccs.com",
             active=True,
@@ -122,6 +132,7 @@ class AccountNotificationTests(TestCase):
         self.assertIn("Created:", body)
 
     def test_creating_user_automatically_sends_notification(self):
+        """Verify that creating user automatically sends notification."""
         AccountNotificationRecipient.objects.create(
             email="admin@gotoccs.com",
             active=True,
@@ -141,6 +152,7 @@ class AccountNotificationTests(TestCase):
 
 
     def test_editing_existing_user_does_not_send_notification(self):
+        """Verify that editing existing user does not send notification."""
         AccountNotificationRecipient.objects.create(
             email="admin@gotoccs.com",
             active=True,

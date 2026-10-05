@@ -1,3 +1,5 @@
+"""Django management command for merge work code."""
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -5,14 +7,17 @@ from timesheets.models import TimeEntry, WorkCode
 
 
 class Command(BaseCommand):
+    """Implement the ``merge_work_code`` Django management command."""
     help = "Merge an invalid work code into a replacement work code."
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``merge_work_code`` command."""
         parser.add_argument("bad_code")
         parser.add_argument("replacement_code")
 
     @transaction.atomic
     def handle(self, *args, **options):
+        """Execute the ``merge_work_code`` management command."""
         bad_code = options["bad_code"]
         replacement_code = options["replacement_code"]
 

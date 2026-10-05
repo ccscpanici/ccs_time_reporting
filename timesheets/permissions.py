@@ -1,5 +1,8 @@
+"""Centralized authorization rules used by views and service workflows."""
+
 
 def is_management_staff(user):
+    """Evaluate whether the current user satisfies the is management staff permission rule."""
     return bool(
         user.is_authenticated
         and (user.is_superuser or user.groups.filter(name="Management Staff").exists())
@@ -7,6 +10,7 @@ def is_management_staff(user):
 
 
 def is_business_admin(user):
+    """Evaluate whether the current user satisfies the is business admin permission rule."""
     return bool(
         user.is_authenticated
         and (
@@ -17,6 +21,7 @@ def is_business_admin(user):
 
 
 def is_project_manager(user):
+    """Evaluate whether the current user satisfies the is project manager permission rule."""
     return bool(
         user.is_authenticated
         and (
@@ -27,6 +32,7 @@ def is_project_manager(user):
 
 
 def is_assigned_project_manager(user, timesheet):
+    """Evaluate whether the current user satisfies the is assigned project manager permission rule."""
     if not user.is_authenticated:
         return False
     if not is_project_manager(user):
@@ -36,6 +42,7 @@ def is_assigned_project_manager(user, timesheet):
 
 
 def can_view_timesheet(user, timesheet):
+    """Evaluate whether the current user satisfies the can view timesheet permission rule."""
     if not user.is_authenticated:
         return False
     return bool(
@@ -47,6 +54,7 @@ def can_view_timesheet(user, timesheet):
 
 
 def can_approve_timesheet(user, timesheet):
+   """Evaluate whether the current user satisfies the can approve timesheet permission rule."""
    if not user.is_authenticated:
         return False
 

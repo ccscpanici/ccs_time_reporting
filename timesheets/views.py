@@ -1,3 +1,8 @@
+"""HTTP request handlers for this Django application.
+
+Views coordinate permissions, forms, service-layer operations, messages, and responses.
+"""
+
 import threading
 import tempfile
 import zipfile
@@ -84,6 +89,7 @@ def _hours_for_job_number(job_number):
 
 
 def _user_initials(user):
+    """Build or validate internal data used by the user initials workflow."""
     full_name = user.get_full_name().strip()
     if full_name:
         return "".join(part[0].upper() for part in full_name.split() if part)
@@ -91,6 +97,7 @@ def _user_initials(user):
 
 
 def _add_text_page(pdf_writer, title, message):
+    """Build or validate internal data used by the add text page workflow."""
     stream = BytesIO()
     page = canvas.Canvas(stream, pagesize=letter)
     width, height = letter
@@ -112,6 +119,7 @@ def _add_text_page(pdf_writer, title, message):
 
 
 def _add_image_receipt_page(pdf_writer, receipt, receipt_bytes):
+    """Build or validate internal data used by the add image receipt page workflow."""
     stream = BytesIO()
     page = canvas.Canvas(stream, pagesize=letter)
     width, height = letter
@@ -214,6 +222,7 @@ def _apply_bulk_import_status(timesheet, user, *, mark_submitted=False, mark_app
 
 
 def _run_bulk_import_job(job_id, mark_submitted=False, mark_approved=False):
+    """Build or validate internal data used by the run bulk import job workflow."""
     job = BulkImportJob.objects.get(pk=job_id)
     job.status = "running"
     job.save(update_fields=["status"])
@@ -293,11 +302,13 @@ def _run_bulk_import_job(job_id, mark_submitted=False, mark_approved=False):
 
 def sunday_for(d):
     # Company timesheet weeks start on Sunday.
+    """Handle the sunday for request and enforce the workflow rules for this operation."""
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
 
 def _timesheet_download_initials(timesheet):
+    """Build or validate internal data used by the timesheet download initials workflow."""
     user = timesheet.employee
     initials = (
         f"{(user.first_name or '')[:1]}"
@@ -311,6 +322,7 @@ def _timesheet_download_initials(timesheet):
 
 
 def _timesheet_download_base_filename(timesheet):
+    """Build or validate internal data used by the timesheet download base filename workflow."""
     return f"{timesheet.week_start:%Y%m%d}_{_timesheet_download_initials(timesheet)}"
 
 
@@ -394,6 +406,7 @@ def attachment_response(artifact):
 
 
 def get_timesheet_for_request_user(request, pk):
+    """Handle the get timesheet for request user request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(
         Timesheet.objects.select_related("employee", "employee__employee_profile"),
         pk=pk,
@@ -406,6 +419,7 @@ def get_timesheet_for_request_user(request, pk):
 
 @login_required
 def timesheet_list(request):
+    """Handle the timesheet list request and enforce the workflow rules for this operation."""
     timesheet_qs = (
         Timesheet.objects.filter(
             employee=request.user,
@@ -606,6 +620,7 @@ def timesheet_batch_download_file(request):
 
 @login_required
 def timesheet_create(request):
+    """Handle the timesheet create request and enforce the workflow rules for this operation."""
     initial = {"week_start": sunday_for(date.today()), "entries_per_day": 5}
     if request.method == "POST":
         form = TimesheetCreateForm(request.POST)
@@ -655,6 +670,7 @@ def timesheet_create(request):
 
 @login_required
 def timesheet_detail(request, pk):
+    """Handle the timesheet detail request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
     weekly_total_hours = sum(day["total_hours"] for day in grid)
@@ -684,6 +700,7 @@ def timesheet_detail(request, pk):
 
 
 def _job_options_for_timesheet_forms():
+    """Build or validate internal data used by the job options for timesheet forms workflow."""
     jobs = valid_time_entry_job_qs().order_by("job_number")
     return [
         {
@@ -697,6 +714,7 @@ def _job_options_for_timesheet_forms():
 
 
 def _posted_time_rows(request, timesheet, work_date):
+    """Build or validate internal data used by the posted time rows workflow."""
     day_key = work_date.isoformat()
     rows = []
     for row_order in range(1, timesheet.entries_per_day + 1):
@@ -713,6 +731,7 @@ def _posted_time_rows(request, timesheet, work_date):
 
 
 def _validate_timesheet_jobs_from_post(request, timesheet, work_dates):
+    """Build or validate internal data used by the validate timesheet jobs from post workflow."""
     errors = []
     for work_date in work_dates:
         for row_order, _prefix, row in _posted_time_rows(request, timesheet, work_date):
@@ -881,6 +900,7 @@ def _save_timesheet_day_from_post(request, timesheet, work_date):
 
 @login_required
 def timesheet_edit(request, pk):
+    """Handle the timesheet edit request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
     if not timesheet.can_edit:
         messages.error(request, "Only draft, rejected, or reopened timesheets can be edited.")
@@ -1006,6 +1026,7 @@ def _timesheet_day_entry(request, target_date, page_title):
 @login_required
 @require_POST
 def timesheet_autosave(request):
+    """Handle the timesheet autosave request and enforce the workflow rules for this operation."""
     timesheet_id = request.POST.get("timesheet_id")
 
     if timesheet_id:
@@ -1063,6 +1084,7 @@ def timesheet_autosave(request):
 
 @login_required
 def timesheet_bulk_zip_upload(request):
+    """Handle the timesheet bulk zip upload request and enforce the workflow rules for this operation."""
     if request.method == "POST":
         form = TimesheetBulkZipImportForm(request.POST, request.FILES)
 
@@ -1093,6 +1115,7 @@ def timesheet_bulk_zip_upload(request):
 
 @login_required
 def job_import(request):
+    """Handle the job import request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can import jobs.")
         return redirect("job_list")
@@ -1119,6 +1142,7 @@ def job_import(request):
 
 @login_required
 def job_import_preview(request, pk):
+    """Handle the job import preview request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can import jobs.")
         return redirect("job_list")
@@ -1142,6 +1166,7 @@ def job_import_preview(request, pk):
 
 @login_required
 def job_import_apply(request, pk):
+    """Handle the job import apply request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can import jobs.")
         return redirect("job_list")
@@ -1171,12 +1196,14 @@ def job_import_apply(request, pk):
 
 @login_required
 def timesheet_bulk_zip_upload_status(request, job_pk):
+    """Handle the timesheet bulk zip upload status request and enforce the workflow rules for this operation."""
     job = get_object_or_404(BulkImportJob, pk=job_pk, employee=request.user)
     return render(request, "timesheets/bulk_zip_upload_status.html", {"job": job})
 
 
 @login_required
 def timesheet_template_download(request):
+    """Handle the timesheet template download request and enforce the workflow rules for this operation."""
     if not TEMPLATE_PATH.exists():
         raise Http404("Template workbook not found.")
 
@@ -1184,6 +1211,7 @@ def timesheet_template_download(request):
     ws = wb[wb.sheetnames[0]]
 
     class TempTS:
+        """Provide temp ts behavior for this module."""
         pass
 
     temp = TempTS()
@@ -1207,11 +1235,13 @@ def timesheet_template_download(request):
 
 @login_required
 def timesheet_today(request):
+    """Handle the timesheet today request and enforce the workflow rules for this operation."""
     return _timesheet_day_entry(request, timezone.localdate(), "Today's Timesheet")
 
 
 @login_required
 def timesheet_yesterday(request):
+    """Handle the timesheet yesterday request and enforce the workflow rules for this operation."""
     return _timesheet_day_entry(
         request,
         timezone.localdate() - timedelta(days=1),
@@ -1221,6 +1251,7 @@ def timesheet_yesterday(request):
 
 @login_required
 def job_list(request):
+    """Handle the job list request and enforce the workflow rules for this operation."""
     query = (request.GET.get("q") or "").strip()
     status = (request.GET.get("status") or "").strip()
     active_filter = (request.GET.get("active") or "").strip()
@@ -1278,6 +1309,7 @@ def job_list(request):
     jobs = sorted(jobs, key=sort_key_map[sort_field], reverse=(sort_dir == "desc"))
 
     def make_sort_link(field):
+        """Handle the make sort link request and enforce the workflow rules for this operation."""
         params = request.GET.copy()
         params.pop("page", None)
         params["sort"] = field
@@ -1341,6 +1373,7 @@ def job_list(request):
 
 @login_required
 def job_create(request):
+    """Handle the job create request and enforce the workflow rules for this operation."""
     if request.method == "POST":
         form = JobForm(request.POST)
         if form.is_valid():
@@ -1355,6 +1388,7 @@ def job_create(request):
 
 @login_required
 def job_edit(request, pk):
+    """Handle the job edit request and enforce the workflow rules for this operation."""
     job = get_object_or_404(Job, pk=pk)
 
     if request.method == "POST":
@@ -1372,6 +1406,7 @@ def job_edit(request, pk):
 
 @login_required
 def active_project_list(request):
+    """Handle the active project list request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can view active projects.")
         return redirect("timesheet_list")
@@ -1400,6 +1435,7 @@ def active_project_list(request):
 
 @login_required
 def active_project_detail(request, pk):
+    """Handle the active project detail request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can view project statistics.")
         return redirect("timesheet_list")
@@ -1490,6 +1526,7 @@ def active_project_detail(request, pk):
 
 @login_required
 def active_project_create(request):
+    """Handle the active project create request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can create active projects.")
         return redirect("timesheet_list")
@@ -1516,6 +1553,7 @@ def active_project_create(request):
 
 @login_required
 def active_project_edit(request, pk):
+    """Handle the active project edit request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can edit active projects.")
         return redirect("timesheet_list")
@@ -1544,6 +1582,7 @@ def active_project_edit(request, pk):
 
 @login_required
 def active_project_remove(request, pk):
+    """Handle the active project remove request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can remove active projects.")
         return redirect("timesheet_list")
@@ -1562,6 +1601,7 @@ def active_project_remove(request, pk):
 
 @login_required
 def timesheet_bulk_zip_upload_status_api(request, job_pk):
+    """Handle the timesheet bulk zip upload status api request and enforce the workflow rules for this operation."""
     job = get_object_or_404(BulkImportJob, pk=job_pk, employee=request.user)
 
     return JsonResponse({
@@ -1577,6 +1617,7 @@ def timesheet_bulk_zip_upload_status_api(request, job_pk):
 
 @login_required
 def invalid_job_cleanup(request):
+    """Handle the invalid job cleanup request and enforce the workflow rules for this operation."""
     if not is_management_staff(request.user):
         messages.error(request, "Only management staff can clean up invalid jobs.")
         return redirect("job_list")
@@ -1606,6 +1647,7 @@ def invalid_job_cleanup(request):
 
 @login_required
 def invalid_job_cleanup_apply(request, pk):
+    """Handle the invalid job cleanup apply request and enforce the workflow rules for this operation."""
     if not is_management_staff(request.user):
         messages.error(request, "Only management staff can clean up invalid jobs.")
         return redirect("job_list")
@@ -1645,6 +1687,7 @@ def invalid_job_cleanup_apply(request, pk):
 
 @login_required
 def timesheet_upload(request):
+    """Handle the timesheet upload request and enforce the workflow rules for this operation."""
     if request.method == "POST":
         form = TimesheetImportForm(request.POST, request.FILES)
         if form.is_valid():
@@ -1677,6 +1720,7 @@ def timesheet_upload(request):
 
 @login_required
 def timesheet_upload_job_corrections(request, upload_pk):
+    """Handle the timesheet upload job corrections request and enforce the workflow rules for this operation."""
     upload = get_object_or_404(TimesheetImport, pk=upload_pk, employee=request.user)
     invalid_jobs = find_invalid_time_entry_job_numbers(upload.uploaded_file.path)
 
@@ -1775,6 +1819,7 @@ def timesheet_download(request, pk):
 
 @login_required
 def timesheet_submit(request, pk):
+    """Handle the timesheet submit request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
     if not timesheet.can_submit:
         messages.error(request, "Only draft, rejected, or reopened timesheets can be submitted.")
@@ -1804,6 +1849,7 @@ def timesheet_submit(request, pk):
 
 @login_required
 def timesheet_submitted(request, pk):
+    """Handle the timesheet submitted request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
     if timesheet.status == Timesheet.Status.DRAFT:
         return redirect(timesheet)
@@ -1865,6 +1911,7 @@ def timesheet_submitted_download(request, artifact_pk):
 
 @login_required
 def timesheet_artifact_download(request, artifact_pk):
+    """Handle the timesheet artifact download request and enforce the workflow rules for this operation."""
     artifact = get_object_or_404(
         TimesheetSubmissionArtifact.objects.select_related("timesheet", "timesheet__employee"),
         pk=artifact_pk,
@@ -1881,6 +1928,7 @@ def timesheet_artifact_download(request, artifact_pk):
 
 @login_required
 def timesheet_package_download(request, pk):
+    """Handle the timesheet package download request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
 
     try:
@@ -1900,6 +1948,7 @@ def timesheet_package_download(request, pk):
 
 @login_required
 def timesheet_receipt_upload(request, pk):
+    """Handle the timesheet receipt upload request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
 
     if not timesheet.can_edit:
@@ -1931,6 +1980,7 @@ def timesheet_receipt_upload(request, pk):
 
 @login_required
 def timesheet_receipt_download(request, receipt_pk):
+    """Handle the timesheet receipt download request and enforce the workflow rules for this operation."""
     receipt = get_object_or_404(
         TimesheetReceipt.objects.select_related("timesheet", "timesheet__employee"),
         pk=receipt_pk,
@@ -1951,6 +2001,7 @@ def timesheet_receipt_download(request, receipt_pk):
 
 @login_required
 def timesheet_receipts_pdf(request, pk):
+    """Handle the timesheet receipts pdf request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(
         Timesheet.objects.select_related("employee"),
         pk=pk,
@@ -1972,6 +2023,7 @@ def timesheet_receipts_pdf(request, pk):
 
 @login_required
 def timesheet_receipt_delete(request, receipt_pk):
+    """Handle the timesheet receipt delete request and enforce the workflow rules for this operation."""
     receipt = get_object_or_404(
         TimesheetReceipt.objects.select_related("timesheet", "timesheet__employee"),
         pk=receipt_pk,
@@ -1998,6 +2050,7 @@ def timesheet_receipt_delete(request, receipt_pk):
 
 @login_required
 def timesheet_approvals(request):
+    """Handle the timesheet approvals request and enforce the workflow rules for this operation."""
     if not is_project_manager(request.user):
         messages.error(request, "Only project managers can view timesheet approvals.")
         return redirect("timesheet_list")
@@ -2018,6 +2071,7 @@ def timesheet_approvals(request):
 
 @login_required
 def quickbooks_timesheets(request):
+    """Handle the quickbooks timesheets request and enforce the workflow rules for this operation."""
     if not is_business_admin(request.user):
         messages.error(
             request,
@@ -2103,6 +2157,7 @@ def quickbooks_timesheets(request):
 
 @login_required
 def timesheet_reopen(request, pk):
+    """Handle the timesheet reopen request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
     if not timesheet.can_reopen:
         messages.error(request, "Only submitted timesheets can be reopened.")
@@ -2135,10 +2190,12 @@ def timesheet_reopen(request, pk):
 
 # Helper function
 def user_can_manage_reopen_requests(user):
+    """Handle the user can manage reopen requests request and enforce the workflow rules for this operation."""
     return is_management_staff(user)
 
 @login_required
 def timesheet_reopen_request(request, pk):
+    """Handle the timesheet reopen request request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user)
 
     allowed = {
@@ -2229,6 +2286,7 @@ def timesheet_reopen_request(request, pk):
 @login_required
 def reopen_request_list(request):
 
+    """Handle the reopen request list request and enforce the workflow rules for this operation."""
     if not user_can_manage_reopen_requests(request.user):
         messages.error(request, "You do not have permission to manage reopen requests.")
         return redirect("timesheet_list")
@@ -2249,6 +2307,7 @@ def reopen_request_list(request):
 @login_required
 def reopen_request_review(request, pk):
 
+    """Handle the reopen request review request and enforce the workflow rules for this operation."""
     if not user_can_manage_reopen_requests(request.user):
         messages.error(request, "You do not have permission to manage reopen requests.")
         return redirect("timesheet_list")
@@ -2274,6 +2333,7 @@ def reopen_request_review(request, pk):
 @login_required
 def reopen_request_approve(request, pk):
 
+    """Handle the reopen request approve request and enforce the workflow rules for this operation."""
     if not user_can_manage_reopen_requests(request.user):
         messages.error(request, "You do not have permission to manage reopen requests.")
         return redirect("timesheet_list")
@@ -2311,6 +2371,7 @@ def reopen_request_approve(request, pk):
 @login_required
 def reopen_request_reject(request, pk):
 
+    """Handle the reopen request reject request and enforce the workflow rules for this operation."""
     if not user_can_manage_reopen_requests(request.user):
         messages.error(request, "You do not have permission to manage reopen requests.")
         return redirect("timesheet_list")
@@ -2341,6 +2402,7 @@ def reopen_request_reject(request, pk):
 
 @login_required
 def timesheet_approve(request, pk):
+    """Handle the timesheet approve request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
     if not can_approve_timesheet(request.user, timesheet):
         messages.error(request, "You do not have permission to approve this timesheet.")
@@ -2374,6 +2436,7 @@ def timesheet_approve(request, pk):
 
 @login_required
 def timesheet_reject(request, pk):
+    """Handle the timesheet reject request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
     if not can_approve_timesheet(request.user, timesheet):
         messages.error(request, "You do not have permission to reject this timesheet.")
@@ -2412,6 +2475,7 @@ def timesheet_reject(request, pk):
 
 @login_required
 def timesheet_mark_exported_to_quickbooks(request, pk):
+    """Handle the timesheet mark exported to quickbooks request and enforce the workflow rules for this operation."""
     if not is_business_admin(request.user):
         messages.error(
             request,
@@ -2435,6 +2499,7 @@ def timesheet_mark_exported_to_quickbooks(request, pk):
 
 @login_required
 def timesheet_mark_invoiced(request, pk):
+    """Handle the timesheet mark invoiced request and enforce the workflow rules for this operation."""
     if not is_management_staff(request.user):
         messages.error(request, "Only management staff can mark timesheets invoiced.")
         return redirect("timesheet_list")
@@ -2452,6 +2517,7 @@ def timesheet_mark_invoiced(request, pk):
 
 @login_required
 def timesheet_delete(request, pk):
+    """Handle the timesheet delete request and enforce the workflow rules for this operation."""
     timesheet = get_object_or_404(Timesheet, pk=pk, employee=request.user, deleted_at__isnull=True)
     if request.method == "POST":
         form = TimesheetDeleteForm(request.POST)

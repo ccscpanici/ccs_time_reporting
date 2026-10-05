@@ -1,3 +1,5 @@
+"""Django management command for import timesheet zip."""
+
 from pathlib import Path
 import shutil
 import tempfile
@@ -15,15 +17,18 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
+    """Implement the ``import_timesheet_zip`` Django management command."""
     help = "Import a ZIP archive of XLSX timesheets"
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``import_timesheet_zip`` command."""
         parser.add_argument("zip_path", type=str)
         parser.add_argument("--user", required=True)
         parser.add_argument("--submitted", action="store_true")
         parser.add_argument("--approved", action="store_true")
 
     def handle(self, *args, **options):
+        """Execute the ``import_timesheet_zip`` management command."""
         zip_path = Path(options["zip_path"])
 
         if not zip_path.exists():

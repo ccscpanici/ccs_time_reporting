@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/email queue."""
+
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -15,7 +17,9 @@ from timesheets.services.email_queue import (
 
 
 class EmailQueueTests(TestCase):
+    """Exercise the email queue workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         User = get_user_model()
 
         self.user = User.objects.create_user(
@@ -32,6 +36,7 @@ class EmailQueueTests(TestCase):
         )
 
     def test_queue_email_job_creates_job_after_commit(self):
+        """Verify that queue email job creates job after commit."""
         with self.captureOnCommitCallbacks(execute=True):
             queue_email_job(
                 job_type=EmailJob.JobType.TIMESHEET_APPROVED_EMPLOYEE,
@@ -52,6 +57,7 @@ class EmailQueueTests(TestCase):
 
     @patch("timesheets.services.email_queue._dispatch_job")
     def test_process_email_job_marks_job_sent(self, dispatch):
+        """Verify that process email job marks job sent."""
         job = EmailJob.objects.create(
             job_type=EmailJob.JobType.TIMESHEET_APPROVED_EMPLOYEE,
             timesheet=self.timesheet,
@@ -74,6 +80,7 @@ class EmailQueueTests(TestCase):
         side_effect=RuntimeError("SMTP unavailable"),
     )
     def test_process_email_job_schedules_retry(self, dispatch):
+        """Verify that process email job schedules retry."""
         job = EmailJob.objects.create(
             job_type=EmailJob.JobType.TIMESHEET_APPROVED_EMPLOYEE,
             timesheet=self.timesheet,
@@ -109,6 +116,7 @@ class EmailQueueTests(TestCase):
         self,
         dispatch,
     ):
+        """Verify that process email job marks job failed after max attempts."""
         job = EmailJob.objects.create(
             job_type=EmailJob.JobType.TIMESHEET_APPROVED_EMPLOYEE,
             timesheet=self.timesheet,
@@ -128,6 +136,7 @@ class EmailQueueTests(TestCase):
         dispatch.assert_called_once()
 
     def test_claim_next_job_recovers_stale_processing_job(self):
+        """Verify that claim next job recovers stale processing job."""
         stale_started_at = timezone.now() - timedelta(minutes=11)
 
         job = EmailJob.objects.create(

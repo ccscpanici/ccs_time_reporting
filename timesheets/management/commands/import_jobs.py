@@ -1,3 +1,5 @@
+"""Django management command for import jobs."""
+
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import re
@@ -72,6 +74,7 @@ TEXT_FIELDS = {
 
 
 def clean_text(value):
+    """Provide the clean text helper used by the ``import_jobs`` management command."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
@@ -80,6 +83,7 @@ def clean_text(value):
 
 
 def clean_job_number(value):
+    """Provide the clean job number helper used by the ``import_jobs`` management command."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
@@ -88,6 +92,7 @@ def clean_job_number(value):
 
 
 def clean_year(value):
+    """Provide the clean year helper used by the ``import_jobs`` management command."""
     if value in (None, ""):
         return None
     try:
@@ -100,6 +105,7 @@ def clean_year(value):
 
 
 def clean_date(value):
+    """Provide the clean date helper used by the ``import_jobs`` management command."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -137,10 +143,12 @@ def is_year_separator_row(job_number, values, customer_name):
 
 
 def user_full_name_key(user):
+    """Provide the user full name key helper used by the ``import_jobs`` management command."""
     return f"{user.first_name} {user.last_name}".strip().casefold()
 
 
 def resolve_user_by_full_name(name, users_by_name):
+    """Provide the resolve user by full name helper used by the ``import_jobs`` management command."""
     raw = clean_text(name)
     if not raw:
         return None
@@ -148,14 +156,17 @@ def resolve_user_by_full_name(name, users_by_name):
 
 
 class Command(BaseCommand):
+    """Implement the ``import_jobs`` Django management command."""
     help = "Import CCS jobs from the company Work Order and Job List workbook."
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``import_jobs`` command."""
         parser.add_argument("workbook", help="Path to CCS Work Order and Job List .xlsx file")
         parser.add_argument("--sheet", default=SHEET_NAME, help=f"Worksheet name. Default: {SHEET_NAME}")
         parser.add_argument("--dry-run", action="store_true", help="Parse and report counts without saving changes")
 
     def handle(self, *args, **options):
+        """Execute the ``import_jobs`` management command."""
         workbook_path = options["workbook"]
         sheet_name = options["sheet"]
         dry_run = options["dry_run"]
@@ -192,6 +203,7 @@ class Command(BaseCommand):
 
         @transaction.atomic
         def import_rows():
+            """Provide the import rows helper used by the ``import_jobs`` management command."""
             nonlocal created, updated, skipped, unknown_status
             for row_number in range(HEADER_ROW + 1, ws.max_row + 1):
                 raw_job_number = ws.cell(row_number, column_map["job_number"]).value

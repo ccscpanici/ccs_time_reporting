@@ -1,3 +1,5 @@
+"""Regression tests for absence/pto balances."""
+
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -16,19 +18,24 @@ User = get_user_model()
 
 
 class PTOPayPeriodTests(TestCase):
+    """Exercise the ptopay period workflow and protect its expected behavior from regressions."""
     def test_anchor_and_biweekly_period_ends(self):
+        """Verify that anchor and biweekly period ends."""
         self.assertEqual(PAY_PERIOD_ANCHOR_END, date(2026, 9, 11))
         self.assertEqual(pay_period_end_for(date(2026, 9, 8)), date(2026, 9, 11))
         self.assertEqual(pay_period_end_for(date(2026, 9, 18)), date(2026, 9, 25))
         self.assertEqual(pay_period_end_for(date(2026, 10, 1)), date(2026, 10, 9))
 
     def test_pending_expires_after_following_pay_period(self):
+        """Verify that pending expires after following pay period."""
         self.assertEqual(pending_expiration_for(date(2026, 9, 8)), date(2026, 9, 25))
         self.assertEqual(pending_expiration_for(date(2026, 9, 18)), date(2026, 10, 9))
 
 
 class VacationSummaryTests(TestCase):
+    """Exercise the vacation summary workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.employee = User.objects.create_user(
             username="employee",
             first_name="Test",
@@ -45,6 +52,7 @@ class VacationSummaryTests(TestCase):
         )
 
     def test_vacation_balance_uses_entitlement_minus_payroll_used(self):
+        """Verify that vacation balance uses entitlement minus payroll used."""
         summary = vacation_summary(self.account, as_of=date(2026, 9, 8))
 
         self.assertEqual(summary.annual_entitlement_minutes, 7200)
@@ -53,6 +61,7 @@ class VacationSummaryTests(TestCase):
         self.assertEqual(summary.vacation_balance_minutes, 3420)
 
     def test_approved_vacation_pending_is_calculated_per_workday(self):
+        """Verify that approved vacation pending is calculated per workday."""
         AbsenceRequest.objects.create(
             employee=self.employee,
             absence_type=AbsenceRequest.AbsenceType.VACATION,
@@ -74,6 +83,7 @@ class VacationSummaryTests(TestCase):
 
 
     def test_approved_pending_uses_actual_partial_day_hours(self):
+        """Verify that approved pending uses actual partial day hours."""
         request = AbsenceRequest.objects.create(
             employee=self.employee,
             absence_type=AbsenceRequest.AbsenceType.VACATION,
@@ -100,6 +110,7 @@ class VacationSummaryTests(TestCase):
         )
 
     def test_projected_balance_subtracts_approved_pending(self):
+        """Verify that projected balance subtracts approved pending."""
         AbsenceRequest.objects.create(
             employee=self.employee,
             absence_type=AbsenceRequest.AbsenceType.VACATION,
@@ -116,6 +127,7 @@ class VacationSummaryTests(TestCase):
         self.assertEqual(summary.projected_vacation_balance_minutes, 2460)
 
     def test_nonapproved_requests_do_not_count_as_pending(self):
+        """Verify that nonapproved requests do not count as pending."""
         AbsenceRequest.objects.create(
             employee=self.employee,
             absence_type=AbsenceRequest.AbsenceType.VACATION,

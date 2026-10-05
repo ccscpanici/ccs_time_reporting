@@ -1,3 +1,5 @@
+"""Django management command for process email queue."""
+
 import time
 from datetime import timedelta
 
@@ -10,9 +12,11 @@ from timesheets.services.email_queue import process_email_job
 
 
 class Command(BaseCommand):
+    """Implement the ``process_email_queue`` Django management command."""
     help = "Process queued email jobs."
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``process_email_queue`` command."""
         parser.add_argument(
             "--once",
             action="store_true",
@@ -26,6 +30,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Execute the ``process_email_queue`` management command."""
         run_once = options["once"]
         sleep_seconds = options["sleep"]
 
@@ -49,6 +54,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _claim_next_job():
+        """Provide the claim next job helper used by the ``process_email_queue`` management command."""
         now = timezone.now()
         stale_before = now - timedelta(minutes=10)
 

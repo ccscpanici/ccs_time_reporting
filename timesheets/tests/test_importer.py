@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/importer."""
+
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -30,13 +32,16 @@ from timesheets.tests.factories import write_timesheet_workbook
 
 
 class ImporterHelperTests(AppTestCase):
+    """Exercise the importer helper workflow and protect its expected behavior from regressions."""
     def test_clean_handles_blank_and_text_values(self):
+        """Verify that clean handles blank and text values."""
         self.assertEqual(_clean(None), "")
         self.assertEqual(_clean(""), "")
         self.assertEqual(_clean("  value  "), "value")
         self.assertEqual(_clean(123), "123")
 
     def test_as_date_supports_date_datetime_and_strings(self):
+        """Verify that as date supports date datetime and strings."""
         expected = date(2026, 8, 2)
         self.assertEqual(_as_date(expected), expected)
         self.assertEqual(_as_date(datetime(2026, 8, 2, 13, 30)), expected)
@@ -46,10 +51,12 @@ class ImporterHelperTests(AppTestCase):
         self.assertIsNone(_as_date("not-a-date"))
 
     def test_week_start_returns_sunday(self):
+        """Verify that week start returns sunday."""
         self.assertEqual(_week_start(date(2026, 8, 6)), date(2026, 8, 2))
         self.assertEqual(_week_start(date(2026, 8, 2)), date(2026, 8, 2))
 
     def test_first_date_from_cells_returns_first_valid_date(self):
+        """Verify that first date from cells returns first valid date."""
         workbook = Workbook()
         worksheet = workbook.active
         worksheet["A1"] = "bad"
@@ -57,6 +64,7 @@ class ImporterHelperTests(AppTestCase):
         self.assertEqual(_first_date_from_cells(worksheet, ["A1", "A2"]), date(2026, 8, 3))
 
     def test_find_chunk_date_uses_explicit_or_previous_day(self):
+        """Verify that find chunk date uses explicit or previous day."""
         workbook = Workbook()
         worksheet = workbook.active
         worksheet["A20"] = date(2026, 8, 2)
@@ -66,12 +74,15 @@ class ImporterHelperTests(AppTestCase):
 
 
 class ImporterParsingTests(AppTestCase):
+    """Exercise the importer parsing workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "timesheet.xlsx"
 
     def test_parse_time_entries_reads_hours_description_and_overnight(self):
+        """Verify that parse time entries reads hours description and overnight."""
         write_timesheet_workbook(
             self.path,
             time_rows=[
@@ -102,6 +113,7 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(items[1].row_order, 2)
 
     def test_parse_time_entries_infers_following_dates_and_skips_blank_rows(self):
+        """Verify that parse time entries infers following dates and skips blank rows."""
         write_timesheet_workbook(
             self.path,
             week_start=None,
@@ -114,6 +126,7 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual([item.work_date for item in items], [date(2026, 8, 2), date(2026, 8, 3)])
 
     def test_time_row_mapping_covers_all_template_rows(self):
+        """Verify that time row mapping covers all template rows."""
         write_timesheet_workbook(self.path, time_rows=[{"row": 20, "date": date(2026, 8, 2)}])
         mapping = _time_row_to_date_and_order(self.path)
         self.assertEqual(mapping[20], (date(2026, 8, 2), 1))
@@ -122,6 +135,7 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(mapping[54], (date(2026, 8, 8), 5))
 
     def test_variable_six_rows_per_day_are_mapped_without_duplicate_slots(self):
+        """Verify that variable six rows per day are mapped without duplicate slots."""
         workbook = Workbook()
 
         time_sheet = workbook.active
@@ -225,6 +239,7 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(len(slots), len(set(slots)))
 
     def test_parse_expenses_reads_values_and_skips_blank_rows(self):
+        """Verify that parse expenses reads values and skips blank rows."""
         write_timesheet_workbook(
             self.path,
             time_rows=[{"row": 20, "date": date(2026, 8, 2), "regular": 1}],
@@ -252,10 +267,12 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(items[0].explanation_of_expenses, "Travel")
 
     def test_parse_expenses_returns_empty_without_sheet(self):
+        """Verify that parse expenses returns empty without sheet."""
         write_timesheet_workbook(self.path, include_expense_sheet=False)
         self.assertEqual(parse_expense_entries(self.path), [])
 
     def test_parse_parts_reads_values_and_skips_blank_rows(self):
+        """Verify that parse parts reads values and skips blank rows."""
         write_timesheet_workbook(
             self.path,
             time_rows=[{"row": 20, "date": date(2026, 8, 2), "regular": 1}],
@@ -277,14 +294,17 @@ class ImporterParsingTests(AppTestCase):
         self.assertTrue(items[0].reorder_part)
 
     def test_parse_parts_returns_empty_without_sheet(self):
+        """Verify that parse parts returns empty without sheet."""
         write_timesheet_workbook(self.path, include_parts_sheet=False)
         self.assertEqual(parse_part_entries(self.path), [])
 
     def test_parse_week_start_prefers_explicit_cell(self):
+        """Verify that parse week start prefers explicit cell."""
         write_timesheet_workbook(self.path, week_start=date(2026, 8, 5))
         self.assertEqual(parse_week_start(self.path), date(2026, 8, 2))
 
     def test_parse_week_start_falls_back_to_first_entry(self):
+        """Verify that parse week start falls back to first entry."""
         write_timesheet_workbook(
             self.path,
             week_start=None,
@@ -293,13 +313,16 @@ class ImporterParsingTests(AppTestCase):
         self.assertEqual(parse_week_start(self.path), date(2026, 8, 2))
 
     def test_parse_week_start_raises_when_no_dates_exist(self):
+        """Verify that parse week start raises when no dates exist."""
         write_timesheet_workbook(self.path, week_start=None)
         with self.assertRaisesMessage(ValueError, "Could not determine week start"):
             parse_week_start(self.path)
 
 
 class ImporterJobValidationTests(AppTestCase):
+    """Exercise the importer job validation workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "timesheet.xlsx"
@@ -308,9 +331,11 @@ class ImporterJobValidationTests(AppTestCase):
         self.make_job_record(job_number="26003", description="Inactive", active=False)
 
     def test_valid_job_queryset_requires_active_and_description(self):
+        """Verify that valid job queryset requires active and description."""
         self.assertEqual(list(valid_time_entry_job_qs()), [self.valid_job])
 
     def test_invalid_job_numbers_are_grouped_with_unique_sample_descriptions(self):
+        """Verify that invalid job numbers are grouped with unique sample descriptions."""
         write_timesheet_workbook(
             self.path,
             time_rows=[
@@ -325,16 +350,19 @@ class ImporterJobValidationTests(AppTestCase):
         self.assertEqual(invalid, {"BAD": {"count": 3, "descriptions": ["One", "Two"]}})
 
     def test_resolve_import_job_handles_blank_valid_correction_and_clear(self):
+        """Verify that resolve import job handles blank valid correction and clear."""
         self.assertEqual(_resolve_import_job(""), ("", None))
         self.assertEqual(_resolve_import_job("26001"), ("26001", self.valid_job))
         self.assertEqual(_resolve_import_job("BAD", {"BAD": "26001"}), ("26001", self.valid_job))
         self.assertEqual(_resolve_import_job("BAD", {"BAD": ""}), ("", None))
 
     def test_resolve_import_job_rejects_inactive_job_when_active_is_required(self):
+        """Verify that resolve import job rejects inactive job when active is required."""
         with self.assertRaisesMessage(ValueError, "is not available for time entry"):
             _resolve_import_job("26003")
 
     def test_resolve_import_job_allows_existing_inactive_job_for_historical_import(self):
+        """Verify that resolve import job allows existing inactive job for historical import."""
         job_number, job = _resolve_import_job(
             "26003",
             require_active_jobs=False,
@@ -345,6 +373,7 @@ class ImporterJobValidationTests(AppTestCase):
         self.assertFalse(job.active)
 
     def test_resolve_import_job_still_rejects_unknown_job_for_historical_import(self):
+        """Verify that resolve import job still rejects unknown job for historical import."""
         with self.assertRaisesMessage(
             ValueError,
             "does not exist in the valid Job table",
@@ -355,6 +384,7 @@ class ImporterJobValidationTests(AppTestCase):
             )
 
     def test_resolve_import_job_still_rejects_blank_description_for_historical_import(self):
+        """Verify that resolve import job still rejects blank description for historical import."""
         with self.assertRaisesMessage(
             ValueError,
             "does not exist in the valid Job table",
@@ -367,7 +397,9 @@ class ImporterJobValidationTests(AppTestCase):
 
 @override_settings(DEFAULT_FILE_STORAGE="django.core.files.storage.FileSystemStorage")
 class ImportTimesheetUploadTests(AppTestCase):
+    """Exercise the import timesheet upload workflow and protect its expected behavior from regressions."""
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.override = override_settings(MEDIA_ROOT=self.tmp.name)
@@ -377,6 +409,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.job = self.make_job_record(job_number="26001", description="Valid", active=True)
 
     def create_upload(self, *, filename="timesheet.xlsx", **workbook_kwargs):
+        """Provide the create upload helper used by this test suite."""
         source_path = Path(self.tmp.name) / f"source_{filename}"
         write_timesheet_workbook(source_path, **workbook_kwargs)
         upload = TimesheetImport(employee=self.employee)
@@ -385,6 +418,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         return upload
 
     def test_import_creates_timesheet_entries_work_code_expense_part_and_upload_status(self):
+        """Verify that import creates timesheet entries work code expense part and upload status."""
         upload = self.create_upload(
             time_rows=[
                 {
@@ -421,6 +455,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertIn("Existing records for the week were replaced", upload.message)
 
     def test_expense_only_row_creates_minimal_time_entry(self):
+        """Verify that expense only row creates minimal time entry."""
         upload = self.create_upload(
             time_rows=[{"row": 20, "date": date(2026, 8, 2)}],
             expense_rows=[{"row": 9, "miles": 12}],
@@ -432,6 +467,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(entry.expense.miles, Decimal("12.00"))
 
     def test_part_only_row_creates_minimal_time_entry_and_resolves_job(self):
+        """Verify that part only row creates minimal time entry and resolves job."""
         upload = self.create_upload(
             time_rows=[{"row": 20, "date": date(2026, 8, 2)}],
             part_rows=[{"row": 9, "ee_stock_job_number": "26001", "quantity": 1, "description": "Sensor"}],
@@ -442,6 +478,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(entry.part_entry.ee_stock_job_number, "26001")
 
     def test_job_correction_replaces_invalid_job_or_clears_it(self):
+        """Verify that job correction replaces invalid job or clears it."""
         upload = self.create_upload(
             time_rows=[
                 {"row": 20, "date": date(2026, 8, 2), "job_number": "BAD", "regular": 1},
@@ -456,6 +493,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(entries[1].job_number, "")
 
     def test_historical_import_allows_existing_inactive_job(self):
+        """Verify that historical import allows existing inactive job."""
         inactive_job = self.make_job_record(
             job_number="26003",
             description="Historical inactive job",
@@ -483,6 +521,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(entry.job_number, "26003")
 
     def test_draft_import_rejects_existing_inactive_job(self):
+        """Verify that draft import rejects existing inactive job."""
         self.make_job_record(
             job_number="26003",
             description="Inactive",
@@ -506,6 +545,7 @@ class ImportTimesheetUploadTests(AppTestCase):
             import_timesheet_upload(upload)
 
     def test_invalid_job_rolls_back_timesheet_and_upload_changes(self):
+        """Verify that invalid job rolls back timesheet and upload changes."""
         upload = self.create_upload(
             time_rows=[{"row": 20, "date": date(2026, 8, 2), "job_number": "BAD", "regular": 1}],
         )
@@ -517,6 +557,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertIsNone(upload.imported_timesheet)
 
     def test_reupload_replaces_existing_editable_week_and_resets_workflow_fields(self):
+        """Verify that reupload replaces existing editable week and resets workflow fields."""
         timesheet = self.make_timesheet_record(
             employee=self.employee,
             week_start=date(2026, 8, 2),
@@ -554,6 +595,7 @@ class ImportTimesheetUploadTests(AppTestCase):
         self.assertEqual(imported.submission_export_format, "")
 
     def test_locked_existing_week_cannot_be_replaced(self):
+        """Verify that locked existing week cannot be replaced."""
         for status in [
             Timesheet.Status.SUBMITTED,
             Timesheet.Status.APPROVED,
@@ -571,6 +613,7 @@ class ImportTimesheetUploadTests(AppTestCase):
                     import_timesheet_upload(upload)
 
     def test_import_variable_six_row_workbook_sets_entries_per_day_to_six(self):
+        """Verify that import variable six row workbook sets entries per day to six."""
         source_path = Path(self.tmp.name) / "source_variable_six_rows.xlsx"
 
         workbook = Workbook()
@@ -653,6 +696,7 @@ class ImportTimesheetUploadTests(AppTestCase):
 
 
     def test_existing_work_code_is_reused(self):
+        """Verify that existing work code is reused."""
         existing = WorkCode.objects.create(code="TEST", description="Existing")
         upload = self.create_upload(
             time_rows=[{"row": 20, "date": date(2026, 8, 2), "work_code": "TEST", "regular": 1}],

@@ -1,8 +1,11 @@
+"""Centralized authorization rules used by views and service workflows."""
+
 from accounts.models import EmployeeProfile
 from timesheets.permissions import is_management_staff, is_project_manager
 
 
 def can_view_absence_request(user, absence_request):
+    """Evaluate whether the current user satisfies the can view absence request permission rule."""
     if not user.is_authenticated:
         return False
     if absence_request.employee_id == user.id:
@@ -13,6 +16,7 @@ def can_view_absence_request(user, absence_request):
 
 
 def can_supervisor_decide(user, absence_request):
+    """Evaluate whether the current user satisfies the can supervisor decide permission rule."""
     if not user.is_authenticated or absence_request.status != absence_request.Status.SUBMITTED:
         return False
     if is_management_staff(user):
@@ -21,6 +25,7 @@ def can_supervisor_decide(user, absence_request):
 
 
 def can_decide_exception(user, absence_request):
+    """Evaluate whether the current user satisfies the can decide exception permission rule."""
     return bool(
         user.is_authenticated
         and is_management_staff(user)
@@ -29,6 +34,7 @@ def can_decide_exception(user, absence_request):
 
 
 def can_manage_pto_account(user, employee):
+    """Evaluate whether the current user satisfies the can manage pto account permission rule."""
     if not user.is_authenticated:
         return False
     if is_management_staff(user):
@@ -40,10 +46,12 @@ def can_manage_pto_account(user, employee):
 
 
 def can_import_pto(user):
+    """Evaluate whether the current user satisfies the can import pto permission rule."""
     return bool(user.is_authenticated and is_management_staff(user))
 
 
 def employees_manageable_by(user):
+    """Evaluate whether the current user satisfies the employees manageable by permission rule."""
     from django.contrib.auth import get_user_model
 
     User = get_user_model()

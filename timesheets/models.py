@@ -1,3 +1,5 @@
+"""Application support code for models."""
+
 from datetime import timedelta
 from decimal import Decimal
 import re
@@ -10,10 +12,12 @@ from django.utils import timezone
 
 
 class Customer(models.Model):
+    """Provide customer behavior for this module."""
     name = models.CharField(max_length=255, unique=True)
     active = models.BooleanField(default=True)
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.name
 
 
@@ -45,6 +49,7 @@ def infer_job_year_and_month(job_number):
     return None, None
 
 class Job(models.Model):
+    """Provide job behavior for this module."""
     STATUS_ACTIVE = "Job Active"
     STATUS_QUOTING = "Quoting in Progress"
     STATUS_QUOTING_LEGACY = "Quoting In Progress"
@@ -207,9 +212,11 @@ class Job(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-year", "job_number"]
 
     def save(self, *args, **kwargs):
+        """Provide the save operation for this module."""
         if not (self.job_status or "").strip():
             self.job_status = self.STATUS_UNKNOWN
         inferred_year, inferred_month = infer_job_year_and_month(self.job_number)
@@ -221,17 +228,21 @@ class Job(models.Model):
 
     @property
     def requires_time_entry_warning(self):
+        """Provide the requires time entry warning operation for this module."""
         return (self.job_status or self.STATUS_UNKNOWN) in self.WARNING_STATUSES
 
     @property
     def search_display(self):
+        """Provide the search display operation for this module."""
         return f"{self.job_number} - {self.description}" if self.description else self.job_number
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.search_display
 
 
 class JobListImport(models.Model):
+    """Provide job list import behavior for this module."""
     STATUS_PREVIEWED = "previewed"
     STATUS_APPLIED = "applied"
     STATUS_FAILED = "failed"
@@ -259,12 +270,15 @@ class JobListImport(models.Model):
     error_message = models.TextField(blank=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-created_at"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.original_filename or self.uploaded_file.name} - {self.status}"
 
     def record_result(self, result):
+        """Provide the record result operation for this module."""
         self.added_count = result.added
         self.updated_count = result.updated
         self.unchanged_count = result.unchanged
@@ -277,6 +291,7 @@ class JobListImport(models.Model):
 
 
 class ActiveProject(models.Model):
+    """Provide active project behavior for this module."""
     job_number = models.CharField(max_length=50)
     budgeted_hours = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     active = models.BooleanField(default=True)
@@ -298,6 +313,7 @@ class ActiveProject(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["job_number"]
         constraints = [
             models.UniqueConstraint(
@@ -307,10 +323,12 @@ class ActiveProject(models.Model):
         ]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.job_number
 
 
 class WorkCode(models.Model):
+    """Provide work code behavior for this module."""
     code = models.CharField(max_length=20, unique=True)
     description = models.CharField(max_length=255)
     allows_overtime = models.BooleanField(default=True)
@@ -318,24 +336,30 @@ class WorkCode(models.Model):
     display_order = models.PositiveIntegerField(default=0)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["display_order", "code"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.code} - {self.description}"
 
 
 class MileageRate(models.Model):
+    """Provide mileage rate behavior for this module."""
     year = models.PositiveIntegerField(unique=True)
     rate = models.DecimalField(max_digits=6, decimal_places=3)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-year"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.year}: {self.rate}"
 
     @classmethod
     def rate_for_date(cls, work_date):
+        """Provide the rate for date operation for this module."""
         exact = cls.objects.filter(year=work_date.year).first()
         if exact:
             return exact.rate
@@ -346,17 +370,21 @@ class MileageRate(models.Model):
 
 
 class OvernightRate(models.Model):
+    """Provide overnight rate behavior for this module."""
     year = models.PositiveIntegerField(unique=True)
     rate = models.DecimalField(max_digits=8, decimal_places=2)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-year"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.year}: ${self.rate:.2f}"
 
     @classmethod
     def rate_for_date(cls, work_date):
+        """Provide the rate for date operation for this module."""
         exact = cls.objects.filter(year=work_date.year).first()
         if exact:
             return exact.rate
@@ -367,7 +395,9 @@ class OvernightRate(models.Model):
 
 
 class Timesheet(models.Model):
+    """Provide timesheet behavior for this module."""
     class Status(models.TextChoices):
+        """Provide status behavior for this module."""
         DRAFT = "draft", "Draft"
         SUBMITTED = "submitted", "Submitted"
         REOPENED = "reopened", "Reopened"
@@ -378,6 +408,7 @@ class Timesheet(models.Model):
         VOID = "void", "Voided"
 
     class ExportFormat(models.TextChoices):
+        """Provide export format behavior for this module."""
         EXCEL = "excel", "Excel Workbook"
         PDF = "pdf", "PDF Report"
 
@@ -467,48 +498,60 @@ class Timesheet(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         constraints = [models.UniqueConstraint(fields=["employee", "week_start"], name="unique_employee_week_timesheet")]
         ordering = ["-week_start", "-created_at"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.employee} - week of {self.week_start}"
 
     def get_absolute_url(self):
+        """Provide the get absolute url operation for this module."""
         return reverse("timesheet_detail", args=[self.pk])
 
     @property
     def can_edit(self):
+        """Provide the can edit operation for this module."""
         return self.deleted_at is None and self.status in {self.Status.DRAFT, self.Status.REJECTED, self.Status.REOPENED}
 
     @property
     def can_submit(self):
+        """Provide the can submit operation for this module."""
         return self.deleted_at is None and self.status in {self.Status.DRAFT, self.Status.REJECTED, self.Status.REOPENED}
 
     @property
     def can_reopen(self):
+        """Provide the can reopen operation for this module."""
         return self.deleted_at is None and self.status == self.Status.SUBMITTED
 
     @property
     def is_locked(self):
+        """Provide the is locked operation for this module."""
         return self.deleted_at is not None or self.status in {self.Status.SUBMITTED, self.Status.APPROVED, self.Status.EXPORTED_TO_QUICKBOOKS, self.Status.INVOICED, self.Status.VOID}
 
     @property
     def week_dates(self):
+        """Provide the week dates operation for this module."""
         return [self.week_start + timedelta(days=offset) for offset in range(7)]
 
     def entry_count_for_date(self, work_date):
+        """Provide the entry count for date operation for this module."""
         return self.entries.filter(work_date=work_date).count()
 
     @property
     def has_excel_overflow(self):
+        """Provide the has excel overflow operation for this module."""
         return any(self.entry_count_for_date(work_date) > self.template_entries_per_day for work_date in self.week_dates)
 
     @property
     def can_export_excel(self):
+        """Provide the can export excel operation for this module."""
         return not self.has_excel_overflow
 
     @property
     def open_url(self):
+        """Provide the open url operation for this module."""
         if self.status in ("draft", "reopened"):
             return reverse("timesheet_edit", args=[self.pk])
         # end if
@@ -516,9 +559,11 @@ class Timesheet(models.Model):
 
     @property
     def is_editable(self):
+        """Provide the is editable operation for this module."""
         return self.status in ("draft", "reopened")
 
 class TimeEntry(models.Model):
+    """Provide time entry behavior for this module."""
     timesheet = models.ForeignKey(Timesheet, on_delete=models.CASCADE, related_name="entries")
     work_date = models.DateField()
     row_order = models.PositiveSmallIntegerField(default=1)
@@ -535,6 +580,7 @@ class TimeEntry(models.Model):
     description = models.TextField(blank=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["work_date", "row_order", "id"]
         constraints = [
             models.UniqueConstraint(
@@ -545,10 +591,12 @@ class TimeEntry(models.Model):
 
     @property
     def total_hours(self):
+        """Provide the total hours operation for this module."""
         return self.regular_hours + self.overtime_hours + self.doubletime_hours
 
     @property
     def job_display(self):
+        """Provide the job display operation for this module."""
         if self.job_number:
             return self.job_number
         if self.job_id:
@@ -557,6 +605,7 @@ class TimeEntry(models.Model):
 
 
 class Expense(models.Model):
+    """Provide expense behavior for this module."""
     time_entry = models.OneToOneField(TimeEntry, on_delete=models.CASCADE, related_name="expense")
 
     # Editable quantity. The dollar mileage reimbursement is calculated automatically
@@ -574,11 +623,13 @@ class Expense(models.Model):
     explanation_of_expenses = models.TextField(blank=True)
 
     def calculate_mileage(self):
+        """Provide the calculate mileage operation for this module."""
         rate = self.time_entry.timesheet.mileage_rate or Decimal("0.720")
         return Money((self.miles or Decimal("0")) * rate, "USD")
 
     @property
     def daily_total(self):
+        """Provide the daily total operation for this module."""
         return (
             self.mileage
             + self.per_diem_food
@@ -591,12 +642,14 @@ class Expense(models.Model):
         )
 
     def save(self, *args, **kwargs):
+        """Provide the save operation for this module."""
         self.mileage = self.calculate_mileage()
         super().save(*args, **kwargs)
 
 
 
 class PartEntry(models.Model):
+    """Provide part entry behavior for this module."""
     time_entry = models.OneToOneField(
         TimeEntry,
         on_delete=models.CASCADE,
@@ -612,14 +665,17 @@ class PartEntry(models.Model):
     reorder_part = models.BooleanField(default=False)
 
     class Meta:
+        """Provide meta behavior for this module."""
         verbose_name = "Part entry"
         verbose_name_plural = "Part entries"
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.job_display} - {self.part_description_part_number}".strip(" -")
 
     @property
     def job_display(self):
+        """Provide the job display operation for this module."""
         if self.ee_stock_job_number:
             return self.ee_stock_job_number
         if self.time_entry_id:
@@ -628,12 +684,14 @@ class PartEntry(models.Model):
 
     @property
     def work_date(self):
+        """Provide the work date operation for this module."""
         return self.time_entry.work_date if self.time_entry_id else None
 
 
 
 
 class TimesheetReceipt(models.Model):
+    """Provide timesheet receipt behavior for this module."""
     timesheet = models.ForeignKey(
         Timesheet,
         on_delete=models.CASCADE,
@@ -652,17 +710,22 @@ class TimesheetReceipt(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-uploaded_at"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.original_filename
 
     def filename(self):
+        """Provide the filename operation for this module."""
         return self.original_filename or self.file.name.split("/")[-1]
 
 
 class TimesheetSubmissionArtifact(models.Model):
+    """Provide timesheet submission artifact behavior for this module."""
     class FileType(models.TextChoices):
+        """Provide file type behavior for this module."""
         EXCEL = "xlsx", "Excel Workbook"
         PDF = "pdf", "PDF Report"
 
@@ -683,12 +746,15 @@ class TimesheetSubmissionArtifact(models.Model):
     )
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["-created_at"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.timesheet} - {self.file_type} - {self.created_at:%Y-%m-%d %H:%M}"
 
 class TimesheetImport(models.Model):
+    """Provide timesheet import behavior for this module."""
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="timesheet_imports")
     uploaded_file = models.FileField(upload_to="timesheet_uploads/")
     imported_timesheet = models.ForeignKey(Timesheet, on_delete=models.SET_NULL, null=True, blank=True)
@@ -699,6 +765,7 @@ class TimesheetImport(models.Model):
 
 
 class EmailConfiguration(models.Model):
+    """Provide email configuration behavior for this module."""
     name = models.CharField(max_length=100, default="Default")
     from_email = models.EmailField(default="vw@gotoccs.com")
     reply_to_email = models.EmailField(default="admin@gotoccs.com", blank=True)
@@ -720,38 +787,48 @@ class EmailConfiguration(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         verbose_name = "Email Configuration"
         verbose_name_plural = "Email Configuration"
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.name} ({self.from_email})"
 
     @classmethod
     def active_config(cls):
+        """Provide the active config operation for this module."""
         return cls.objects.filter(active=True).order_by("-updated_at", "-pk").first()
 
 
 class ApprovalNotificationRecipient(models.Model):
+    """Provide approval notification recipient behavior for this module."""
     name = models.CharField(max_length=100, blank=True)
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["email"]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.name or self.email
 
 
 class TimesheetSubmissionRecipient(models.Model):
+    """Provide timesheet submission recipient behavior for this module."""
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return self.email
 
 class TimesheetReopenRequest(models.Model):
+    """Provide timesheet reopen request behavior for this module."""
     class Priority(models.TextChoices):
+        """Provide priority behavior for this module."""
         HIGH = "high", "High"
         MEDIUM = "medium", "Medium"
         LOW = "low", "Low"
@@ -773,6 +850,7 @@ class TimesheetReopenRequest(models.Model):
     decision_notes = models.TextField(blank=True)
 
     def approve(self, user, notes=""):
+        """Provide the approve operation for this module."""
         self.status = "approved"
         self.decided_by = user
         self.decided_at = timezone.now()
@@ -784,6 +862,7 @@ class TimesheetReopenRequest(models.Model):
 
 
     def reject(self, user, notes=""):
+        """Provide the reject operation for this module."""
         self.status = "denied"
         self.decided_by = user
         self.decided_at = timezone.now()
@@ -791,6 +870,7 @@ class TimesheetReopenRequest(models.Model):
         self.save()
 
 class BulkImportJob(models.Model):
+    """Provide bulk import job behavior for this module."""
     STATUS_CHOICES = [("pending","Pending"),("running","Running"),("completed","Completed"),("failed","Failed")]
 
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bulk_import_jobs")
@@ -805,7 +885,9 @@ class BulkImportJob(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
 class EmailJob(models.Model):
+    """Provide email job behavior for this module."""
     class JobType(models.TextChoices):
+        """Provide job type behavior for this module."""
         TIMESHEET_APPROVED_ADMIN = (
             "timesheet_approved_admin",
             "Timesheet Approved - Admin",
@@ -840,6 +922,7 @@ class EmailJob(models.Model):
         )
 
     class Status(models.TextChoices):
+        """Provide status behavior for this module."""
         PENDING = "pending", "Pending"
         PROCESSING = "processing", "Processing"
         SENT = "sent", "Sent"
@@ -891,6 +974,7 @@ class EmailJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["created_at"]
         indexes = [
             models.Index(
@@ -900,6 +984,7 @@ class EmailJob(models.Model):
         ]
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return (
             f"{self.get_job_type_display()} "
             f"for timesheet {self.timesheet_id} "
@@ -925,9 +1010,11 @@ class JobUserAlias(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Provide meta behavior for this module."""
         ordering = ["source_name"]
         verbose_name = "job user alias"
         verbose_name_plural = "job user aliases"
 
     def __str__(self):
+        """Provide the str operation for this module."""
         return f"{self.source_name} -> {self.user.username}"

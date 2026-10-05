@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/views."""
+
 from datetime import date
 from unittest.mock import patch
 
@@ -14,10 +16,12 @@ User = get_user_model()
 
 
 class TimesheetViewTestBase(AppTestCase):
+    """Exercise the timesheet view test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 7, 26)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="employee",
             password="test-password",
@@ -67,6 +71,7 @@ class TimesheetViewTestBase(AppTestCase):
         EmployeeProfile.objects.create(user=cls.management_user)
 
     def make_timesheet(self, employee=None, status=Timesheet.Status.DRAFT, with_entry=False, week_start=None):
+        """Provide the make timesheet helper used by this test suite."""
         timesheet = Timesheet.objects.create(
             employee=employee or self.employee,
             week_start=week_start or self.week_start,
@@ -85,11 +90,14 @@ class TimesheetViewTestBase(AppTestCase):
 
 
 class AuthenticationAndOwnershipTests(TimesheetViewTestBase):
+    """Exercise the authentication and ownership workflow and protect its expected behavior from regressions."""
     def test_anonymous_user_is_redirected_to_login(self):
+        """Verify that anonymous user is redirected to login."""
         response = self.client.get(reverse("timesheet_list"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('timesheet_list')}")
 
     def test_employee_can_view_own_timesheet(self):
+        """Verify that employee can view own timesheet."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -99,6 +107,7 @@ class AuthenticationAndOwnershipTests(TimesheetViewTestBase):
         self.assertEqual(response.context["timesheet"], timesheet)
 
     def test_employee_cannot_view_another_employees_timesheet(self):
+        """Verify that employee cannot view another employees timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.client.force_login(self.employee)
 
@@ -107,6 +116,7 @@ class AuthenticationAndOwnershipTests(TimesheetViewTestBase):
         self.assertEqual(response.status_code, 404)
 
     def test_assigned_project_manager_can_view_employee_timesheet(self):
+        """Verify that assigned project manager can view employee timesheet."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.project_manager)
 
@@ -115,6 +125,7 @@ class AuthenticationAndOwnershipTests(TimesheetViewTestBase):
         self.assertEqual(response.status_code, 200)
 
     def test_management_staff_can_view_any_timesheet(self):
+        """Verify that management staff can view any timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.client.force_login(self.management_user)
 
@@ -124,7 +135,9 @@ class AuthenticationAndOwnershipTests(TimesheetViewTestBase):
 
 
 class TimesheetCreateTests(TimesheetViewTestBase):
+    """Exercise the timesheet create workflow and protect its expected behavior from regressions."""
     def test_create_timesheet_requires_sunday(self):
+        """Verify that create timesheet requires sunday."""
         self.client.force_login(self.employee)
 
         response = self.client.post(
@@ -137,6 +150,7 @@ class TimesheetCreateTests(TimesheetViewTestBase):
         self.assertFalse(Timesheet.objects.filter(employee=self.employee).exists())
 
     def test_create_timesheet_creates_draft_and_redirects_to_edit(self):
+        """Verify that create timesheet creates draft and redirects to edit."""
         self.client.force_login(self.employee)
 
         response = self.client.post(
@@ -150,6 +164,7 @@ class TimesheetCreateTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_edit", args=[timesheet.pk]))
 
     def test_create_existing_week_opens_existing_timesheet(self):
+        """Verify that create existing week opens existing timesheet."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -163,8 +178,10 @@ class TimesheetCreateTests(TimesheetViewTestBase):
 
 
 class TimesheetSubmissionTests(TimesheetViewTestBase):
+    """Exercise the timesheet submission workflow and protect its expected behavior from regressions."""
     @patch("timesheets.views.queue_email_job")
     def test_owner_can_submit_nonempty_draft(self, send_email):
+        """Verify that owner can submit nonempty draft."""
         timesheet = self.make_timesheet(with_entry=True)
         self.client.force_login(self.employee)
 
@@ -179,6 +196,7 @@ class TimesheetSubmissionTests(TimesheetViewTestBase):
 
     @patch("timesheets.views.queue_email_job")
     def test_empty_timesheet_remains_draft(self, send_email):
+        """Verify that empty timesheet remains draft."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -190,6 +208,7 @@ class TimesheetSubmissionTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_user_cannot_submit_another_employees_timesheet(self):
+        """Verify that user cannot submit another employees timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee, with_entry=True)
         self.client.force_login(self.employee)
 
@@ -201,7 +220,9 @@ class TimesheetSubmissionTests(TimesheetViewTestBase):
 
 
 class TimesheetApprovalTests(TimesheetViewTestBase):
+    """Exercise the timesheet approval workflow and protect its expected behavior from regressions."""
     def test_project_manager_approval_list_only_contains_direct_reports(self):
+        """Verify that project manager approval list only contains direct reports."""
         direct_report_sheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         unrelated_sheet = self.make_timesheet(
             employee=self.other_employee,
@@ -217,6 +238,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
 
     @patch("timesheets.views.queue_email_job")
     def test_assigned_project_manager_can_approve_submitted_timesheet(self, queue_email):
+        """Verify that assigned project manager can approve submitted timesheet."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.client.force_login(self.project_manager)
 
@@ -229,6 +251,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_unassigned_project_manager_cannot_approve_timesheet(self):
+        """Verify that unassigned project manager cannot approve timesheet."""
         timesheet = self.make_timesheet(
             employee=self.other_employee,
             status=Timesheet.Status.SUBMITTED,
@@ -246,6 +269,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
 
     @patch("timesheets.views.queue_email_job")
     def test_assigned_project_manager_can_reject_with_reason(self, send_email):
+        """Verify that assigned project manager can reject with reason."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.client.force_login(self.project_manager)
 
@@ -262,6 +286,7 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
     def test_management_staff_can_mark_exported_timesheet_invoiced(self):
+        """Verify that management staff can mark exported timesheet invoiced."""
         timesheet = self.make_timesheet(status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS)
         self.client.force_login(self.management_user)
 
@@ -274,7 +299,9 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
 
 
 class ReopenRequestTests(TimesheetViewTestBase):
+    """Exercise the reopen request workflow and protect its expected behavior from regressions."""
     def test_employee_request_is_pending_when_supervisor_is_assigned(self):
+        """Verify that employee request is pending when supervisor is assigned."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.client.force_login(self.employee)
 
@@ -300,6 +327,7 @@ class ReopenRequestTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_request_without_supervisor_is_automatically_approved(self):
+        """Verify that request without supervisor is automatically approved."""
         timesheet = self.make_timesheet(employee=self.other_employee, status=Timesheet.Status.APPROVED)
         self.client.force_login(self.other_employee)
 
@@ -335,6 +363,7 @@ class ReopenRequestTests(TimesheetViewTestBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_management_staff_can_open_reopen_request_list(self):
+        """Verify that management staff can open reopen request list."""
         self.client.force_login(self.management_user)
 
         response = self.client.get(reverse("reopen_request_list"))
@@ -342,6 +371,7 @@ class ReopenRequestTests(TimesheetViewTestBase):
         self.assertEqual(response.status_code, 200)
 
     def test_management_staff_can_approve_reopen_request(self):
+        """Verify that management staff can approve reopen request."""
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         reopen_request = TimesheetReopenRequest.objects.create(
             timesheet=timesheet,

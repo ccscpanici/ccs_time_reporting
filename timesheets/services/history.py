@@ -1,7 +1,13 @@
+"""Service-layer operations for history workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from django.utils import timezone
 
 
 def _user_name(user):
+    """Internal helper used to user name."""
     if not user:
         return "System"
 
@@ -10,6 +16,7 @@ def _user_name(user):
 
 def _add_event(events, *, timestamp, title, icon, badge,
                user=None, details=None):
+    """Internal helper used to add event."""
     if not timestamp:
         return
 

@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/timesheet edit."""
+
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -14,11 +16,13 @@ User = get_user_model()
 
 
 class TimesheetEditTestBase(AppTestCase):
+    """Exercise the timesheet edit test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 7, 26)
     work_date = date(2026, 7, 27)
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="edit_employee",
             password="test-password",
@@ -55,6 +59,7 @@ class TimesheetEditTestBase(AppTestCase):
         )
 
     def make_timesheet(self, *, employee=None, status=Timesheet.Status.DRAFT, entries_per_day=5):
+        """Provide the make timesheet helper used by this test suite."""
         return self.make_timesheet_record(
             employee=employee or self.employee,
             week_start=self.week_start,
@@ -64,6 +69,7 @@ class TimesheetEditTestBase(AppTestCase):
         )
 
     def row_post(self, *, work_date=None, row_order=1, **overrides):
+        """Provide the row post helper used by this test suite."""
         work_date = work_date or self.work_date
         prefix = f"entry_{work_date.isoformat()}_{row_order}"
         values = {
@@ -119,8 +125,10 @@ class TimesheetEditTestBase(AppTestCase):
 
 
 class TimesheetDayViewTests(TimesheetEditTestBase):
+    """Exercise the timesheet day view workflow and protect its expected behavior from regressions."""
     @patch("timesheets.views.timezone.localdate", return_value=date(2026, 7, 27))
     def test_today_live_form_includes_work_date(self, _localdate):
+        """Verify that today live form includes work date."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("timesheet_today"))
@@ -134,6 +142,7 @@ class TimesheetDayViewTests(TimesheetEditTestBase):
 
     @patch("timesheets.views.timezone.localdate", return_value=date(2026, 7, 27))
     def test_yesterday_live_form_includes_yesterday_work_date(self, _localdate):
+        """Verify that yesterday live form includes yesterday work date."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("timesheet_yesterday"))
@@ -147,7 +156,9 @@ class TimesheetDayViewTests(TimesheetEditTestBase):
 
 
 class TimesheetEditViewTests(TimesheetEditTestBase):
+    """Exercise the timesheet edit view workflow and protect its expected behavior from regressions."""
     def test_owner_can_open_draft_timesheet(self):
+        """Verify that owner can open draft timesheet."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -157,6 +168,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertEqual(response.context["timesheet"], timesheet)
 
     def test_user_cannot_open_another_employees_timesheet(self):
+        """Verify that user cannot open another employees timesheet."""
         timesheet = self.make_timesheet(employee=self.other_employee)
         self.client.force_login(self.employee)
 
@@ -165,6 +177,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertEqual(response.status_code, 404)
 
     def test_locked_timesheet_redirects_to_detail(self):
+        """Verify that locked timesheet redirects to detail."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.client.force_login(self.employee)
 
@@ -173,6 +186,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertRedirects(response, reverse("timesheet_detail", args=[timesheet.pk]))
 
     def test_post_creates_time_entry_and_links_job_and_work_code(self):
+        """Verify that post creates time entry and links job and work code."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"entries_per_day": "5"}
@@ -199,6 +213,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertRedirects(response, reverse("timesheet_edit", args=[timesheet.pk]))
 
     def test_post_updates_existing_time_entry(self):
+        """Verify that post updates existing time entry."""
         timesheet = self.make_timesheet()
         entry = TimeEntry.objects.create(
             timesheet=timesheet,
@@ -219,6 +234,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertEqual(TimeEntry.objects.filter(timesheet=timesheet).count(), 1)
 
     def test_blank_post_deletes_existing_row_and_related_records(self):
+        """Verify that blank post deletes existing row and related records."""
         timesheet = self.make_timesheet()
         entry = TimeEntry.objects.create(
             timesheet=timesheet,
@@ -239,6 +255,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertFalse(PartEntry.objects.filter(time_entry_id=entry.pk).exists())
 
     def test_post_creates_expense_and_calculates_mileage(self):
+        """Verify that post creates expense and calculates mileage."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"entries_per_day": "5"}
@@ -260,6 +277,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertEqual(expense.explanation_of_expenses, "Customer-site travel")
 
     def test_post_creates_part_entry(self):
+        """Verify that post creates part entry."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"entries_per_day": "5"}
@@ -282,6 +300,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertTrue(part.reorder_part)
 
     def test_invalid_job_number_prevents_save(self):
+        """Verify that invalid job number prevents save."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"entries_per_day": "5"}
@@ -294,6 +313,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
 
     def test_inactive_job_number_prevents_save(self):
+        """Verify that inactive job number prevents save."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"entries_per_day": "5"}
@@ -306,6 +326,7 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
         self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
 
     def test_entries_per_day_is_clamped_to_supported_range(self):
+        """Verify that entries per day is clamped to supported range."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -316,7 +337,9 @@ class TimesheetEditViewTests(TimesheetEditTestBase):
 
 
 class TimesheetAutosaveTests(TimesheetEditTestBase):
+    """Exercise the timesheet autosave workflow and protect its expected behavior from regressions."""
     def test_autosave_requires_post(self):
+        """Verify that autosave requires post."""
         self.client.force_login(self.employee)
 
         response = self.client.get(reverse("timesheet_autosave"))
@@ -324,6 +347,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(response.status_code, 405)
 
     def test_autosave_rejects_invalid_work_date(self):
+        """Verify that autosave rejects invalid work date."""
         self.client.force_login(self.employee)
 
         response = self.client.post(reverse("timesheet_autosave"), {"work_date": "not-a-date"})
@@ -332,6 +356,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(response.json(), {"ok": False, "error": "Invalid work date."})
 
     def test_autosave_creates_timesheet_and_entry(self):
+        """Verify that autosave creates timesheet and entry."""
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
         data.update(self.row_post(regular_hours="8", description="Autosaved work"))
@@ -347,6 +372,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
 
 
     def test_autosave_accepts_fractional_hour_value(self):
+        """Verify that autosave accepts fractional hour value."""
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
         data.update(self.row_post(regular_hours="0.1"))
@@ -361,6 +387,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(entry.regular_hours, Decimal("0.1"))
 
     def test_autosave_accepts_24_hours(self):
+        """Verify that autosave accepts 24 hours."""
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
         data.update(self.row_post(regular_hours="24"))
@@ -375,6 +402,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(entry.regular_hours, Decimal("24"))
 
     def test_autosave_rejects_hours_above_24(self):
+        """Verify that autosave rejects hours above 24."""
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
         data.update(self.row_post(regular_hours="24.1"))
@@ -390,6 +418,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
 
     def test_autosave_rejects_negative_hours(self):
+        """Verify that autosave rejects negative hours."""
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
         data.update(self.row_post(regular_hours="-0.1"))
@@ -405,6 +434,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertFalse(TimeEntry.objects.filter(timesheet=timesheet).exists())
 
     def test_weekly_autosave_updates_non_today_entry(self):
+        """Verify that weekly autosave updates non today entry."""
         timesheet = self.make_timesheet()
         self.client.force_login(self.employee)
 
@@ -436,6 +466,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(entry.regular_hours, Decimal("6.25"))
 
     def test_autosave_returns_validation_errors_for_invalid_job(self):
+        """Verify that autosave returns validation errors for invalid job."""
         self.make_timesheet()
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}
@@ -449,6 +480,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertIn("BAD-JOB", payload["errors"][0])
 
     def test_autosave_rejects_locked_timesheet(self):
+        """Verify that autosave rejects locked timesheet."""
         self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.client.force_login(self.employee)
 
@@ -461,6 +493,7 @@ class TimesheetAutosaveTests(TimesheetEditTestBase):
         self.assertEqual(response.json(), {"ok": False, "error": "Timesheet is locked."})
 
     def test_autosave_only_modifies_logged_in_users_timesheet(self):
+        """Verify that autosave only modifies logged in users timesheet."""
         other_timesheet = self.make_timesheet(employee=self.other_employee)
         self.client.force_login(self.employee)
         data = {"work_date": self.work_date.isoformat(), "entries_per_day": "5"}

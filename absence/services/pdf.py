@@ -1,3 +1,8 @@
+"""Service-layer operations for pdf workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,6 +22,7 @@ from absence.services.time_values import format_hhmm
 
 
 def employee_initials(user) -> str:
+    """Provide the employee initials operation used by the application service layer."""
     first = (user.first_name or "").strip()
     last = (user.last_name or "").strip()
     if first and last:
@@ -26,6 +32,7 @@ def employee_initials(user) -> str:
 
 
 def _unique_archive_path(request):
+    """Internal helper used to unique archive path."""
     root = Path(settings.ABSENCE_PDF_ROOT)
     root.mkdir(parents=True, exist_ok=True)
     base = f"{employee_initials(request.employee)}_{request.start_date:%Y%m%d}"
@@ -38,12 +45,14 @@ def _unique_archive_path(request):
 
 
 def _name(user):
+    """Internal helper used to name."""
     if not user:
         return ""
     return user.get_full_name() or user.get_username()
 
 
 def _dt(value):
+    """Internal helper used to dt."""
     if not value:
         return ""
     try:
@@ -55,10 +64,12 @@ def _dt(value):
 
 
 def _yes_no(value):
+    """Internal helper used to yes no."""
     return "Yes" if value else "No"
 
 
 def generate_absence_pdf(request, generated_by=None) -> AbsenceArtifact:
+    """Provide the generate absence pdf operation used by the application service layer."""
     if not request.is_final:
         raise ValueError("Only finalized absence requests can be archived.")
 
@@ -243,6 +254,7 @@ def generate_absence_pdf(request, generated_by=None) -> AbsenceArtifact:
 
 
 def ensure_final_pdf(request, generated_by=None):
+    """Provide the ensure final pdf operation used by the application service layer."""
     artifact = request.artifacts.filter(artifact_type=AbsenceArtifact.ArtifactType.FINAL_PDF).first()
     if artifact and Path(artifact.file_path).exists():
         return artifact

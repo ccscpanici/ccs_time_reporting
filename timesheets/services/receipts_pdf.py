@@ -1,3 +1,8 @@
+"""Service-layer operations for receipts pdf workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from io import BytesIO
 from pathlib import Path
 
@@ -8,6 +13,7 @@ from reportlab.pdfgen import canvas
 
 
 def _add_text_page(pdf_writer, title, message):
+    """Internal helper used to add text page."""
     stream = BytesIO()
     page = canvas.Canvas(stream, pagesize=letter)
     width, height = letter
@@ -29,6 +35,7 @@ def _add_text_page(pdf_writer, title, message):
 
 
 def _add_image_receipt_page(pdf_writer, receipt, receipt_bytes):
+    """Internal helper used to add image receipt page."""
     stream = BytesIO()
     page = canvas.Canvas(stream, pagesize=letter)
     width, height = letter
@@ -115,6 +122,7 @@ def build_receipts_pdf_bytes(timesheet):
 
 
 def receipts_pdf_filename(timesheet):
+    """Provide the receipts pdf filename operation used by the application service layer."""
     employee = timesheet.employee
     full_name = employee.get_full_name().strip()
 

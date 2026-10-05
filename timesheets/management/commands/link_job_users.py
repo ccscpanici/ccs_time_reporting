@@ -1,3 +1,5 @@
+"""Django management command for link job users."""
+
 import re
 
 from django.contrib.auth import get_user_model
@@ -44,12 +46,14 @@ def suggested_username(value):
 
 
 class Command(BaseCommand):
+    """Implement the ``link_job_users`` Django management command."""
     help = (
         "Link Job lead/engineer text fields to Django users. "
         "Interactive mode can resolve unmatched names and remember aliases."
     )
 
     def add_arguments(self, parser):
+        """Define command-line options accepted by the ``link_job_users`` command."""
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -103,6 +107,7 @@ class Command(BaseCommand):
         return lookup, duplicates
 
     def build_username_lookup(self):
+        """Provide the build username lookup helper used by the ``link_job_users`` management command."""
         User = get_user_model()
         lookup = {}
         duplicates = set()
@@ -123,6 +128,7 @@ class Command(BaseCommand):
         return lookup
 
     def build_email_lookup(self):
+        """Provide the build email lookup helper used by the ``link_job_users`` management command."""
         User = get_user_model()
         lookup = {}
         duplicates = set()
@@ -143,6 +149,7 @@ class Command(BaseCommand):
         return lookup
 
     def build_alias_lookup(self):
+        """Provide the build alias lookup helper used by the ``link_job_users`` management command."""
         return {
             normalize_name(alias.source_name): alias.user
             for alias in JobUserAlias.objects.select_related("user").all()
@@ -156,6 +163,7 @@ class Command(BaseCommand):
         email_lookup,
         full_name_lookup,
     ):
+        """Provide the find user by manual entry helper used by the ``link_job_users`` management command."""
         key = (value or "").strip().casefold()
         if not key:
             return None
@@ -222,6 +230,7 @@ class Command(BaseCommand):
         return None, None
 
     def list_users(self):
+        """Provide the list users helper used by the ``link_job_users`` management command."""
         User = get_user_model()
 
         users = User.objects.all().order_by(
@@ -256,6 +265,7 @@ class Command(BaseCommand):
         email_lookup,
         full_name_lookup,
     ):
+        """Provide the prompt for user helper used by the ``link_job_users`` management command."""
         while True:
             self.stdout.write("")
             self.stdout.write(self.style.WARNING("User match required"))
@@ -312,6 +322,7 @@ class Command(BaseCommand):
         *,
         dry_run,
     ):
+        """Provide the save alias helper used by the ``link_job_users`` management command."""
         normalized = normalize_name(source_name)
         if not normalized:
             return False
@@ -346,6 +357,7 @@ class Command(BaseCommand):
         interactive,
         dry_run,
     ):
+        """Provide the resolve user helper used by the ``link_job_users`` management command."""
         normalized = normalize_name(source_name)
 
         if not normalized:
@@ -394,6 +406,7 @@ class Command(BaseCommand):
         return "user", user, "manual"
 
     def handle(self, *args, **options):
+        """Execute the ``link_job_users`` management command."""
         dry_run = options["dry_run"]
         active_only = options["active_only"]
         clear_missing = options["clear_missing"]

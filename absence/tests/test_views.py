@@ -1,3 +1,5 @@
+"""Regression tests for absence/views."""
+
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -14,8 +16,10 @@ User = get_user_model()
 
 
 class AbsenceViewBase(TestCase):
+    """Exercise the absence view base workflow and protect its expected behavior from regressions."""
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         pm_group, _ = Group.objects.get_or_create(name="ProjectManagers")
         management_group, _ = Group.objects.get_or_create(name="Management Staff")
         cls.manager = User.objects.create_user(username="manager", first_name="Mandy", last_name="Manager", password="test")
@@ -30,6 +34,7 @@ class AbsenceViewBase(TestCase):
         EmployeeProfile.objects.create(user=cls.other)
 
     def make_request(self, **kwargs):
+        """Provide the make request helper used by this test suite."""
         defaults = {
             "employee": self.employee,
             "manager": self.manager,
@@ -44,7 +49,9 @@ class AbsenceViewBase(TestCase):
 
 
 class AbsenceRequestWorkflowTests(AbsenceViewBase):
+    """Exercise the absence request workflow workflow and protect its expected behavior from regressions."""
     def test_employee_creates_draft(self):
+        """Verify that employee creates draft."""
         PTOAccount.objects.create(employee=self.employee, vacation_balance_minutes=6000)
         self.client.force_login(self.employee)
         response = self.client.post(reverse("absence_create"), {
@@ -59,6 +66,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
         self.assertRedirects(response, reverse("absence_detail", args=[absence.pk]))
 
     def test_employee_can_create_partial_day_request(self):
+        """Verify that employee can create partial day request."""
         PTOAccount.objects.create(employee=self.employee, vacation_weeks_per_year=3)
         self.client.force_login(self.employee)
         response = self.client.post(reverse("absence_create"), {
@@ -78,6 +86,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
         self.assertRedirects(response, reverse("absence_detail", args=[absence.pk]))
 
     def test_project_manager_without_supervisor_defaults_to_self_on_submit(self):
+        """Verify that project manager without supervisor defaults to self on submit."""
         absence = AbsenceRequest.objects.create(
             employee=self.manager,
             absence_type=AbsenceRequest.AbsenceType.VACATION,
@@ -98,6 +107,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
         self.assertEqual(absence.manager, self.manager)
 
     def test_submit_snapshots_manager_and_pto(self):
+        """Verify that submit snapshots manager and pto."""
         PTOAccount.objects.create(
             employee=self.employee,
             vacation_weeks_per_year=3,
@@ -120,6 +130,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
         self.assertRedirects(response, reverse("absence_detail", args=[absence.pk]))
 
     def test_sick_request_inside_two_weeks_is_not_late(self):
+        """Verify that sick request inside two weeks is not late."""
         today = timezone.localdate()
         absence = self.make_request(
             absence_type=AbsenceRequest.AbsenceType.SICK,
@@ -135,6 +146,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
 
     @patch("absence.views.ensure_final_pdf")
     def test_assigned_manager_approves_normal_request_and_archives_pdf(self, ensure_pdf):
+        """Verify that assigned manager approves normal request and archives pdf."""
         absence = self.make_request(status=AbsenceRequest.Status.SUBMITTED)
         self.client.force_login(self.manager)
         response = self.client.post(reverse("absence_approve", args=[absence.pk]), {"notes": "Approved."})
@@ -147,6 +159,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
 
     @patch("absence.views.ensure_final_pdf")
     def test_negative_balance_request_requires_management_exception_approval(self, ensure_pdf):
+        """Verify that negative balance request requires management exception approval."""
         absence = self.make_request(
             status=AbsenceRequest.Status.SUBMITTED,
             negative_balance_exception_required=True,
@@ -168,6 +181,7 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
         ensure_pdf.assert_called_once()
 
     def test_employee_cannot_view_another_employees_request(self):
+        """Verify that employee cannot view another employees request."""
         absence = self.make_request(employee=self.other)
         self.client.force_login(self.employee)
         response = self.client.get(reverse("absence_detail", args=[absence.pk]))
@@ -175,7 +189,9 @@ class AbsenceRequestWorkflowTests(AbsenceViewBase):
 
 
 class PTOManagementViewTests(AbsenceViewBase):
+    """Exercise the ptomanagement view workflow and protect its expected behavior from regressions."""
     def test_supervisor_can_manually_update_direct_report_and_audit(self):
+        """Verify that supervisor can manually update direct report and audit."""
         account = PTOAccount.objects.create(employee=self.employee)
         self.client.force_login(self.manager)
         response = self.client.post(reverse("pto_balance_edit", args=[self.employee.pk]), {
@@ -194,17 +210,20 @@ class PTOManagementViewTests(AbsenceViewBase):
         self.assertRedirects(response, reverse("pto_balance_list"))
 
     def test_supervisor_cannot_edit_unassigned_employee(self):
+        """Verify that supervisor cannot edit unassigned employee."""
         self.client.force_login(self.manager)
         response = self.client.get(reverse("pto_balance_edit", args=[self.other.pk]))
         self.assertEqual(response.status_code, 404)
 
     def test_pto_import_is_management_only(self):
+        """Verify that pto import is management only."""
         self.client.force_login(self.manager)
         self.assertEqual(self.client.get(reverse("pto_import_upload")).status_code, 403)
         self.client.force_login(self.management)
         self.assertEqual(self.client.get(reverse("pto_import_upload")).status_code, 200)
 
     def test_pto_import_preview_allows_partial_matches(self):
+        """Verify that pto import preview allows partial matches."""
         pto_import = PTOImport.objects.create(
             source_file="absence/pto_imports/test.pdf",
             source_name="PTOList.pdf",

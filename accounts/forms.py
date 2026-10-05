@@ -1,3 +1,5 @@
+"""Application support code for forms."""
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
@@ -6,7 +8,9 @@ from .models import EmployeeProfile, OfficeLocation, UserPreference
 
 
 class UserPreferenceForm(forms.ModelForm):
+    """Provide user preference form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = UserPreference
         fields = ["color_scheme", "theme"]
         widgets = {
@@ -16,7 +20,9 @@ class UserPreferenceForm(forms.ModelForm):
 
 
 class UserProfileForm(forms.ModelForm):
+    """Provide user profile form behavior for this module."""
     class Meta:
+        """Provide meta behavior for this module."""
         model = User
         fields = ["first_name", "last_name", "email"]
         widgets = {
@@ -27,6 +33,7 @@ class UserProfileForm(forms.ModelForm):
 
 
 class EmployeeProfileForm(forms.ModelForm):
+    """Provide employee profile form behavior for this module."""
     office_location = forms.ModelChoiceField(
         queryset=OfficeLocation.objects.filter(active=True).order_by("name"),
         required=True,
@@ -34,6 +41,7 @@ class EmployeeProfileForm(forms.ModelForm):
     )
 
     class Meta:
+        """Provide meta behavior for this module."""
         model = EmployeeProfile
         fields = [
             "office_location",
@@ -53,6 +61,7 @@ class EmployeeProfileForm(forms.ModelForm):
 
 
 class UserSignupForm(UserCreationForm):
+    """Provide user signup form behavior for this module."""
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(attrs={"class": "form-control"}),
@@ -68,6 +77,7 @@ class UserSignupForm(UserCreationForm):
     )
 
     class Meta:
+        """Provide meta behavior for this module."""
         model = User
         fields = ["username", "first_name", "last_name", "email", "password1", "password2"]
         widgets = {
@@ -75,6 +85,7 @@ class UserSignupForm(UserCreationForm):
         }
 
     def clean_email(self):
+        """Provide the clean email operation for this module."""
         email = (self.cleaned_data.get("email") or "").strip().lower()
 
         if not email.endswith("@gotoccs.com"):
@@ -86,6 +97,7 @@ class UserSignupForm(UserCreationForm):
         return email
 
     def save(self, commit=True):
+        """Provide the save operation for this module."""
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
         user.first_name = self.cleaned_data["first_name"]

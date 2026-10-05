@@ -1,3 +1,5 @@
+"""Application support code for admin."""
+
 
 from django.contrib import admin, messages
 from django import forms
@@ -10,6 +12,7 @@ from .services.notifications import send_test_email
 
 
 class EmailConfigurationAdminForm(forms.ModelForm):
+    """Provide email configuration admin form behavior for this module."""
     smtp_password = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
@@ -17,12 +20,14 @@ class EmailConfigurationAdminForm(forms.ModelForm):
     )
 
     class Meta:
+        """Provide meta behavior for this module."""
         model = EmailConfiguration
         fields = "__all__"
 
 
 @admin.register(EmailConfiguration)
 class EmailConfigurationAdmin(admin.ModelAdmin):
+    """Provide email configuration admin behavior for this module."""
     form = EmailConfigurationAdminForm
     list_display = (
         "name",
@@ -49,6 +54,7 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
     )
 
     def get_urls(self):
+        """Provide the get urls operation for this module."""
         urls = super().get_urls()
         custom_urls = [
             path(
@@ -60,6 +66,7 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def send_test_email_view(self, request, object_id):
+        """Provide the send test email view operation for this module."""
         config = self.get_object(request, object_id)
         if not config:
             self.message_user(request, "Email configuration not found.", level=messages.ERROR)
@@ -83,6 +90,7 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
         return redirect(f"../../{object_id}/change/")
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
+        """Provide the change view operation for this module."""
         extra_context = extra_context or {}
         extra_context["show_send_test_email"] = True
         return super().change_view(request, object_id, form_url, extra_context=extra_context)
@@ -90,6 +98,7 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(ApprovalNotificationRecipient)
 class ApprovalNotificationRecipientAdmin(admin.ModelAdmin):
+    """Provide approval notification recipient admin behavior for this module."""
     list_display = ("email", "name", "active")
     list_filter = ("active",)
     search_fields = ("email", "name")
@@ -98,12 +107,14 @@ class ApprovalNotificationRecipientAdmin(admin.ModelAdmin):
 
 
 class TimeEntryInline(admin.TabularInline):
+    """Provide time entry inline behavior for this module."""
     model = TimeEntry
     extra = 0
 
 
 @admin.register(Timesheet)
 class TimesheetAdmin(admin.ModelAdmin):
+    """Provide timesheet admin behavior for this module."""
     list_display = ("employee", "week_start", "mileage_rate", "overnight_rate", "status", "submitted_at", "reopened_at", "approved_at", "quickbooks_exported_at", "invoiced_at", "deleted_at")
     list_filter = ("status", "week_start", "submitted_at", "approved_at", "quickbooks_exported_at", "invoiced_at", "deleted_at")
     search_fields = ("employee__username", "employee__first_name", "employee__last_name")
@@ -111,6 +122,7 @@ class TimesheetAdmin(admin.ModelAdmin):
     change_list_template = "admin/timesheets/timesheet/change_list.html"
 
     def get_urls(self):
+        """Provide the get urls operation for this module."""
         urls = super().get_urls()
         custom_urls = [
             path(
@@ -122,6 +134,7 @@ class TimesheetAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def clear_all_timesheets(self, request):
+        """Provide the clear all timesheets operation for this module."""
         if request.method == "POST":
             count = Timesheet.objects.count()
             Timesheet.objects.all().delete()
@@ -147,6 +160,7 @@ class TimesheetAdmin(admin.ModelAdmin):
 
 @admin.register(WorkCode)
 class WorkCodeAdmin(admin.ModelAdmin):
+    """Provide work code admin behavior for this module."""
     list_display = ("code", "description", "active", "allows_overtime", "display_order")
     list_filter = ("active", "allows_overtime")
     search_fields = ("code", "description")
@@ -155,6 +169,7 @@ class WorkCodeAdmin(admin.ModelAdmin):
 
 @admin.register(MileageRate)
 class MileageRateAdmin(admin.ModelAdmin):
+    """Provide mileage rate admin behavior for this module."""
     list_display = ("year", "rate")
     search_fields = ("year",)
     ordering = ("-year",)
@@ -162,6 +177,7 @@ class MileageRateAdmin(admin.ModelAdmin):
 
 @admin.register(OvernightRate)
 class OvernightRateAdmin(admin.ModelAdmin):
+    """Provide overnight rate admin behavior for this module."""
     list_display = ("year", "rate")
     search_fields = ("year",)
     ordering = ("-year",)
@@ -169,6 +185,7 @@ class OvernightRateAdmin(admin.ModelAdmin):
 
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
+    """Provide job admin behavior for this module."""
     list_display = ("job_number", "year", "job_month", "description", "customer", "job_status", "invoice_status", "work_type", "lead_display", "available_for_time_entry", "last_imported_at")
     list_filter = ("year", "job_month", "active", "job_status", "invoice_status", "work_type", "customer")
     search_fields = (
@@ -227,6 +244,7 @@ class JobAdmin(admin.ModelAdmin):
 
     @admin.display(description="Lead")
     def lead_display(self, obj):
+        """Provide the lead display operation for this module."""
         if obj.lead_user:
             full_name = obj.lead_user.get_full_name()
             return full_name or obj.lead_user.username
@@ -234,12 +252,15 @@ class JobAdmin(admin.ModelAdmin):
 
     @admin.display(boolean=True, description="Available for Time Entry")
     def available_for_time_entry(self, obj):
+        """Provide the available for time entry operation for this module."""
         return obj.active
 
     def has_delete_permission(self, request, obj=None):
+        """Provide the has delete permission operation for this module."""
         return False
 
     def get_actions(self, request):
+        """Provide the get actions operation for this module."""
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
         return actions
@@ -250,6 +271,7 @@ admin.site.register(Expense)
 
 @admin.register(PartEntry)
 class PartEntryAdmin(admin.ModelAdmin):
+    """Provide part entry admin behavior for this module."""
     list_display = ("time_entry", "ee_stock_job_number", "quantity", "part_description_part_number", "reorder_part")
     list_filter = ("reorder_part",)
     search_fields = (
@@ -264,6 +286,7 @@ admin.site.register(TimesheetImport)
 
 @admin.register(TimesheetSubmissionArtifact)
 class TimesheetSubmissionArtifactAdmin(admin.ModelAdmin):
+    """Provide timesheet submission artifact admin behavior for this module."""
     list_display = ("timesheet", "file_type", "export_format", "created_at", "created_by")
     list_filter = ("file_type", "export_format", "created_at")
     search_fields = ("timesheet__employee__username", "timesheet__employee__first_name", "timesheet__employee__last_name", "file")
@@ -274,6 +297,7 @@ admin.site.register(TimesheetSubmissionRecipient)
 
 @admin.register(TimesheetReceipt)
 class TimesheetReceiptAdmin(admin.ModelAdmin):
+    """Provide timesheet receipt admin behavior for this module."""
     list_display = ("timesheet", "original_filename", "description", "uploaded_by", "uploaded_at")
     list_filter = ("uploaded_at",)
     search_fields = (
@@ -287,6 +311,7 @@ class TimesheetReceiptAdmin(admin.ModelAdmin):
 
 @admin.register(TimesheetReopenRequest)
 class TimesheetReopenRequestAdmin(admin.ModelAdmin):
+    """Provide timesheet reopen request admin behavior for this module."""
     list_display = (
         "timesheet",
         "requested_by",

@@ -1,3 +1,5 @@
+"""Regression tests for timesheets/notifications."""
+
 from .base import AppTestCase
 from datetime import date
 from pathlib import Path
@@ -26,10 +28,12 @@ User = get_user_model()
 
 
 class NotificationTestBase(AppTestCase):
+    """Exercise the notification test base workflow and protect its expected behavior from regressions."""
     week_start = date(2026, 8, 2)
 
     @classmethod
     def setUpClass(cls):
+        """Provide the set up class helper used by this test suite."""
         super().setUpClass()
         cls._media = TemporaryDirectory()
         cls._settings = override_settings(
@@ -40,12 +44,14 @@ class NotificationTestBase(AppTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Provide the tear down class helper used by this test suite."""
         cls._settings.disable()
         cls._media.cleanup()
         super().tearDownClass()
 
     @classmethod
     def setUpTestData(cls):
+        """Provide the set up test data helper used by this test suite."""
         cls.employee = User.objects.create_user(
             username="employee",
             first_name="Test",
@@ -69,6 +75,7 @@ class NotificationTestBase(AppTestCase):
         EmployeeProfile.objects.create(user=cls.manager)
 
     def setUp(self):
+        """Create the shared fixtures used by the tests in this class."""
         mail.outbox = []
         self.config = EmailConfiguration.objects.create(
             name="Test SMTP",
@@ -90,6 +97,7 @@ class NotificationTestBase(AppTestCase):
         self.addCleanup(self.backend_patcher.stop)
 
     def make_timesheet(self, **overrides):
+        """Provide the make timesheet helper used by this test suite."""
         values = {
             "employee": self.employee,
             "week_start": self.week_start,
@@ -101,6 +109,7 @@ class NotificationTestBase(AppTestCase):
         return Timesheet.objects.create(**values)
 
     def make_reopen_request(self, **overrides):
+        """Provide the make reopen request helper used by this test suite."""
         values = {
             "timesheet": self.make_timesheet(),
             "requested_by": self.employee,
@@ -113,14 +122,18 @@ class NotificationTestBase(AppTestCase):
 
 
 class NotificationHelperTests(NotificationTestBase):
+    """Exercise the notification helper workflow and protect its expected behavior from regressions."""
     def test_employee_initials_uses_full_name(self):
+        """Verify that employee initials uses full name."""
         self.assertEqual(notifications._employee_initials(self.employee), "TE")
 
     def test_employee_initials_falls_back_to_username(self):
+        """Verify that employee initials falls back to username."""
         user = User.objects.create_user(username="xyuser")
         self.assertEqual(notifications._employee_initials(user), "XY")
 
     def test_timesheet_url_normalizes_trailing_slash(self):
+        """Verify that timesheet url normalizes trailing slash."""
         timesheet = self.make_timesheet()
         self.assertEqual(
             notifications._timesheet_url(timesheet),
@@ -128,6 +141,7 @@ class NotificationHelperTests(NotificationTestBase):
         )
 
     def test_basic_email_ignores_blank_recipients(self):
+        """Verify that basic email ignores blank recipients."""
         notifications._send_basic_email(
             config=self.config,
             subject="Hello",
@@ -137,6 +151,7 @@ class NotificationHelperTests(NotificationTestBase):
         self.assertEqual(mail.outbox, [])
 
     def test_active_config_uses_latest_active_configuration(self):
+        """Verify that active config uses latest active configuration."""
         newer = EmailConfiguration.objects.create(
             name="Newer",
             from_email="newer@example.com",
@@ -147,13 +162,16 @@ class NotificationHelperTests(NotificationTestBase):
 
 
 class BasicNotificationTests(NotificationTestBase):
+    """Exercise the basic notification workflow and protect its expected behavior from regressions."""
     def test_send_test_email_requires_recipient(self):
+        """Verify that send test email requires recipient."""
         self.config.test_recipient = ""
         self.config.save(update_fields=["test_recipient"])
         with self.assertRaisesMessage(ValueError, "Test recipient is required"):
             notifications.send_test_email(self.config)
 
     def test_send_test_email_uses_configured_addresses(self):
+        """Verify that send test email uses configured addresses."""
         notifications.send_test_email(self.config)
         message = mail.outbox[0]
         self.assertEqual(message.subject, "CCS Time Reporting - Test Email")
@@ -163,6 +181,7 @@ class BasicNotificationTests(NotificationTestBase):
         self.assertIn("smtp.example.com", message.body)
 
     def test_employee_approval_email_contains_approver_and_link(self):
+        """Verify that employee approval email contains approver and link."""
         timesheet = self.make_timesheet()
         notifications.send_employee_timesheet_approved_email(timesheet, self.manager)
         message = mail.outbox[0]
@@ -172,6 +191,7 @@ class BasicNotificationTests(NotificationTestBase):
         self.assertIn("https://tests.example.com", message.body)
 
     def test_employee_rejection_email_includes_reason(self):
+        """Verify that employee rejection email includes reason."""
         timesheet = self.make_timesheet(status=Timesheet.Status.REJECTED)
         notifications.send_employee_timesheet_rejected_email(
             timesheet,
@@ -184,6 +204,7 @@ class BasicNotificationTests(NotificationTestBase):
         self.assertIn("Use the correct job number.", message.body)
 
     def test_submitted_email_goes_to_assigned_supervisor(self):
+        """Verify that submitted email goes to assigned supervisor."""
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         notifications.send_timesheet_submitted_supervisor_email(timesheet, self.employee)
         message = mail.outbox[0]
@@ -192,6 +213,7 @@ class BasicNotificationTests(NotificationTestBase):
         self.assertIn("Submitted By: Test Employee", message.body)
 
     def test_reopened_admin_notification_uses_active_recipients_only(self):
+        """Verify that reopened admin notification uses active recipients only."""
         active = ApprovalNotificationRecipient.objects.create(email="active@example.com", active=True)
         ApprovalNotificationRecipient.objects.create(email="inactive@example.com", active=False)
         timesheet = self.make_timesheet(reopen_reason="Fix Wednesday.")
@@ -202,7 +224,9 @@ class BasicNotificationTests(NotificationTestBase):
 
 
 class ReopenRequestNotificationTests(NotificationTestBase):
+    """Exercise the reopen request notification workflow and protect its expected behavior from regressions."""
     def test_reopen_request_email_contains_priority_reason_and_review_link(self):
+        """Verify that reopen request email contains priority reason and review link."""
         request = self.make_reopen_request()
         notifications.send_timesheet_reopen_request_email(request)
         message = mail.outbox[0]
@@ -212,6 +236,7 @@ class ReopenRequestNotificationTests(NotificationTestBase):
         self.assertIn(f"/timesheets/reopen-requests/{request.pk}/", message.body)
 
     def test_reopen_approved_email_contains_decider_and_notes(self):
+        """Verify that reopen approved email contains decider and notes."""
         request = self.make_reopen_request(
             status="approved",
             decided_by=self.manager,
@@ -225,6 +250,7 @@ class ReopenRequestNotificationTests(NotificationTestBase):
         self.assertIn("Approved for correction.", message.body)
 
     def test_reopen_rejected_email_uses_system_when_no_decider(self):
+        """Verify that reopen rejected email uses system when no decider."""
         request = self.make_reopen_request(
             status="denied",
             decided_by=None,
@@ -237,13 +263,16 @@ class ReopenRequestNotificationTests(NotificationTestBase):
 
 
 class NotificationValidationTests(NotificationTestBase):
+    """Exercise the notification validation workflow and protect its expected behavior from regressions."""
     def test_missing_active_email_configuration_raises(self):
+        """Verify that missing active email configuration raises."""
         EmailConfiguration.objects.update(active=False)
         timesheet = self.make_timesheet()
         with self.assertRaisesMessage(ValueError, "No active email configuration"):
             notifications.send_employee_timesheet_approved_email(timesheet, self.manager)
 
     def test_employee_email_is_required(self):
+        """Verify that employee email is required."""
         self.employee.email = ""
         self.employee.save(update_fields=["email"])
         timesheet = self.make_timesheet()
@@ -251,6 +280,7 @@ class NotificationValidationTests(NotificationTestBase):
             notifications.send_employee_timesheet_approved_email(timesheet, self.manager)
 
     def test_supervisor_assignment_is_required_for_submission_email(self):
+        """Verify that supervisor assignment is required for submission email."""
         self.employee.employee_profile.supervisor = None
         self.employee.employee_profile.save(update_fields=["supervisor"])
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
@@ -258,6 +288,7 @@ class NotificationValidationTests(NotificationTestBase):
             notifications.send_timesheet_submitted_supervisor_email(timesheet, self.employee)
 
     def test_supervisor_email_is_required_for_reopen_request(self):
+        """Verify that supervisor email is required for reopen request."""
         self.supervisor.email = ""
         self.supervisor.save(update_fields=["email"])
         request = self.make_reopen_request()
@@ -265,13 +296,16 @@ class NotificationValidationTests(NotificationTestBase):
             notifications.send_timesheet_reopen_request_email(request)
 
     def test_admin_recipient_is_required_for_reopened_notification(self):
+        """Verify that admin recipient is required for reopened notification."""
         timesheet = self.make_timesheet()
         with self.assertRaisesMessage(ValueError, "No active approval notification recipients"):
             notifications.send_reopened_admin_notification(timesheet, self.manager)
 
 
 class ApprovedTimesheetAttachmentTests(NotificationTestBase):
+    """Exercise the approved timesheet attachment workflow and protect its expected behavior from regressions."""
     def test_approved_email_generates_artifacts_and_three_attachments(self):
+        """Verify that approved email generates artifacts and three attachments."""
         ApprovalNotificationRecipient.objects.create(email="accounting@example.com")
         timesheet = self.make_timesheet()
 
@@ -306,6 +340,7 @@ class ApprovedTimesheetAttachmentTests(NotificationTestBase):
         )
 
     def test_approved_email_skips_excel_when_timesheet_cannot_export_excel(self):
+        """Verify that approved email skips excel when timesheet cannot export excel."""
         ApprovalNotificationRecipient.objects.create(email="accounting@example.com")
         timesheet = self.make_timesheet(template_entries_per_day=5)
         for row_order in range(1, 7):
@@ -332,6 +367,7 @@ class ApprovedTimesheetAttachmentTests(NotificationTestBase):
         self.assertEqual(TimesheetSubmissionArtifact.objects.filter(timesheet=timesheet).count(), 2)
 
     def test_approved_email_requires_active_recipient(self):
+        """Verify that approved email requires active recipient."""
         ApprovalNotificationRecipient.objects.create(email="inactive@example.com", active=False)
         timesheet = self.make_timesheet()
         with self.assertRaisesMessage(ValueError, "No active approval notification recipients"):

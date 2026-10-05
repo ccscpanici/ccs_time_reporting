@@ -1,3 +1,5 @@
+"""Regression tests for accounts/views."""
+
 from django.core import mail
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -16,7 +18,9 @@ from accounts.models import (
 User = get_user_model()
 
 class AccountsViewTestCase(AppTestCase):
+    """Exercise the accounts view workflow and protect its expected behavior from regressions."""
     def make_office(self, name="Appleton", *, active=True, **overrides):
+        """Provide the make office helper used by this test suite."""
         values = {
             "address_1": "123 Main Street",
             "address_2": "",
@@ -29,11 +33,14 @@ class AccountsViewTestCase(AppTestCase):
         return OfficeLocation.objects.create(name=name, **values)
 
     def messages_for(self, response):
+        """Provide the messages for helper used by this test suite."""
         return [str(message) for message in get_messages(response.wsgi_request)]
 
 
 class SignupViewTests(AccountsViewTestCase):
+    """Exercise the signup view workflow and protect its expected behavior from regressions."""
     def signup_data(self, **overrides):
+        """Provide the signup data helper used by this test suite."""
         values = {
             "username": "newemployee",
             "first_name": "New",
@@ -46,6 +53,7 @@ class SignupViewTests(AccountsViewTestCase):
         return values
 
     def test_signup_get_renders_empty_form(self):
+        """Verify that signup get renders empty form."""
         response = self.client.get(reverse("signup"))
 
         self.assertEqual(response.status_code, 200)
@@ -54,6 +62,7 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertFalse(response.context["form"].is_bound)
 
     def test_authenticated_user_is_redirected_to_timesheet_list(self):
+        """Verify that authenticated user is redirected to timesheet list."""
         user = self.make_user(username="existing")
         self.login(user)
 
@@ -62,6 +71,7 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertRedirects(response, reverse("timesheet_list"))
 
     def test_valid_signup_creates_user_profile_logs_in_and_uses_first_active_office(self):
+        """Verify that valid signup creates user profile logs in and uses first active office."""
         self.make_office("Zeta Office")
         expected_office = OfficeLocation.objects.get(name="Appleton Office")
         self.make_office("Aardvark Closed", active=False)
@@ -79,6 +89,7 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertIn("Account created. Please complete your profile.", self.messages_for(response))
 
     def test_valid_signup_allows_profile_without_office_when_none_exist(self):
+        """Verify that valid signup allows profile without office when none exist."""
         OfficeLocation.objects.all().delete()
 
         response = self.client.post(
@@ -92,6 +103,7 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertIsNone(user.employee_profile.office_location)
         
     def test_non_company_email_is_rejected_without_creating_user(self):
+        """Verify that non company email is rejected without creating user."""
         response = self.client.post(
             reverse("signup"),
             self.signup_data(email="employee@example.com"),
@@ -106,6 +118,7 @@ class SignupViewTests(AccountsViewTestCase):
         )
 
     def test_duplicate_email_is_rejected_case_insensitively(self):
+        """Verify that duplicate email is rejected case insensitively."""
         self.make_user(username="existing", email="new.employee@gotoccs.com")
 
         response = self.client.post(reverse("signup"), self.signup_data())
@@ -118,6 +131,7 @@ class SignupViewTests(AccountsViewTestCase):
         )
 
     def test_invalid_password_confirmation_redisplays_bound_form(self):
+        """Verify that invalid password confirmation redisplays bound form."""
         response = self.client.post(
             reverse("signup"),
             self.signup_data(password2="different-password"),
@@ -133,6 +147,7 @@ class SignupViewTests(AccountsViewTestCase):
         DEFAULT_FROM_EMAIL="timetrack@gotoccs.com",
     )
     def test_signup_sends_one_account_notification_after_profile_creation(self):
+        """Verify that signup sends one account notification after profile creation."""
         AccountNotificationRecipient.objects.create(
             email="admin@gotoccs.com",
             active=True,
@@ -160,6 +175,7 @@ class SignupViewTests(AccountsViewTestCase):
         DEFAULT_FROM_EMAIL="timetrack@gotoccs.com",
     )
     def test_signup_without_office_still_sends_one_notification(self):
+        """Verify that signup without office still sends one notification."""
         OfficeLocation.objects.all().delete()
 
         AccountNotificationRecipient.objects.create(
@@ -176,7 +192,9 @@ class SignupViewTests(AccountsViewTestCase):
         self.assertIn("Office: Not assigned", mail.outbox[0].body)
 
 class ProfileViewTests(AccountsViewTestCase):
+    """Exercise the profile view workflow and protect its expected behavior from regressions."""
     def profile_data(self, office, **overrides):
+        """Provide the profile data helper used by this test suite."""
         values = {
             "first_name": "Updated",
             "last_name": "Person",
@@ -192,9 +210,11 @@ class ProfileViewTests(AccountsViewTestCase):
         return values
 
     def test_profile_requires_login(self):
+        """Verify that profile requires login."""
         self.assert_login_required(reverse("profile"))
 
     def test_profile_get_creates_profile_with_first_active_office(self):
+        """Verify that profile get creates profile with first active office."""
         self.make_office("Zeta Office")
         expected_office = OfficeLocation.objects.get(name="Appleton Office")
         user = self.make_user(username="profileuser")
@@ -210,6 +230,7 @@ class ProfileViewTests(AccountsViewTestCase):
         self.assertTemplateUsed(response, "accounts/profile.html")
 
     def test_profile_get_preserves_existing_profile_office(self):
+        """Verify that profile get preserves existing profile office."""
         first_office = self.make_office("Appleton")
         existing_office = self.make_office("Mosinee")
         user = self.make_user(username="profileuser")
@@ -224,6 +245,7 @@ class ProfileViewTests(AccountsViewTestCase):
         self.assertEqual(profile.office_location, existing_office)
 
     def test_valid_profile_post_updates_user_and_address(self):
+        """Verify that valid profile post updates user and address."""
         old_office = self.make_office("Appleton")
         new_office = self.make_office("Mosinee")
         user = self.make_user(username="profileuser", first_name="Old", last_name="Name")
@@ -249,6 +271,7 @@ class ProfileViewTests(AccountsViewTestCase):
         self.assertIn("Profile updated.", self.messages_for(response))
 
     def test_invalid_employee_form_does_not_save_either_form(self):
+        """Verify that invalid employee form does not save either form."""
         active_office = self.make_office("Appleton")
         inactive_office = self.make_office("Closed", active=False)
         user = self.make_user(
@@ -275,6 +298,7 @@ class ProfileViewTests(AccountsViewTestCase):
         self.assertIn("office_location", response.context["employee_form"].errors)
 
     def test_invalid_user_form_does_not_save_employee_form(self):
+        """Verify that invalid user form does not save employee form."""
         office = self.make_office("Appleton")
         user = self.make_user(username="profileuser", email="original@gotoccs.com")
         profile = self.make_profile(user=user, office_location=office, city="Appleton")
@@ -294,10 +318,13 @@ class ProfileViewTests(AccountsViewTestCase):
 
 
 class PreferencesViewTests(AccountsViewTestCase):
+    """Exercise the preferences view workflow and protect its expected behavior from regressions."""
     def test_preferences_requires_login(self):
+        """Verify that preferences requires login."""
         self.assert_login_required(reverse("preferences"))
 
     def test_preferences_get_creates_default_record(self):
+        """Verify that preferences get creates default record."""
         user = self.make_user(username="prefsuser")
         self.login(user)
 
@@ -310,6 +337,7 @@ class PreferencesViewTests(AccountsViewTestCase):
         self.assertTemplateUsed(response, "accounts/preferences.html")
 
     def test_preferences_get_uses_existing_record(self):
+        """Verify that preferences get uses existing record."""
         user = self.make_user(username="prefsuser")
         preference = UserPreference.objects.create(
             user=user,
@@ -325,6 +353,7 @@ class PreferencesViewTests(AccountsViewTestCase):
         self.assertEqual(response.context["form"].initial["theme"], UserPreference.Theme.DARK)
 
     def test_valid_preferences_post_updates_record(self):
+        """Verify that valid preferences post updates record."""
         user = self.make_user(username="prefsuser")
         self.login(user)
 
@@ -344,6 +373,7 @@ class PreferencesViewTests(AccountsViewTestCase):
         self.assertIn("Preferences saved.", self.messages_for(response))
 
     def test_invalid_preferences_post_keeps_existing_values(self):
+        """Verify that invalid preferences post keeps existing values."""
         user = self.make_user(username="prefsuser")
         preference = UserPreference.objects.create(
             user=user,
