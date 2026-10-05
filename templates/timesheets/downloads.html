@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Timesheet Downloads</h1>
+    <p class="text-muted mb-0">
+      Filter and download multiple timesheets at once.
+    </p>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label for="start_date" class="form-label">Start Date</label>
+        <input
+          type="date"
+          class="form-control"
+          id="start_date"
+          name="start_date"
+          value="{{ start_date }}"
+        >
+      </div>
+
+      <div class="col-md-4">
+        <label for="end_date" class="form-label">End Date</label>
+        <input
+          type="date"
+          class="form-control"
+          id="end_date"
+          name="end_date"
+          value="{{ end_date }}"
+        >
+      </div>
+
+      <div class="col-md-4">
+        <button type="submit" class="btn btn-primary">
+          Filter
+        </button>
+
+        <a href="{% url 'timesheet_downloads' %}" class="btn btn-outline-secondary">
+          Clear
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form
+  method="post"
+  action="{% url 'timesheet_batch_download' %}"
+  id="batch-download-form"
+>
+  {% csrf_token %}
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="text-muted">
+      {{ timesheets|length }} timesheet{{ timesheets|length|pluralize }}
+    </div>
+
+    <button
+      type="submit"
+      class="btn btn-primary"
+      id="download-selected"
+      disabled
+    >
+      <i class="bi bi-download me-1"></i>
+      Download Selected
+    </button>
+  </div>
+
+  <div class="card shadow-sm border-0 rounded-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 50px;" class="text-center">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="select-all"
+                aria-label="Select all timesheets"
+              >
+            </th>
+
+            <th>Week</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th class="text-end">Hours</th>
+            <th class="text-end">Format</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for ts in timesheets %}
+            <tr>
+              <td class="text-center">
+                <input
+                  class="form-check-input timesheet-checkbox"
+                  type="checkbox"
+                  name="timesheet_ids"
+                  value="{{ ts.pk }}"
+                  aria-label="Select timesheet for week of {{ ts.week_start }}"
+                >
+              </td>
+
+              <td>
+                <a
+                  href="{{ ts.get_absolute_url }}"
+                  class="text-decoration-none fw-semibold"
+                >
+                  {{ ts.week_start }}
+                </a>
+              </td>
+
+              <td>
+                <span class="badge text-bg-secondary">
+                  {{ ts.get_status_display }}
+                </span>
+              </td>
+
+              <td>
+                {{ ts.submitted_at|default:"—" }}
+              </td>
+
+              <td class="text-end">
+                {{ ts.total_hours|floatformat:2 }}
+              </td>
+
+              <td class="text-end">
+                <span
+                  class="badge text-bg-light border"
+                  {% if not ts.can_export_excel %}
+                    title="Excel is omitted because this timesheet exceeds the Excel template row limit. The ZIP still includes the PDF and receipts PDF."
+                  {% endif %}
+                >
+                  ZIP
+                </span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="text-center p-4 text-muted">
+                No timesheets found for this date range.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const selectAll = document.getElementById("select-all");
+
+    const checkboxes = Array.from(
+      document.querySelectorAll(".timesheet-checkbox")
+    );
+
+    const downloadButton = document.getElementById("download-selected");
+    const downloadForm = document.getElementById("batch-download-form");
+
+    function updateControls() {
+      const selectedCount = checkboxes.filter(function (checkbox) {
+        return checkbox.checked;
+      }).length;
+
+      downloadButton.disabled = selectedCount === 0;
+
+      if (selectedCount === 0) {
+        downloadButton.innerHTML =
+          '<i class="bi bi-download me-1"></i>Download Selected';
+      } else {
+        downloadButton.innerHTML =
+          '<i class="bi bi-download me-1"></i>Download Selected (' +
+          selectedCount +
+          ')';
+      }
+
+      if (!selectAll) {
+        return;
+      }
+
+      selectAll.checked =
+        checkboxes.length > 0 &&
+        selectedCount === checkboxes.length;
+
+      selectAll.indeterminate =
+        selectedCount > 0 &&
+        selectedCount < checkboxes.length;
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        checkboxes.forEach(function (checkbox) {
+          checkbox.checked = selectAll.checked;
+        });
+
+        updateControls();
+      });
+    }
+
+    checkboxes.forEach(function (checkbox) {
+      checkbox.addEventListener("change", updateControls);
+    });
+
+    downloadForm.addEventListener("submit", function (event) {
+      const selectedCount = checkboxes.filter(function (checkbox) {
+        return checkbox.checked;
+      }).length;
+
+      if (selectedCount === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      /*
+       * Allow the browser to perform the POST normally.
+       *
+       * The dedicated batch-download endpoint returns an
+       * application/zip attachment, so we do not need fetch(),
+       * Blob URLs, or synthetic download links.
+       */
+      downloadButton.disabled = true;
+
+      downloadButton.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' +
+        'Preparing ZIP...';
+
+      /*
+       * A file attachment does not navigate away from this page.
+       * Restore the button after the request has had time to start.
+       */
+      window.setTimeout(function () {
+        updateControls();
+      }, 1500);
+    });
+
+    updateControls();
+  });
+</script>
+{% endblock %}

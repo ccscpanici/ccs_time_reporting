@@ -261,8 +261,8 @@ class TimesheetApprovalTests(TimesheetViewTestBase):
         send_email.assert_called_once()
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
-    def test_management_staff_can_mark_approved_timesheet_invoiced(self):
-        timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
+    def test_management_staff_can_mark_exported_timesheet_invoiced(self):
+        timesheet = self.make_timesheet(status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS)
         self.client.force_login(self.management_user)
 
         response = self.client.post(reverse("timesheet_mark_invoiced", args=[timesheet.pk]))

@@ -14,4 +14,5 @@ urlpatterns = [
     path('timesheets/', include('timesheets.urls')),
     path('reports/', include('reports.urls')), 
     path('jobgrid/', include('jobgrid.urls')),
+    path('absence/', include('absence.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-7">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h1 class="h3 mb-1">Import PTO Report</h1>
+        <div class="text-body-secondary">
+          Upload the CCS Paid Time Off List PDF. Nothing is changed until the preview is confirmed.
+        </div>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'pto_import_list' %}">Back</a>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="card shadow-sm">
+      {% csrf_token %}
+      <div class="card-body">
+        <label class="form-label" for="{{ form.source_file.id_for_label }}">
+          {{ form.source_file.label }}
+        </label>
+        {{ form.source_file }}
+        {{ form.source_file.errors }}
+        <div class="form-text">
+          The importer reads Employee, Sick Available, Sick Used, Vacation Available (stored as Vacation Accrual), and Vacation Used.
+        </div>
+      </div>
+      <div class="card-footer text-end">
+        <button class="btn btn-primary" type="submit">Upload and Preview</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

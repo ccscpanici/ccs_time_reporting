@@ -162,32 +162,91 @@ class MarkOldTimesheetsInvoicedCommandTests(AppTestCase):
         self.actor = make_user(username="cpanici")
         self.employee = make_user(username="employee")
 
-    def test_marks_only_old_approved_non_deleted_timesheets(self):
-        today = timezone.localdate()
-        old = make_timesheet(employee=self.employee, week_start=today - timedelta(days=30), status=Timesheet.Status.APPROVED)
-        recent = make_timesheet(employee=self.employee, week_start=today - timedelta(days=7), status=Timesheet.Status.APPROVED)
-        deleted = make_timesheet(employee=make_user(username="deleted"), week_start=today - timedelta(days=30), status=Timesheet.Status.APPROVED, deleted_at=timezone.now())
+    def test_marks_only_old_exported_non_deleted_timesheets(self):
+        now = timezone.now()
+
+        old_exported = make_timesheet(
+            employee=self.employee,
+            week_start=timezone.localdate() - timedelta(days=30),
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=now - timedelta(days=30),
+        )
+        recent_exported = make_timesheet(
+            employee=make_user(username="recent"),
+            week_start=timezone.localdate() - timedelta(days=30),
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=now - timedelta(days=7),
+        )
+        old_approved = make_timesheet(
+            employee=make_user(username="approved"),
+            week_start=timezone.localdate() - timedelta(days=30),
+            status=Timesheet.Status.APPROVED,
+        )
+        deleted = make_timesheet(
+            employee=make_user(username="deleted"),
+            week_start=timezone.localdate() - timedelta(days=30),
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=now - timedelta(days=30),
+            deleted_at=now,
+        )
         out = StringIO()
 
-        call_command("mark_old_timesheets_invoiced", days=14, username="cpanici", stdout=out)
+        call_command(
+            "mark_old_timesheets_invoiced",
+            days=14,
+            username="cpanici",
+            stdout=out,
+        )
 
-        old.refresh_from_db(); recent.refresh_from_db(); deleted.refresh_from_db()
-        self.assertEqual(old.status, Timesheet.Status.INVOICED)
-        self.assertEqual(old.invoiced_by, self.actor)
-        self.assertEqual(recent.status, Timesheet.Status.APPROVED)
-        self.assertEqual(deleted.status, Timesheet.Status.APPROVED)
+        old_exported.refresh_from_db()
+        recent_exported.refresh_from_db()
+        old_approved.refresh_from_db()
+        deleted.refresh_from_db()
+
+        self.assertEqual(old_exported.status, Timesheet.Status.INVOICED)
+        self.assertEqual(old_exported.invoiced_by, self.actor)
+        self.assertIsNotNone(old_exported.invoiced_at)
+        self.assertEqual(
+            recent_exported.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
+        self.assertEqual(old_approved.status, Timesheet.Status.APPROVED)
+        self.assertEqual(
+            deleted.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
         self.assertIn("Marked 1 timesheets", out.getvalue())
 
     def test_dry_run_and_missing_user_make_no_changes(self):
-        old = make_timesheet(employee=self.employee, week_start=timezone.localdate() - timedelta(days=30), status=Timesheet.Status.APPROVED)
+        old = make_timesheet(
+            employee=self.employee,
+            week_start=timezone.localdate() - timedelta(days=30),
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=timezone.now() - timedelta(days=30),
+        )
         out = StringIO()
-        call_command("mark_old_timesheets_invoiced", days=14, username="cpanici", dry_run=True, stdout=out)
+
+        call_command(
+            "mark_old_timesheets_invoiced",
+            days=14,
+            username="cpanici",
+            dry_run=True,
+            stdout=out,
+        )
+
         old.refresh_from_db()
-        self.assertEqual(old.status, Timesheet.Status.APPROVED)
+        self.assertEqual(
+            old.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
         self.assertIn("No changes made", out.getvalue())
 
         err = StringIO()
-        call_command("mark_old_timesheets_invoiced", username="missing", stderr=err)
+        call_command(
+            "mark_old_timesheets_invoiced",
+            username="missing",
+            stderr=err,
+        )
         self.assertIn("User not found", err.getvalue())
 
 

@@ -33,7 +33,7 @@
       <button class="btn btn-outline-warning" disabled>
         Reopen Request Pending
       </button>
-    {% elif timesheet.status == "submitted" or timesheet.status == "approved" or timesheet.status == "invoiced" %}
+    {% elif timesheet.status == "submitted" or timesheet.status == "approved" or timesheet.status == "exported_to_quickbooks" or timesheet.status == "invoiced" %}
       <a class="btn btn-outline-warning"
         href="{% url 'timesheet_reopen_request' timesheet.pk %}">
         Request Reopen
@@ -46,7 +46,15 @@
       </form>
       <a class="btn btn-outline-danger" href="{% url 'timesheet_reject' timesheet.pk %}">Reject</a>
     {% endif %}
-    {% if is_management_staff and timesheet.status == timesheet.Status.APPROVED %}
+    {% if is_business_admin and timesheet.status == timesheet.Status.APPROVED %}
+      <form method="post" action="{% url 'timesheet_mark_exported_to_quickbooks' timesheet.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-primary">
+          Mark Exported to QuickBooks
+        </button>
+      </form>
+    {% endif %}
+    {% if is_management_staff and timesheet.status == timesheet.Status.EXPORTED_TO_QUICKBOOKS %}
       <form method="post" action="{% url 'timesheet_mark_invoiced' timesheet.pk %}" class="d-inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-info">Mark Invoiced</button>
@@ -92,11 +100,36 @@
   {% if timesheet.reopened_at %}<br><span class="small text-muted">Reopened {{ timesheet.reopened_at }} by {{ timesheet.reopened_by }}</span>{% endif %}
 </div>
 {% endif %}
-{% if timesheet.approved_at or timesheet.invoiced_at %}
+{% if timesheet.approved_at or timesheet.quickbooks_exported_at or timesheet.invoiced_at %}
 <div class="card border-0 shadow-sm rounded-4 mb-4">
   <div class="card-body py-3">
-    {% if timesheet.approved_at %}<div><strong>Approved:</strong> {{ timesheet.approved_at }}{% if timesheet.approved_by %} by {{ timesheet.approved_by }}{% endif %}</div>{% endif %}
-    {% if timesheet.invoiced_at %}<div><strong>Invoiced:</strong> {{ timesheet.invoiced_at }}{% if timesheet.invoiced_by %} by {{ timesheet.invoiced_by }}{% endif %}</div>{% endif %}
+    {% if timesheet.approved_at %}
+      <div>
+        <strong>Approved:</strong>
+        {{ timesheet.approved_at|date:"m/d/Y g:i A" }}
+        {% if timesheet.approved_by %}
+          by {{ timesheet.approved_by.get_full_name|default:timesheet.approved_by.username }}
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if timesheet.quickbooks_exported_at %}
+      <div>
+        <strong>Exported to QuickBooks:</strong>
+        {{ timesheet.quickbooks_exported_at|date:"m/d/Y g:i A" }}
+        {% if timesheet.quickbooks_exported_by %}
+          by {{ timesheet.quickbooks_exported_by.get_full_name|default:timesheet.quickbooks_exported_by.username }}
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if timesheet.invoiced_at %}
+      <div>
+        <strong>Invoiced:</strong>
+        {{ timesheet.invoiced_at|date:"m/d/Y g:i A" }}
+        {% if timesheet.invoiced_by %}
+          by {{ timesheet.invoiced_by.get_full_name|default:timesheet.invoiced_by.username }}
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}

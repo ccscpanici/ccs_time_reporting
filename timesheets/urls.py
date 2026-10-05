@@ -3,6 +3,9 @@ from . import views
 
 urlpatterns = [
     path("", views.timesheet_list, name="timesheet_list"),
+    path("downloads/", views.timesheet_downloads, name="timesheet_downloads"),
+    path("downloads/batch/", views.timesheet_batch_download, name="timesheet_batch_download"),
+    path("downloads/file/", views.timesheet_batch_download_file, name="timesheet_batch_download_file"),
     path("create/", views.timesheet_create, name="timesheet_create"),
     path("autosave/", views.timesheet_autosave, name="timesheet_autosave"),
     path("today/", views.timesheet_today, name="timesheet_today"),
@@ -14,6 +17,7 @@ urlpatterns = [
     path("bulk-upload/<int:job_pk>/", views.timesheet_bulk_zip_upload_status, name="timesheet_bulk_zip_upload_status"),
     path("bulk-upload/<int:job_pk>/api/", views.timesheet_bulk_zip_upload_status_api, name="timesheet_bulk_zip_upload_status_api"),
     path("approvals/", views.timesheet_approvals, name="timesheet_approvals"),
+    path("quickbooks/", views.quickbooks_timesheets, name="quickbooks_timesheets"),
     path("active-projects/", views.active_project_list, name="active_project_list"),
     path("active-projects/create/", views.active_project_create, name="active_project_create"),
     path("active-projects/<int:pk>/edit/", views.active_project_edit, name="active_project_edit"),
@@ -48,6 +52,7 @@ urlpatterns = [
     path("reopen-requests/<int:pk>/reject/", views.reopen_request_reject, name="reopen_request_reject"),
     path("<int:pk>/approve/", views.timesheet_approve, name="timesheet_approve"),
     path("<int:pk>/reject/", views.timesheet_reject, name="timesheet_reject"),
+    path("<int:pk>/mark-exported-to-quickbooks/", views.timesheet_mark_exported_to_quickbooks, name="timesheet_mark_exported_to_quickbooks"),
     path("<int:pk>/mark-invoiced/", views.timesheet_mark_invoiced, name="timesheet_mark_invoiced"),
     path("<int:pk>/delete/", views.timesheet_delete, name="timesheet_delete"),
 ]

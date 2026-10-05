@@ -7,10 +7,13 @@ from datetime import date, timedelta
 from pathlib import Path
 from django.contrib import messages
 from django.core.files import File
+from django.core import signing
+from django.core.signing import BadSignature, SignatureExpired
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
@@ -24,18 +27,19 @@ from .services.job_importer import apply_job_import, preview_job_import
 from .services.email_queue import queue_email_job
 from .services.receipts_pdf import build_receipts_pdf_bytes, receipts_pdf_filename
 from .services.submission import create_timesheet_artifact, submit_timesheet
-from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
-from .services.exporter import TEMPLATE_PATH, _write_employee_header
+from .services.status import approve_timesheet, mark_timesheet_exported_to_quickbooks, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
+from .services.exporter import TEMPLATE_PATH, _write_employee_header, build_submission_attachment
 from openpyxl import load_workbook
 from io import BytesIO
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-from .permissions import can_approve_timesheet, can_view_timesheet, is_management_staff, is_project_manager
-from django.views.decorators.http import require_POST
+from .permissions import can_approve_timesheet, can_view_timesheet, is_business_admin, is_management_staff, is_project_manager
+from django.views.decorators.http import require_POST, require_http_methods
 from timesheets.services.history import build_timesheet_history
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 
 def _job_number_sort_key(job):
     """Return a numeric-aware sort key for CCS job numbers.
@@ -309,6 +313,49 @@ def _timesheet_download_initials(timesheet):
 def _timesheet_download_base_filename(timesheet):
     return f"{timesheet.week_start:%Y%m%d}_{_timesheet_download_initials(timesheet)}"
 
+
+def _build_timesheet_package_bytes(timesheet):
+    """Build the standard ZIP package for a timesheet without saving artifacts.
+
+    Normal timesheets include Excel, PDF, and a separate receipts PDF. If the
+    timesheet exceeds the Excel template row limit, the ZIP still downloads and
+    contains the PDF and receipts PDF.
+    """
+    base_filename = _timesheet_download_base_filename(timesheet)
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        if timesheet.can_export_excel:
+            excel_path = Path(
+                build_submission_attachment(
+                    timesheet,
+                    Timesheet.ExportFormat.EXCEL,
+                )
+            )
+            zip_file.writestr(
+                f"{base_filename}.xlsx",
+                excel_path.read_bytes(),
+            )
+
+        pdf_path = Path(
+            build_submission_attachment(
+                timesheet,
+                Timesheet.ExportFormat.PDF,
+            )
+        )
+        zip_file.writestr(
+            f"{base_filename}.pdf",
+            pdf_path.read_bytes(),
+        )
+
+        receipts_pdf_bytes = build_receipts_pdf_bytes(timesheet)
+        zip_file.writestr(
+            f"{base_filename}_Receipts.pdf",
+            receipts_pdf_bytes,
+        )
+
+    return zip_buffer.getvalue()
+
 def attachment_response(artifact):
     """Return a saved submission artifact as a real browser download."""
 
@@ -388,6 +435,174 @@ def timesheet_list(request):
         "timesheets": page_obj,
         "page_obj": page_obj,
     })
+
+@login_required
+def timesheet_downloads(request):
+    """List and filter the current user's timesheets for batch download."""
+    timesheets = (
+        Timesheet.objects.filter(
+            employee=request.user,
+            deleted_at__isnull=True,
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(
+                            max_digits=8,
+                            decimal_places=2,
+                        ),
+                    )
+                ),
+                0,
+                output_field=DecimalField(
+                    max_digits=8,
+                    decimal_places=2,
+                ),
+            )
+        )
+        .order_by("-week_start", "-created_at")
+    )
+
+    start_date = (request.GET.get("start_date") or "").strip()
+    end_date = (request.GET.get("end_date") or "").strip()
+
+    if start_date:
+        try:
+            start_date_value = date.fromisoformat(start_date)
+            timesheets = timesheets.filter(week_start__gte=start_date_value)
+        except ValueError:
+            messages.error(request, "Invalid start date.")
+            start_date = ""
+
+    if end_date:
+        try:
+            end_date_value = date.fromisoformat(end_date)
+            timesheets = timesheets.filter(week_start__lte=end_date_value)
+        except ValueError:
+            messages.error(request, "Invalid end date.")
+            end_date = ""
+
+    return render(
+        request,
+        "timesheets/downloads.html",
+        {
+            "timesheets": timesheets,
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+    )
+
+
+@login_required
+@require_POST
+def timesheet_batch_download(request):
+    """Validate a batch selection and redirect to a short-lived GET download URL."""
+    selected_ids = request.POST.getlist("timesheet_ids")
+    if not selected_ids:
+        messages.error(request, "Select at least one timesheet to download.")
+        return redirect("timesheet_downloads")
+
+    selected_timesheets = list(
+        Timesheet.objects.filter(
+            employee=request.user,
+            deleted_at__isnull=True,
+            pk__in=selected_ids,
+        )
+        .select_related("employee")
+        .order_by("week_start", "pk")
+    )
+
+    if not selected_timesheets:
+        messages.error(request, "No valid timesheets were selected.")
+        return redirect("timesheet_downloads")
+
+    payload = {
+        "user_id": request.user.pk,
+        "timesheet_ids": [timesheet.pk for timesheet in selected_timesheets],
+    }
+    token = signing.dumps(
+        payload,
+        salt="timesheets.batch-download",
+        compress=True,
+    )
+
+    download_url = reverse("timesheet_batch_download_file")
+    return redirect(f"{download_url}?{urlencode({'token': token})}")
+
+
+@login_required
+@require_http_methods(["GET", "HEAD"])
+def timesheet_batch_download_file(request):
+    """Return a batch ZIP from a short-lived, user-bound signed download token."""
+    token = (request.GET.get("token") or "").strip()
+    if not token:
+        raise Http404("Download token is missing.")
+
+    try:
+        payload = signing.loads(
+            token,
+            salt="timesheets.batch-download",
+            max_age=600,
+        )
+    except (BadSignature, SignatureExpired):
+        raise Http404("Download link is invalid or has expired.")
+
+    if payload.get("user_id") != request.user.pk:
+        raise Http404("Download link is not valid for this user.")
+
+    selected_ids = payload.get("timesheet_ids") or []
+    if not selected_ids:
+        raise Http404("No timesheets were selected.")
+
+    selected_timesheets = list(
+        Timesheet.objects.filter(
+            employee=request.user,
+            deleted_at__isnull=True,
+            pk__in=selected_ids,
+        )
+        .select_related("employee")
+        .order_by("week_start", "pk")
+    )
+
+    # Every ID in the signed selection must still belong to the current user
+    # and still be available. Do not silently return a partial archive.
+    if len(selected_timesheets) != len(set(selected_ids)):
+        raise Http404("One or more selected timesheets are no longer available.")
+
+    outer_buffer = BytesIO()
+
+    try:
+        with zipfile.ZipFile(outer_buffer, "w", zipfile.ZIP_DEFLATED) as outer_zip:
+            for timesheet in selected_timesheets:
+                package_bytes = _build_timesheet_package_bytes(timesheet)
+                package_name = f"{_timesheet_download_base_filename(timesheet)}.zip"
+                outer_zip.writestr(package_name, package_bytes)
+    except Exception as exc:
+        return HttpResponse(
+            f"Timesheet download failed: {exc}",
+            status=500,
+            content_type="text/plain; charset=utf-8",
+        )
+
+    first_week = selected_timesheets[0].week_start
+    last_week = selected_timesheets[-1].week_start
+
+    if first_week == last_week:
+        filename = f"Timesheets_{first_week:%Y%m%d}.zip"
+    else:
+        filename = f"Timesheets_{first_week:%Y%m%d}_{last_week:%Y%m%d}.zip"
+
+    zip_bytes = outer_buffer.getvalue()
+    response = HttpResponse(zip_bytes, content_type="application/zip")
+    response["Content-Length"] = str(len(zip_bytes))
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 @login_required
 def timesheet_create(request):
@@ -1668,41 +1883,13 @@ def timesheet_artifact_download(request, artifact_pk):
 def timesheet_package_download(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
 
-    if not timesheet.can_export_excel:
-        messages.error(
-            request,
-            "Package download requires Excel export, but this timesheet has more than 5 entries on at least one date. Please download the PDF instead.",
-        )
-        return redirect("timesheet_submitted", pk=timesheet.pk)
-
     try:
-        excel_artifact = create_timesheet_artifact(
-            timesheet=timesheet,
-            created_by=request.user,
-            export_format=Timesheet.ExportFormat.EXCEL,
-            submitted=False,
-        )
-        pdf_artifact = create_timesheet_artifact(
-            timesheet=timesheet,
-            created_by=request.user,
-            export_format=Timesheet.ExportFormat.PDF,
-            submitted=False,
-        )
-        receipts_pdf_bytes = build_receipts_pdf_bytes(timesheet)
+        zip_bytes = _build_timesheet_package_bytes(timesheet)
     except Exception as exc:
         messages.error(request, f"Package download failed: {exc}")
         return redirect("timesheet_submitted", pk=timesheet.pk)
 
     base_filename = _timesheet_download_base_filename(timesheet)
-    zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        with excel_artifact.file.open("rb") as excel_file:
-            zip_file.writestr(f"{base_filename}.xlsx", excel_file.read())
-        with pdf_artifact.file.open("rb") as pdf_file:
-            zip_file.writestr(f"{base_filename}.pdf", pdf_file.read())
-        zip_file.writestr(f"{base_filename}_Receipts.pdf", receipts_pdf_bytes)
-
-    zip_bytes = zip_buffer.getvalue()
     response = HttpResponse(zip_bytes, content_type="application/zip")
     response["Content-Length"] = str(len(zip_bytes))
     response["Content-Disposition"] = f'attachment; filename="{base_filename}.zip"'
@@ -1829,6 +2016,89 @@ def timesheet_approvals(request):
 
     return render(request, "timesheets/approvals.html", {"timesheets": timesheets})
 
+@login_required
+def quickbooks_timesheets(request):
+    if not is_business_admin(request.user):
+        messages.error(
+            request,
+            "Only Business Admin users can view the QuickBooks export queue.",
+        )
+        return redirect("timesheet_list")
+
+    awaiting_export = (
+        Timesheet.objects.filter(
+            status=Timesheet.Status.APPROVED,
+            deleted_at__isnull=True,
+        )
+        .select_related(
+            "employee",
+            "approved_by",
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(
+                            max_digits=8,
+                            decimal_places=2,
+                        ),
+                    )
+                ),
+                0,
+                output_field=DecimalField(
+                    max_digits=8,
+                    decimal_places=2,
+                ),
+            )
+        )
+        .order_by("approved_at", "week_start")
+    )
+
+    recently_exported = (
+        Timesheet.objects.filter(
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            deleted_at__isnull=True,
+        )
+        .select_related(
+            "employee",
+            "approved_by",
+            "quickbooks_exported_by",
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(
+                            max_digits=8,
+                            decimal_places=2,
+                        ),
+                    )
+                ),
+                0,
+                output_field=DecimalField(
+                    max_digits=8,
+                    decimal_places=2,
+                ),
+            )
+        )
+        .order_by("-quickbooks_exported_at", "-week_start")[:50]
+    )
+
+    return render(
+        request,
+        "timesheets/quickbooks.html",
+        {
+            "awaiting_export": awaiting_export,
+            "recently_exported": recently_exported,
+        },
+    )
+
 
 
 @login_required
@@ -1874,6 +2144,7 @@ def timesheet_reopen_request(request, pk):
     allowed = {
         Timesheet.Status.SUBMITTED,
         Timesheet.Status.APPROVED,
+        Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
         Timesheet.Status.INVOICED,
     }
 
@@ -2139,6 +2410,28 @@ def timesheet_reject(request, pk):
 
     return render(request, "timesheets/reject.html", {"timesheet": timesheet, "form": form})
 
+@login_required
+def timesheet_mark_exported_to_quickbooks(request, pk):
+    if not is_business_admin(request.user):
+        messages.error(
+            request,
+            "Only Business Admin users can mark timesheets exported to QuickBooks.",
+        )
+        return redirect("timesheet_list")
+
+    timesheet = get_timesheet_for_request_user(request, pk)
+
+    if request.method != "POST":
+        return redirect(timesheet)
+
+    try:
+        mark_timesheet_exported_to_quickbooks(timesheet, request.user)
+    except Exception as exc:
+        messages.error(request, f"QuickBooks export status update failed: {exc}")
+    else:
+        messages.success(request, "Timesheet marked exported to QuickBooks.")
+
+    return redirect(timesheet)
 
 @login_required
 def timesheet_mark_invoiced(request, pk):

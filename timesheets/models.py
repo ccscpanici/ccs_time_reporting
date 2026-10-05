@@ -372,6 +372,7 @@ class Timesheet(models.Model):
         SUBMITTED = "submitted", "Submitted"
         REOPENED = "reopened", "Reopened"
         APPROVED = "approved", "Approved"
+        EXPORTED_TO_QUICKBOOKS = "exported_to_quickbooks", "Exported to QuickBooks"
         INVOICED = "invoiced", "Invoiced"
         REJECTED = "rejected", "Rejected"
         VOID = "void", "Voided"
@@ -390,7 +391,7 @@ class Timesheet(models.Model):
     # Snapshot of the yearly overnight reimbursement rate used for this timesheet.
     overnight_rate = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("50.00"))
 
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -443,6 +444,15 @@ class Timesheet(models.Model):
         related_name="invoiced_timesheets",
     )
 
+    quickbooks_exported_at = models.DateTimeField(null=True, blank=True)
+    quickbooks_exported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="quickbooks_exported_timesheets",
+    )
+
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -480,7 +490,7 @@ class Timesheet(models.Model):
 
     @property
     def is_locked(self):
-        return self.deleted_at is not None or self.status in {self.Status.SUBMITTED, self.Status.APPROVED, self.Status.INVOICED, self.Status.VOID}
+        return self.deleted_at is not None or self.status in {self.Status.SUBMITTED, self.Status.APPROVED, self.Status.EXPORTED_TO_QUICKBOOKS, self.Status.INVOICED, self.Status.VOID}
 
     @property
     def week_dates(self):

@@ -4,7 +4,7 @@ import zipfile
 from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -376,20 +376,40 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
         )
 
     @patch("timesheets.views.build_receipts_pdf_bytes", return_value=b"%PDF-receipts")
-    @patch("timesheets.views.create_timesheet_artifact")
-    def test_package_download_contains_excel_pdf_and_receipts(self, create_artifact, build_receipts):
+    @patch("timesheets.views.build_submission_attachment")
+    def test_package_download_contains_excel_pdf_and_receipts(
+        self,
+        build_submission_attachment,
+        build_receipts,
+    ):
         timesheet = self.make_timesheet()
-        excel_artifact = self.make_artifact(timesheet, suffix="xlsx", content=b"excel-content")
-        pdf_artifact = self.make_artifact(timesheet, suffix="pdf", content=b"%PDF-content")
-        create_artifact.side_effect = [excel_artifact, pdf_artifact]
+
+        excel_path = Path(tempfile.gettempdir()) / "package.xlsx"
+        excel_path.write_bytes(b"excel-content")
+
+        pdf_path = Path(tempfile.gettempdir()) / "package.pdf"
+        pdf_path.write_bytes(b"%PDF-content")
+
+        build_submission_attachment.side_effect = [
+            excel_path,
+            pdf_path,
+        ]
+
         self.client.force_login(self.employee)
 
-        response = self.client.get(reverse("timesheet_package_download", args=[timesheet.pk]))
+        response = self.client.get(
+            reverse("timesheet_package_download", args=[timesheet.pk])
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/zip")
-        self.assertIn('filename="20260802_EE.zip"', response["Content-Disposition"])
+        self.assertIn(
+            'filename="20260802_EE.zip"',
+            response["Content-Disposition"],
+        )
+
         archive = zipfile.ZipFile(BytesIO(response.content))
+
         self.assertEqual(
             set(archive.namelist()),
             {
@@ -398,19 +418,73 @@ class ExportDownloadViewTests(TimesheetExportTestBase):
                 "20260802_EE_Receipts.pdf",
             },
         )
-        self.assertEqual(archive.read("20260802_EE.xlsx"), b"excel-content")
-        self.assertEqual(archive.read("20260802_EE.pdf"), b"%PDF-content")
-        self.assertEqual(archive.read("20260802_EE_Receipts.pdf"), b"%PDF-receipts")
+        self.assertEqual(
+            archive.read("20260802_EE.xlsx"),
+            b"excel-content",
+        )
+        self.assertEqual(
+            archive.read("20260802_EE.pdf"),
+            b"%PDF-content",
+        )
+        self.assertEqual(
+            archive.read("20260802_EE_Receipts.pdf"),
+            b"%PDF-receipts",
+        )
+
+        self.assertEqual(
+            build_submission_attachment.call_args_list,
+            [
+                call(timesheet, Timesheet.ExportFormat.EXCEL),
+                call(timesheet, Timesheet.ExportFormat.PDF),
+            ],
+        )
         build_receipts.assert_called_once_with(timesheet)
 
-    @patch("timesheets.views.create_timesheet_artifact")
-    def test_package_download_rejects_excel_overflow(self, create_artifact):
+    @patch("timesheets.views.build_receipts_pdf_bytes", return_value=b"%PDF-receipts")
+    @patch("timesheets.views.build_submission_attachment")
+    def test_package_download_excel_overflow_contains_pdf_and_receipts(
+        self,
+        build_submission_attachment,
+        build_receipts,
+    ):
         timesheet = self.make_timesheet()
+
         for row_order in range(1, 7):
             self.make_entry(timesheet, row_order=row_order)
+
+        pdf_path = Path(tempfile.gettempdir()) / "package.pdf"
+        pdf_path.write_bytes(b"%PDF-content")
+        build_submission_attachment.return_value = pdf_path
+
         self.client.force_login(self.employee)
 
-        response = self.client.get(reverse("timesheet_package_download", args=[timesheet.pk]))
+        response = self.client.get(
+            reverse("timesheet_package_download", args=[timesheet.pk])
+        )
 
-        self.assertRedirects(response, reverse("timesheet_submitted", args=[timesheet.pk]))
-        create_artifact.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+
+        archive = zipfile.ZipFile(BytesIO(response.content))
+
+        self.assertEqual(
+            set(archive.namelist()),
+            {
+                "20260802_EE.pdf",
+                "20260802_EE_Receipts.pdf",
+            },
+        )
+        self.assertEqual(
+            archive.read("20260802_EE.pdf"),
+            b"%PDF-content",
+        )
+        self.assertEqual(
+            archive.read("20260802_EE_Receipts.pdf"),
+            b"%PDF-receipts",
+        )
+
+        build_submission_attachment.assert_called_once_with(
+            timesheet,
+            Timesheet.ExportFormat.PDF,
+        )
+        build_receipts.assert_called_once_with(timesheet)

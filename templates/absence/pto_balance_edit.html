@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load absence_tags %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-8">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h1 class="h3 mb-1">Edit PTO Balance</h1>
+        <div class="text-body-secondary">
+          {{ employee.get_full_name|default:employee.username }}
+        </div>
+      </div>
+      <a class="btn btn-outline-secondary" href="{% url 'pto_balance_list' %}">Back</a>
+    </div>
+
+    <div class="alert alert-light border small">
+      Vacation balance is calculated automatically as annual vacation entitlement minus Vacation Used.
+      Vacation Accrual and sick values mirror the payroll report and are informational.
+    </div>
+
+    <form method="post" class="card shadow-sm">
+      {% csrf_token %}
+      <div class="card-body">
+        <div class="row g-3">
+          {% for field in form %}
+            <div class="{% if field.name == 'note' %}col-12{% else %}col-md-6{% endif %}">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+              {{ field.errors }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer text-end">
+        <button class="btn btn-primary" type="submit">Save PTO Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -57,6 +57,15 @@ def seed_management_group(*, stdout=None):
     return created
 
 
+def seed_business_admin_group(*, stdout=None):
+    from django.contrib.auth.models import Group
+
+    _, created = Group.objects.get_or_create(name="Business Admin")
+    if stdout:
+        stdout.write("Business Admin group created." if created else "Business Admin group already exists.")
+    return created
+
+
 def seed_project_managers_group(*, stdout=None):
     from django.contrib.auth.models import Group
 

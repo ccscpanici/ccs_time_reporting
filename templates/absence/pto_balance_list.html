@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% load absence_tags %}
+
+{% block content %}
+<style>
+  .pto-balance-table {
+    font-size: 0.92rem;
+  }
+
+  .pto-balance-table th,
+  .pto-balance-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .pto-balance-table .employee-column {
+    min-width: 150px;
+    white-space: normal;
+  }
+
+  .pto-balance-table .group-heading {
+    text-align: center;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+
+  .pto-balance-table .hours-column {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pto-balance-table .balance-value {
+    font-weight: 600;
+  }
+
+  .pto-balance-table .annual-entitlement {
+    line-height: 1.15;
+  }
+
+  .pto-balance-table .annual-entitlement .hours {
+    font-size: 0.78rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .pto-help-text {
+    max-width: 900px;
+  }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1">PTO Balances</h1>
+    <div class="text-body-secondary">
+      Vacation balance is annual entitlement minus payroll vacation used.
+    </div>
+  </div>
+
+  {% if is_management_staff %}
+    <a class="btn btn-outline-primary" href="{% url 'pto_import_list' %}">
+      PTO Imports
+    </a>
+  {% endif %}
+</div>
+
+<div class="alert alert-light border small pto-help-text mb-3">
+  <strong>Accrual</strong> is the payroll report's <em>Vacation Available</em> value and is shown for reference.
+  <strong>Pending</strong> is approved vacation that has not yet aged out of the approval window.
+  <strong>Projected</strong> is the vacation balance after pending approvals are deducted.
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 pto-balance-table">
+      <thead>
+        <tr>
+          <th class="employee-column" rowspan="2">Employee</th>
+          <th class="group-heading border-start" colspan="6">Vacation</th>
+          <th class="group-heading border-start" colspan="2">Sick</th>
+          <th rowspan="2">As Of</th>
+          <th rowspan="2"></th>
+        </tr>
+        <tr>
+          <th class="border-start">Annual</th>
+          <th class="hours-column">Accrual</th>
+          <th class="hours-column">Used</th>
+          <th class="hours-column">Balance</th>
+          <th class="hours-column">Pending</th>
+          <th class="hours-column">Projected</th>
+          <th class="hours-column border-start">Available</th>
+          <th class="hours-column">Used</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="employee-column">
+              {{ row.employee.get_full_name|default:row.employee.username }}
+            </td>
+
+            <td class="border-start">
+              {% if row.account %}
+                <div class="annual-entitlement">
+                  <div>{{ row.account.vacation_weeks_per_year }} wk</div>
+                  <div class="hours">
+                    {{ row.summary.annual_entitlement_minutes|hhmm }}
+                  </div>
+                </div>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column">
+              {% if row.account %}
+                {{ row.summary.vacation_accrual_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column">
+              {% if row.account %}
+                {{ row.summary.vacation_used_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column balance-value">
+              {% if row.account %}
+                {{ row.summary.vacation_balance_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column">
+              {% if row.account %}
+                {{ row.summary.approved_vacation_pending_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column balance-value">
+              {% if row.account %}
+                {{ row.summary.projected_vacation_balance_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column border-start">
+              {% if row.account %}
+                {{ row.account.sick_available_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="hours-column">
+              {% if row.account %}
+                {{ row.account.sick_used_minutes|hhmm }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td>
+              {% if row.account and row.account.balance_as_of %}
+                {{ row.account.balance_as_of|date:"m/d/Y" }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="text-end">
+              <a
+                class="btn btn-sm btn-outline-primary"
+                href="{% url 'pto_balance_edit' row.employee.pk %}"
+              >
+                Edit
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="11" class="text-center text-body-secondary py-4">
+              No employees are assigned to you.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
