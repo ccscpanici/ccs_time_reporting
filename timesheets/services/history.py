@@ -71,10 +71,20 @@ def build_timesheet_history(timesheet):
 
     _add_event(
         events,
+        timestamp=getattr(timesheet, "quickbooks_exported_at", None),
+        title="Exported to QuickBooks",
+        icon="bi-box-arrow-up-right",
+        badge="info",
+        user=getattr(timesheet, "quickbooks_exported_by", None),
+    )
+
+    _add_event(
+        events,
         timestamp=getattr(timesheet, "invoiced_at", None),
         title="Invoiced",
         icon="bi-receipt",
         badge="dark",
+        user=getattr(timesheet, "invoiced_by", None),
     )
 
     #

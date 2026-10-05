@@ -8,14 +8,14 @@ from timesheets.models import Timesheet
 
 
 class Command(BaseCommand):
-    help = "Mark approved timesheets older than X days as invoiced."
+    help = "Mark timesheets exported to QuickBooks more than X days ago as invoiced."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--days",
             type=int,
             default=14,
-            help="Age in days before approved timesheets are marked invoiced.",
+            help="Age in days after export to QuickBooks before timesheets are marked invoiced.",
         )
 
         parser.add_argument(
@@ -36,7 +36,7 @@ class Command(BaseCommand):
         username = options["username"]
         dry_run = options["dry_run"]
 
-        cutoff = timezone.localdate() - timedelta(days=days)
+        cutoff = timezone.now() - timedelta(days=days)
 
         User = get_user_model()
 
@@ -49,15 +49,15 @@ class Command(BaseCommand):
             return
 
         qs = Timesheet.objects.filter(
-            status=Timesheet.Status.APPROVED,
-            week_start__lt=cutoff,
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at__lt=cutoff,
             deleted_at__isnull=True,
         )
 
         count = qs.count()
 
         self.stdout.write(
-            f"Found {count} approved timesheets older than {days} days."
+            f"Found {count} timesheets exported to QuickBooks more than {days} days ago."
         )
 
         if dry_run:

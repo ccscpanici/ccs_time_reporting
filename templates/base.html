@@ -57,13 +57,23 @@
                       Downloads
                     </a>
                   </li>
-	 	  {% if is_project_manager %}
-		  <li>
-		    <a class="dropdown-item" href="{% url 'timesheet_approvals' %}">
-		      Approvals
-		    </a>
-		  </li>
-		  {% endif %}
+                  {% if is_project_manager or is_business_admin %}
+                    <li><hr class="dropdown-divider"></li>
+                  {% endif %}
+                  {% if is_project_manager %}
+                    <li>
+                      <a class="dropdown-item" href="{% url 'timesheet_approvals' %}">
+                        Approvals
+                      </a>
+                    </li>
+                  {% endif %}
+                  {% if is_business_admin %}
+                    <li>
+                      <a class="dropdown-item" href="{% url 'quickbooks_timesheets' %}">
+                        QuickBooks Export
+                      </a>
+                    </li>
+                  {% endif %}
                 </ul>
               </li>
               <li class="nav-item dropdown px-3" style="border-right: 1px solid rgba(255,255,255,.65);">

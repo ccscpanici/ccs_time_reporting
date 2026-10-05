@@ -13,9 +13,10 @@ class TimesheetsConfig(AppConfig):
 def seed_defaults_after_migrate(sender, **kwargs):
     # Run after migrations so a fresh install has usable dropdown values right away.
     # This is idempotent, so repeated migrate calls are safe.
-    from timesheets.services.defaults import seed_management_group, seed_mileage_rates, seed_overnight_rates, seed_work_codes
+    from timesheets.services.defaults import seed_business_admin_group, seed_management_group, seed_mileage_rates, seed_overnight_rates, seed_work_codes
 
     seed_work_codes()
     seed_mileage_rates()
     seed_overnight_rates()
     seed_management_group()
+    seed_business_admin_group()

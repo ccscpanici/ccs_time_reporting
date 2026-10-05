@@ -6,6 +6,16 @@ def is_management_staff(user):
     )
 
 
+def is_business_admin(user):
+    return bool(
+        user.is_authenticated
+        and (
+            user.is_superuser
+            or user.groups.filter(name="Business Admin").exists()
+        )
+    )
+
+
 def is_project_manager(user):
     return bool(
         user.is_authenticated
@@ -31,6 +41,7 @@ def can_view_timesheet(user, timesheet):
     return bool(
         timesheet.employee_id == user.id
         or is_management_staff(user)
+        or is_business_admin(user)
         or is_assigned_project_manager(user, timesheet)
     )
 

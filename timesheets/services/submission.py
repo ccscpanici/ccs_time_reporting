@@ -45,7 +45,7 @@ def submit_timesheet(timesheet, submitted_by):
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be submitted.")
-    if timesheet.status in {Timesheet.Status.SUBMITTED, Timesheet.Status.APPROVED, Timesheet.Status.INVOICED, Timesheet.Status.VOID}:
+    if timesheet.status in {Timesheet.Status.SUBMITTED, Timesheet.Status.APPROVED, Timesheet.Status.EXPORTED_TO_QUICKBOOKS, Timesheet.Status.INVOICED, Timesheet.Status.VOID}:
         raise ValueError("Only draft, rejected, or reopened timesheets can be submitted.")
     if not timesheet.entries.exists():
         raise ValueError("Cannot submit an empty timesheet.")
@@ -54,9 +54,11 @@ def submit_timesheet(timesheet, submitted_by):
     timesheet.submitted_at = timezone.now()
     timesheet.submitted_by = submitted_by
     timesheet.submission_export_format = ""
-    # Keep the reopen audit trail, but clear approval/invoicing fields on resubmission.
+    # Keep the reopen audit trail, but clear approval/accounting fields on resubmission.
     timesheet.approved_at = None
     timesheet.approved_by = None
+    timesheet.quickbooks_exported_at = None
+    timesheet.quickbooks_exported_by = None
     timesheet.invoiced_at = None
     timesheet.invoiced_by = None
     timesheet.save(update_fields=[
@@ -66,6 +68,8 @@ def submit_timesheet(timesheet, submitted_by):
         "submission_export_format",
         "approved_at",
         "approved_by",
+        "quickbooks_exported_at",
+        "quickbooks_exported_by",
         "invoiced_at",
         "invoiced_by",
         "updated_at",

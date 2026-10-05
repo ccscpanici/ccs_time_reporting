@@ -62,12 +62,36 @@ def reject_timesheet(timesheet, user, reason):
 
 
 @transaction.atomic
+def mark_timesheet_exported_to_quickbooks(timesheet, user):
+    timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
+
+    if timesheet.deleted_at:
+        raise ValueError("Deleted or voided timesheets cannot be marked exported to QuickBooks.")
+
+    if timesheet.status != Timesheet.Status.APPROVED:
+        raise ValueError("Only approved timesheets can be marked exported to QuickBooks.")
+
+    timesheet.status = Timesheet.Status.EXPORTED_TO_QUICKBOOKS
+    timesheet.quickbooks_exported_at = timezone.now()
+    timesheet.quickbooks_exported_by = user
+
+    timesheet.save(update_fields=[
+        "status",
+        "quickbooks_exported_at",
+        "quickbooks_exported_by",
+        "updated_at",
+    ])
+
+    return timesheet
+
+
+@transaction.atomic
 def mark_timesheet_invoiced(timesheet, user):
     timesheet = Timesheet.objects.select_for_update().get(pk=timesheet.pk)
     if timesheet.deleted_at:
         raise ValueError("Deleted or voided timesheets cannot be marked invoiced.")
-    if timesheet.status != Timesheet.Status.APPROVED:
-        raise ValueError("Only approved timesheets can be marked invoiced.")
+    if timesheet.status != Timesheet.Status.EXPORTED_TO_QUICKBOOKS:
+        raise ValueError("Only timesheets exported to QuickBooks can be marked invoiced.")
 
     timesheet.status = Timesheet.Status.INVOICED
     timesheet.invoiced_at = timezone.now()

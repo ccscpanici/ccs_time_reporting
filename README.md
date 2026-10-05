@@ -32,6 +32,39 @@ Management reports are available under `/reports/` to authorized users. Reports 
 
 Employee profiles contain office information, home-address information, and the employee-to-supervisor relationship used for timesheet and absence approval routing.
 
+## Job user linking
+
+Imported job lead/engineer names can be linked to Django users with the `link_job_users` management command.
+
+The linker supports automatic first-initial/last-name matching, interactive manual matching, dry-run mode, and reusable `JobUserAlias` records. Manual aliases are remembered so the same imported source name can be resolved automatically on future runs.
+
+Use dry-run mode to review proposed changes without modifying the database:
+
+```bash
+python manage.py link_job_users --dry-run
+```
+
+Command output includes job information, including the project description, to make ambiguous imported names easier to identify.
+
+# Email queue and timesheet reopen workflow
+
+Timesheet workflow emails are processed through the application's asynchronous `EmailJob` queue where supported. Web requests create queue records and return without waiting for SMTP delivery; the separate email worker processes pending jobs and handles retry behavior.
+
+The production worker runs:
+
+```bash
+python manage.py process_email_queue --sleep 2
+```
+
+Timesheet reopen notifications use the queue for:
+
+- Reopen requests sent for supervisor review
+- Administrative notification after a timesheet is reopened
+- Employee notification after a reopen request is approved
+- Employee notification after a reopen request is rejected
+
+Queued jobs retain status, attempt count, and error information for troubleshooting. Failed deliveries are retried by the worker according to the queue retry policy.
+
 # Absence Management
 
 The `absence` Django application manages PTO balances, absence requests, supervisor approvals, PTO report imports, audit history, and finalized absence-request PDFs.
@@ -204,6 +237,20 @@ Each archived document creates an `AbsenceArtifact` containing the filename, abs
 
 # Configuration and setup
 
+Database and email settings are environment-driven. Production credentials should not be hard-coded in application source. The production systemd services load deployment-specific database settings from a protected environment file outside the repository.
+
+Supported database environment variables include:
+
+```text
+DB_NAME
+DB_USER
+DB_PASSWORD
+DB_HOST
+DB_PORT
+```
+
+Email configuration may also be supplied through environment variables such as `DEFAULT_FROM_EMAIL` and `EMAIL_BACKEND`.
+
 Install dependencies and initialize the application:
 
 ```bash
@@ -222,6 +269,23 @@ Local development:
 ```text
 http://127.0.0.1:8000/
 ```
+
+## Isolated demo environment
+
+The repository includes an isolated demo workflow under `demo/`. The demo environment is intended for demonstrations and training without modifying production data or production static files.
+
+The demo uses its own database and can be reset from a known baseline each time it is launched. Demo database dumps such as `demo/baseline.dump` are intentionally excluded from Git.
+
+The helper scripts are:
+
+```text
+demo/reset_demo.sh
+demo/start_demo.sh
+```
+
+`reset_demo.sh` rebuilds the demo database from the configured baseline. `start_demo.sh` resets the demo data and launches Django's local development server for the demonstration environment.
+
+The demo environment should use its own database configuration and should not be pointed at the production database.
 
 After pulling the Absence application changes, run:
 

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="h3 mb-1">QuickBooks Export</h1>
+    <p class="text-body-secondary mb-0">
+      Review approved timesheets and track timesheets exported to QuickBooks.
+    </p>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Awaiting QuickBooks Export</span>
+    <span class="badge text-bg-primary">
+      {{ awaiting_export|length }}
+    </span>
+  </div>
+
+  <div class="card-body p-0">
+    {% if awaiting_export %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Week</th>
+              <th class="text-end">Hours</th>
+              <th>Approved</th>
+              <th>Approved By</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for timesheet in awaiting_export %}
+              <tr>
+                <td>
+                  <strong>
+                    {{ timesheet.employee.get_full_name|default:timesheet.employee.username }}
+                  </strong>
+                </td>
+
+                <td>
+                  {{ timesheet.week_start|date:"m/d/Y" }}
+                </td>
+
+                <td class="text-end">
+                  {{ timesheet.total_hours|floatformat:2 }}
+                </td>
+
+                <td>
+                  {% if timesheet.approved_at %}
+                    {{ timesheet.approved_at|date:"m/d/Y g:i A" }}
+                  {% else %}
+                    &mdash;
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if timesheet.approved_by %}
+                    {{ timesheet.approved_by.get_full_name|default:timesheet.approved_by.username }}
+                  {% else %}
+                    &mdash;
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  <a
+                    href="{% url 'timesheet_detail' timesheet.pk %}"
+                    class="btn btn-sm btn-outline-primary"
+                  >
+                    View Timesheet
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-4 text-center text-body-secondary">
+        <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+        No approved timesheets are waiting to be exported to QuickBooks.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Recently Exported to QuickBooks</span>
+    <span class="text-body-secondary small">
+      Most recent 50
+    </span>
+  </div>
+
+  <div class="card-body p-0">
+    {% if recently_exported %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Week</th>
+              <th class="text-end">Hours</th>
+              <th>Exported</th>
+              <th>Exported By</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for timesheet in recently_exported %}
+              <tr>
+                <td>
+                  <strong>
+                    {{ timesheet.employee.get_full_name|default:timesheet.employee.username }}
+                  </strong>
+                </td>
+
+                <td>
+                  {{ timesheet.week_start|date:"m/d/Y" }}
+                </td>
+
+                <td class="text-end">
+                  {{ timesheet.total_hours|floatformat:2 }}
+                </td>
+
+                <td>
+                  {% if timesheet.quickbooks_exported_at %}
+                    {{ timesheet.quickbooks_exported_at|date:"m/d/Y g:i A" }}
+                  {% else %}
+                    &mdash;
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if timesheet.quickbooks_exported_by %}
+                    {{ timesheet.quickbooks_exported_by.get_full_name|default:timesheet.quickbooks_exported_by.username }}
+                  {% else %}
+                    &mdash;
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  <a
+                    href="{% url 'timesheet_detail' timesheet.pk %}"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    View Timesheet
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-4 text-center text-body-secondary">
+        No timesheets have been exported to QuickBooks yet.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

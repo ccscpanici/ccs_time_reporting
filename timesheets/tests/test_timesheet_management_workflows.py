@@ -51,15 +51,22 @@ class ManagementWorkflowBase(AppTestCase):
             first_name="Management",
             last_name="User",
         )
+        cls.business_admin = cls.make_user(
+            username="business_admin",
+            first_name="Business",
+            last_name="Admin",
+        )
         cls.add_to_group(cls.manager, "ProjectManagers")
         cls.add_to_group(cls.other_manager, "ProjectManagers")
         cls.add_to_group(cls.management, "Management Staff")
+        cls.add_to_group(cls.business_admin, "Business Admin")
 
         EmployeeProfile.objects.create(user=cls.employee, supervisor=cls.manager)
         EmployeeProfile.objects.create(user=cls.other_employee, supervisor=cls.other_manager)
         EmployeeProfile.objects.create(user=cls.manager)
         EmployeeProfile.objects.create(user=cls.other_manager)
         EmployeeProfile.objects.create(user=cls.management)
+        EmployeeProfile.objects.create(user=cls.business_admin)
 
         cls.valid_job = Job.objects.create(
             job_number="26001",
@@ -205,31 +212,186 @@ class ApprovalQueueAndDecisionTests(ManagementWorkflowBase):
         queue_email.assert_called_once()
         self.assertRedirects(response, reverse("timesheet_approvals"))
 
-    def test_regular_employee_cannot_mark_timesheet_invoiced(self):
+    def test_regular_employee_cannot_open_quickbooks_queue(self):
+        self.login(self.employee)
+
+        response = self.client.get(reverse("quickbooks_timesheets"))
+
+        self.assertRedirects(response, reverse("timesheet_list"))
+
+    def test_business_admin_can_open_quickbooks_queue(self):
+        approved = self.make_timesheet(status=Timesheet.Status.APPROVED)
+        exported = self.make_timesheet(
+            employee=self.other_employee,
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=timezone.now(),
+            quickbooks_exported_by=self.business_admin,
+        )
+        self.login(self.business_admin)
+
+        response = self.client.get(reverse("quickbooks_timesheets"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(approved, list(response.context["awaiting_export"]))
+        self.assertIn(exported, list(response.context["recently_exported"]))
+
+    def test_business_admin_can_view_other_users_timesheet(self):
+        timesheet = self.make_timesheet(
+            employee=self.other_employee,
+            status=Timesheet.Status.APPROVED,
+        )
+        self.login(self.business_admin)
+
+        response = self.client.get(
+            reverse("timesheet_detail", args=[timesheet.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["timesheet"], timesheet)
+
+    def test_regular_employee_cannot_mark_timesheet_exported_to_quickbooks(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
         self.login(self.employee)
 
-        response = self.client.post(reverse("timesheet_mark_invoiced", args=[timesheet.pk]))
+        response = self.client.post(
+            reverse(
+                "timesheet_mark_exported_to_quickbooks",
+                args=[timesheet.pk],
+            )
+        )
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
         self.assertRedirects(response, reverse("timesheet_list"))
 
-    def test_mark_invoiced_get_does_not_change_timesheet(self):
+    def test_business_admin_can_mark_approved_timesheet_exported_to_quickbooks(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
-        self.login(self.management)
+        self.login(self.business_admin)
 
-        response = self.client.get(reverse("timesheet_mark_invoiced", args=[timesheet.pk]))
+        response = self.client.post(
+            reverse(
+                "timesheet_mark_exported_to_quickbooks",
+                args=[timesheet.pk],
+            )
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(
+            timesheet.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
+        self.assertEqual(
+            timesheet.quickbooks_exported_by,
+            self.business_admin,
+        )
+        self.assertIsNotNone(timesheet.quickbooks_exported_at)
+        self.assertRedirects(response, timesheet.get_absolute_url())
+
+    def test_mark_exported_to_quickbooks_get_does_not_change_timesheet(self):
+        timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
+        self.login(self.business_admin)
+
+        response = self.client.get(
+            reverse(
+                "timesheet_mark_exported_to_quickbooks",
+                args=[timesheet.pk],
+            )
+        )
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
+        self.assertRedirects(response, timesheet.get_absolute_url())
+
+    def test_business_admin_cannot_export_non_approved_timesheet(self):
+        timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
+        self.login(self.business_admin)
+
+        response = self.client.post(
+            reverse(
+                "timesheet_mark_exported_to_quickbooks",
+                args=[timesheet.pk],
+            )
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(timesheet.status, Timesheet.Status.SUBMITTED)
+        self.assertRedirects(response, timesheet.get_absolute_url())
+
+    def test_regular_employee_cannot_mark_timesheet_invoiced(self):
+        timesheet = self.make_timesheet(
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=timezone.now(),
+            quickbooks_exported_by=self.business_admin,
+        )
+        self.login(self.employee)
+
+        response = self.client.post(
+            reverse("timesheet_mark_invoiced", args=[timesheet.pk])
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(
+            timesheet.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
+        self.assertRedirects(response, reverse("timesheet_list"))
+
+    def test_management_staff_can_mark_exported_timesheet_invoiced(self):
+        timesheet = self.make_timesheet(
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=timezone.now(),
+            quickbooks_exported_by=self.business_admin,
+        )
+        self.login(self.management)
+
+        response = self.client.post(
+            reverse("timesheet_mark_invoiced", args=[timesheet.pk])
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(timesheet.status, Timesheet.Status.INVOICED)
+        self.assertEqual(timesheet.invoiced_by, self.management)
+        self.assertIsNotNone(timesheet.invoiced_at)
+        self.assertRedirects(response, timesheet.get_absolute_url())
+
+    def test_management_staff_cannot_mark_approved_timesheet_invoiced(self):
+        timesheet = self.make_timesheet(status=Timesheet.Status.APPROVED)
+        self.login(self.management)
+
+        response = self.client.post(
+            reverse("timesheet_mark_invoiced", args=[timesheet.pk])
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(timesheet.status, Timesheet.Status.APPROVED)
+        self.assertRedirects(response, timesheet.get_absolute_url())
+
+    def test_mark_invoiced_get_does_not_change_timesheet(self):
+        timesheet = self.make_timesheet(
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            quickbooks_exported_at=timezone.now(),
+            quickbooks_exported_by=self.business_admin,
+        )
+        self.login(self.management)
+
+        response = self.client.get(
+            reverse("timesheet_mark_invoiced", args=[timesheet.pk])
+        )
+
+        timesheet.refresh_from_db()
+        self.assertEqual(
+            timesheet.status,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        )
         self.assertRedirects(response, timesheet.get_absolute_url())
 
     def test_mark_invoiced_invalid_state_stays_unchanged(self):
         timesheet = self.make_timesheet(status=Timesheet.Status.SUBMITTED)
         self.login(self.management)
 
-        response = self.client.post(reverse("timesheet_mark_invoiced", args=[timesheet.pk]))
+        response = self.client.post(
+            reverse("timesheet_mark_invoiced", args=[timesheet.pk])
+        )
 
         timesheet.refresh_from_db()
         self.assertEqual(timesheet.status, Timesheet.Status.SUBMITTED)

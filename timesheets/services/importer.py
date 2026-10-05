@@ -645,8 +645,17 @@ def import_timesheet_upload(
         week_start=week_start,
         defaults={"entries_per_day": 5, "template_entries_per_day": 5, "mileage_rate": MileageRate.rate_for_date(week_start), "overnight_rate": OvernightRate.rate_for_date(week_start)},
     )
-    if timesheet.status in {Timesheet.Status.SUBMITTED, Timesheet.Status.APPROVED, Timesheet.Status.INVOICED, Timesheet.Status.VOID}:
-        raise ValueError("Submitted, approved, invoiced, or voided timesheets cannot be replaced by upload. Reopen the submitted timesheet first if corrections are needed.")
+    if timesheet.status in {
+        Timesheet.Status.SUBMITTED,
+        Timesheet.Status.APPROVED,
+        Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+        Timesheet.Status.INVOICED,
+        Timesheet.Status.VOID,
+    }:
+        raise ValueError(
+            "Submitted, approved, exported, invoiced, or voided timesheets "
+            "cannot be replaced by upload. Reopen the timesheet first if corrections are needed."
+        )
 
     # Re-upload replaces the existing week.
     timesheet.entries.all().delete()
@@ -753,6 +762,8 @@ def import_timesheet_upload(
     timesheet.reopen_reason = ""
     timesheet.approved_at = None
     timesheet.approved_by = None
+    timesheet.quickbooks_exported_at = None
+    timesheet.quickbooks_exported_by = None
     timesheet.invoiced_at = None
     timesheet.invoiced_by = None
     timesheet.deleted_at = None

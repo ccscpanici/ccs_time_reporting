@@ -104,8 +104,8 @@ class TimeEntryInline(admin.TabularInline):
 
 @admin.register(Timesheet)
 class TimesheetAdmin(admin.ModelAdmin):
-    list_display = ("employee", "week_start", "mileage_rate", "overnight_rate", "status", "submitted_at", "reopened_at", "approved_at", "invoiced_at", "deleted_at")
-    list_filter = ("status", "week_start", "submitted_at", "approved_at", "invoiced_at", "deleted_at")
+    list_display = ("employee", "week_start", "mileage_rate", "overnight_rate", "status", "submitted_at", "reopened_at", "approved_at", "quickbooks_exported_at", "invoiced_at", "deleted_at")
+    list_filter = ("status", "week_start", "submitted_at", "approved_at", "quickbooks_exported_at", "invoiced_at", "deleted_at")
     search_fields = ("employee__username", "employee__first_name", "employee__last_name")
     inlines = [TimeEntryInline]
     change_list_template = "admin/timesheets/timesheet/change_list.html"

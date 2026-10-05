@@ -27,7 +27,7 @@ from .services.job_importer import apply_job_import, preview_job_import
 from .services.email_queue import queue_email_job
 from .services.receipts_pdf import build_receipts_pdf_bytes, receipts_pdf_filename
 from .services.submission import create_timesheet_artifact, submit_timesheet
-from .services.status import approve_timesheet, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
+from .services.status import approve_timesheet, mark_timesheet_exported_to_quickbooks, mark_timesheet_invoiced, reopen_timesheet, reject_timesheet
 from .services.exporter import TEMPLATE_PATH, _write_employee_header, build_submission_attachment
 from openpyxl import load_workbook
 from io import BytesIO
@@ -35,7 +35,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-from .permissions import can_approve_timesheet, can_view_timesheet, is_management_staff, is_project_manager
+from .permissions import can_approve_timesheet, can_view_timesheet, is_business_admin, is_management_staff, is_project_manager
 from django.views.decorators.http import require_POST, require_http_methods
 from timesheets.services.history import build_timesheet_history
 from decimal import Decimal, InvalidOperation
@@ -2016,6 +2016,89 @@ def timesheet_approvals(request):
 
     return render(request, "timesheets/approvals.html", {"timesheets": timesheets})
 
+@login_required
+def quickbooks_timesheets(request):
+    if not is_business_admin(request.user):
+        messages.error(
+            request,
+            "Only Business Admin users can view the QuickBooks export queue.",
+        )
+        return redirect("timesheet_list")
+
+    awaiting_export = (
+        Timesheet.objects.filter(
+            status=Timesheet.Status.APPROVED,
+            deleted_at__isnull=True,
+        )
+        .select_related(
+            "employee",
+            "approved_by",
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(
+                            max_digits=8,
+                            decimal_places=2,
+                        ),
+                    )
+                ),
+                0,
+                output_field=DecimalField(
+                    max_digits=8,
+                    decimal_places=2,
+                ),
+            )
+        )
+        .order_by("approved_at", "week_start")
+    )
+
+    recently_exported = (
+        Timesheet.objects.filter(
+            status=Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            deleted_at__isnull=True,
+        )
+        .select_related(
+            "employee",
+            "approved_by",
+            "quickbooks_exported_by",
+        )
+        .annotate(
+            total_hours=Coalesce(
+                Sum(
+                    ExpressionWrapper(
+                        F("entries__regular_hours")
+                        + F("entries__overtime_hours")
+                        + F("entries__doubletime_hours"),
+                        output_field=DecimalField(
+                            max_digits=8,
+                            decimal_places=2,
+                        ),
+                    )
+                ),
+                0,
+                output_field=DecimalField(
+                    max_digits=8,
+                    decimal_places=2,
+                ),
+            )
+        )
+        .order_by("-quickbooks_exported_at", "-week_start")[:50]
+    )
+
+    return render(
+        request,
+        "timesheets/quickbooks.html",
+        {
+            "awaiting_export": awaiting_export,
+            "recently_exported": recently_exported,
+        },
+    )
+
 
 
 @login_required
@@ -2061,6 +2144,7 @@ def timesheet_reopen_request(request, pk):
     allowed = {
         Timesheet.Status.SUBMITTED,
         Timesheet.Status.APPROVED,
+        Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
         Timesheet.Status.INVOICED,
     }
 
@@ -2326,6 +2410,28 @@ def timesheet_reject(request, pk):
 
     return render(request, "timesheets/reject.html", {"timesheet": timesheet, "form": form})
 
+@login_required
+def timesheet_mark_exported_to_quickbooks(request, pk):
+    if not is_business_admin(request.user):
+        messages.error(
+            request,
+            "Only Business Admin users can mark timesheets exported to QuickBooks.",
+        )
+        return redirect("timesheet_list")
+
+    timesheet = get_timesheet_for_request_user(request, pk)
+
+    if request.method != "POST":
+        return redirect(timesheet)
+
+    try:
+        mark_timesheet_exported_to_quickbooks(timesheet, request.user)
+    except Exception as exc:
+        messages.error(request, f"QuickBooks export status update failed: {exc}")
+    else:
+        messages.success(request, "Timesheet marked exported to QuickBooks.")
+
+    return redirect(timesheet)
 
 @login_required
 def timesheet_mark_invoiced(request, pk):
