@@ -55,6 +55,9 @@ def submit_timesheet(timesheet, submitted_by):
     if not timesheet.entries.exists():
         raise ValueError("Cannot submit an empty timesheet.")
 
+    from .mileage_validation import validate_timesheet_mileage
+    validate_timesheet_mileage(timesheet)
+
     timesheet.status = Timesheet.Status.SUBMITTED
     timesheet.submitted_at = timezone.now()
     timesheet.submitted_by = submitted_by

@@ -41,6 +41,9 @@ def approve_timesheet(timesheet, user):
     if not can_approve_timesheet(user, timesheet):
         raise PermissionError("You do not have permission to approve this timesheet.")
 
+    from .mileage_validation import validate_timesheet_mileage
+    validate_timesheet_mileage(timesheet)
+
     timesheet.status = Timesheet.Status.APPROVED
     timesheet.approved_at = timezone.now()
     timesheet.approved_by = user

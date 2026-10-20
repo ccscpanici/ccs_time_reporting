@@ -642,8 +642,18 @@ class Expense(models.Model):
         )
 
     def save(self, *args, **kwargs):
-        """Provide the save operation for this module."""
+        """Recalculate editable expenses; never alter approved reimbursements."""
+        locked_statuses = {
+            Timesheet.Status.APPROVED,
+            Timesheet.Status.EXPORTED_TO_QUICKBOOKS,
+            Timesheet.Status.INVOICED,
+        }
+        if self.time_entry.timesheet.status in locked_statuses:
+            raise ValueError("Mileage and expenses are locked after timesheet approval.")
         self.mileage = self.calculate_mileage()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"mileage", "mileage_currency"}
         super().save(*args, **kwargs)
 
 
