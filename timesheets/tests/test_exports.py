@@ -178,7 +178,7 @@ class ExporterServiceTests(TimesheetExportTestBase):
             build_timesheet_excel(timesheet)
 
     def test_pdf_export_creates_readable_pdf_with_expense_and_parts_pages(self):
-        timesheet = self.make_timesheet()
+        timesheet = self.make_timesheet(status=Timesheet.Status.DRAFT)
         entry = self.make_entry(timesheet, overnight_stay=True)
 
         Expense.objects.create(
@@ -195,6 +195,10 @@ class ExporterServiceTests(TimesheetExportTestBase):
             additional_notes_for_customer="Replacement controller",
             reorder_part=True,
         )
+
+        # Lock the completed timesheet before verifying its PDF export.
+        timesheet.status = Timesheet.Status.APPROVED
+        timesheet.save(update_fields=["status"])
 
         export_path = build_timesheet_pdf(timesheet)
 
