@@ -1,3 +1,8 @@
+"""Service-layer operations for submission workflows.
+
+Business rules live here so views and commands can share the same behavior.
+"""
+
 from pathlib import Path
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -49,6 +54,9 @@ def submit_timesheet(timesheet, submitted_by):
         raise ValueError("Only draft, rejected, or reopened timesheets can be submitted.")
     if not timesheet.entries.exists():
         raise ValueError("Cannot submit an empty timesheet.")
+
+    from .mileage_validation import validate_timesheet_mileage
+    validate_timesheet_mileage(timesheet)
 
     timesheet.status = Timesheet.Status.SUBMITTED
     timesheet.submitted_at = timezone.now()
