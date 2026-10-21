@@ -11,7 +11,7 @@ def build_timesheet_grid(timesheet):
     """Return seven date groups, padded to the configured rows per day."""
     grid = []
     for work_date in timesheet.week_dates:
-        entries = list(timesheet.entries.filter(work_date=work_date).select_related("job", "work_code", "expense", "part_entry").order_by("row_order"))
+        entries = list(timesheet.entries.filter(work_date=work_date).select_related("job", "work_code", "description_prefix", "expense", "part_entry").order_by("row_order"))
         rows = []
         for row_order in range(1, timesheet.entries_per_day + 1):
             entry = next((item for item in entries if item.row_order == row_order), None)
@@ -36,5 +36,5 @@ def build_timesheet_grid(timesheet):
 
 def is_blank_row(row):
     """Provide the is blank row operation used by the application service layer."""
-    keys = ["job_number", "work_code", "regular_hours", "overtime_hours", "doubletime_hours", "description"]
+    keys = ["job_number", "work_code", "regular_hours", "overtime_hours", "doubletime_hours", "description", "description_prefix_id"]
     return not any(row.get(key) for key in keys)

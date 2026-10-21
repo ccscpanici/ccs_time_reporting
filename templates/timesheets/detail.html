@@ -220,6 +220,54 @@
 
   <div class="tab-pane fade" id="expenses-pane" role="tabpanel" aria-labelledby="expenses-tab" tabindex="0">
     <div class="alert alert-info rounded-4">Expenses are shown in the same date and row order as the time tab. Blank rows are included to match the timesheet form.</div>
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+      <div class="card-body py-3">
+        <div class="fw-semibold fs-5 mb-3">Weekly Expense Totals</div>
+        <div class="row g-3 text-center">
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Miles</div>
+            <div class="fw-semibold">{{ weekly_expenses.miles|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Mileage</div>
+            <div class="fw-semibold">${{ weekly_expenses.mileage|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Per Diem</div>
+            <div class="fw-semibold">${{ weekly_expenses.per_diem_food|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Air Fare</div>
+            <div class="fw-semibold">${{ weekly_expenses.air_fare|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Hotel</div>
+            <div class="fw-semibold">${{ weekly_expenses.hotel|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Tolls/Parking</div>
+            <div class="fw-semibold">${{ weekly_expenses.tolls_parking|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Rental/Fuel</div>
+            <div class="fw-semibold">${{ weekly_expenses.rental_car_fuel|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Meals</div>
+            <div class="fw-semibold">${{ weekly_expenses.business_meals|floatformat:2 }}</div>
+          </div>
+          <div class="col-6 col-md-3 col-xl">
+            <div class="small text-body-secondary">Other</div>
+            <div class="fw-semibold">${{ weekly_expenses.other_expense|floatformat:2 }}</div>
+          </div>
+          <div class="col-12 col-md-3 col-xl-auto ps-xl-4">
+            <div class="small text-body-secondary">Total Expenses</div>
+            <div class="fw-bold fs-5">${{ weekly_expenses.total|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     {% for day in grid %}
     <div class="card shadow-sm border-0 rounded-4 mb-4">
       <div class="card-header bg-body-tertiary rounded-top-4">

@@ -200,6 +200,7 @@
                 <th class="hours-col text-end">Reg</th>
                 <th class="hours-col text-end">OT</th>
                 <th class="hours-col text-end">DT</th>
+                <th style="min-width: 9rem">Prefix</th>
                 <th class="description-col">Description</th>
               </tr>
             </thead>
@@ -286,6 +287,23 @@
                   </td>
 
                   <td>
+                    <select
+                      class="form-select form-select-sm"
+                      name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_description_prefix"
+                      aria-label="Optional description prefix"
+                    >
+                      <option value="">---</option>
+                      {% for prefix in description_prefixes %}
+                        {% if prefix.active or entry.description_prefix_id == prefix.pk %}
+                          <option value="{{ prefix.pk }}" {% if entry.description_prefix_id == prefix.pk %}selected{% endif %}>
+                            {{ prefix.code }}{% if not prefix.active %} (inactive){% endif %}
+                          </option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </td>
+
+                  <td>
                     <input
                       class="form-control form-control-sm"
                       name="entry_{{ day.work_date|date:'Y-m-d' }}_{{ row.row_order }}_description"
@@ -319,7 +337,7 @@
                   <span data-daily-time-doubletime>0.00</span>
                 </td>
 
-                <td>
+                <td colspan="2">
                   Total Hours:
                   <strong>
                     <span data-daily-time-hours>0.00</span>

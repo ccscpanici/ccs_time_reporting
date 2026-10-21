@@ -116,6 +116,7 @@
                 <th class="hours-col">Reg</th>
                 <th class="hours-col">OT</th>
                 <th class="hours-col">DT</th>
+                <th style="min-width: 9rem">Prefix</th>
                 <th class="description-col">Description</th>
               </tr>
             </thead>
@@ -172,6 +173,20 @@
                 </td>
 
                 <td>
+                  <select class="form-select form-select-sm description-prefix-select"
+                          name="entry_{{ key }}_{{ row.row_order }}_description_prefix"
+                          aria-label="Optional description prefix for row {{ row.row_order }} on {{ day.work_date|date:'m/d/Y' }}">
+                    <option value="">---</option>
+                    {% if entry and entry.description_prefix and not entry.description_prefix.active %}
+                      <option value="{{ entry.description_prefix_id }}" selected>{{ entry.description_prefix.code }} (Inactive)</option>
+                    {% endif %}
+                    {% for prefix in description_prefixes %}
+                      <option value="{{ prefix.pk }}" {% if entry and entry.description_prefix_id == prefix.pk %}selected{% endif %}>{{ prefix.code }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+
+                <td>
                   <input class="form-control form-control-sm description-input"
                          name="entry_{{ key }}_{{ row.row_order }}_description"
                          value="{% if entry %}{{ entry.description }}{% endif %}">
@@ -187,7 +202,7 @@
                 <td class="daily-reg-total text-end">0.00</td>
                 <td class="daily-ot-total text-end">0.00</td>
                 <td class="daily-dt-total text-end">0.00</td>
-                <td>
+                <td colspan="2">
                   Total Hours:
                   <span class="daily-hours-total">0.00</span>
                 </td>

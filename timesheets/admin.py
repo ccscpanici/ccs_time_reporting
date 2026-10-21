@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
-from .models import ApprovalNotificationRecipient, Customer, EmailConfiguration, Expense, Job, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode, TimesheetReopenRequest
+from .models import ApprovalNotificationRecipient, Customer, DescriptionPrefix, EmailConfiguration, Expense, Job, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetImport, TimesheetReceipt, TimesheetSubmissionArtifact, TimesheetSubmissionRecipient, WorkCode, TimesheetReopenRequest
 from .services.notifications import send_test_email
 
 
@@ -165,6 +165,21 @@ class WorkCodeAdmin(admin.ModelAdmin):
     list_filter = ("active", "allows_overtime")
     search_fields = ("code", "description")
     ordering = ("display_order", "code")
+
+
+@admin.register(DescriptionPrefix)
+class DescriptionPrefixAdmin(admin.ModelAdmin):
+    """Manage optional time-entry description prefixes."""
+
+    list_display = ("code", "active", "display_order")
+    list_filter = ("active",)
+    search_fields = ("code",)
+    ordering = ("display_order", "code")
+    fields = ("code", "active", "display_order")
+
+    def has_delete_permission(self, request, obj=None):
+        """Preserve prefix records referenced by historical time entries."""
+        return False
 
 
 @admin.register(MileageRate)

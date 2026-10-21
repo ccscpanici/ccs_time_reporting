@@ -344,6 +344,19 @@ class WorkCode(models.Model):
         return f"{self.code} - {self.description}"
 
 
+class DescriptionPrefix(models.Model):
+    """Optional, administrator-managed prefix for time-entry descriptions."""
+    code = models.CharField(max_length=50, unique=True)
+    active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "code"]
+
+    def __str__(self):
+        return self.code
+
+
 class MileageRate(models.Model):
     """Provide mileage rate behavior for this module."""
     year = models.PositiveIntegerField(unique=True)
@@ -577,6 +590,13 @@ class TimeEntry(models.Model):
     overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     doubletime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     overnight_stay = models.BooleanField(default=False)
+    description_prefix = models.ForeignKey(
+        DescriptionPrefix,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="time_entries",
+    )
     description = models.TextField(blank=True)
 
     class Meta:

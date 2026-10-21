@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
 from .forms import ActiveProjectForm, JobForm, JobListImportForm, TimesheetBulkZipImportForm, TimesheetCreateForm, TimesheetDeleteForm, TimesheetImportForm, TimesheetReopenForm, TimesheetRejectForm, TimesheetSubmitForm, TimesheetReopenRequestForm
-from .models import ActiveProject, BulkImportJob, Expense, Job, JobListImport, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest, EmailJob
+from .models import ActiveProject, BulkImportJob, DescriptionPrefix, Expense, Job, JobListImport, MileageRate, OvernightRate, PartEntry, TimeEntry, Timesheet, TimesheetReceipt, TimesheetSubmissionArtifact, WorkCode, TimesheetImport, TimesheetReopenRequest, EmailJob
 from .services.deletion import delete_or_void_timesheet
 from .services.grid import build_timesheet_grid, is_blank_row
 from .services.helpers import as_decimal
@@ -674,6 +674,31 @@ def timesheet_detail(request, pk):
     timesheet = get_timesheet_for_request_user(request, pk)
     grid = build_timesheet_grid(timesheet)
     weekly_total_hours = sum(day["total_hours"] for day in grid)
+
+    # Read saved reimbursement amounts, never recalculate mileage using a rate.
+    # This is especially important for approved and invoiced timesheets.
+    expense_fields = (
+        "mileage", "per_diem_food", "air_fare", "hotel",
+        "tolls_parking", "rental_car_fuel", "business_meals", "other_expense",
+    )
+    weekly_expenses = {field: Decimal("0.00") for field in expense_fields}
+    weekly_expenses["miles"] = Decimal("0.00")
+    for day in grid:
+        for row in day["rows"]:
+            entry = row.get("entry")
+            expense = getattr(entry, "expense", None) if entry is not None else None
+            if expense is None:
+                continue
+            weekly_expenses["miles"] += expense.miles or Decimal("0.00")
+            for field in expense_fields:
+                saved_money = getattr(expense, field, None)
+                weekly_expenses[field] += (
+                    saved_money.amount if saved_money is not None else Decimal("0.00")
+                )
+    weekly_expenses["total"] = sum(
+        (weekly_expenses[field] for field in expense_fields), Decimal("0.00")
+    )
+
     history = build_timesheet_history(timesheet)
     
     pending_reopen_request = TimesheetReopenRequest.objects.filter(
@@ -687,6 +712,7 @@ def timesheet_detail(request, pk):
         {
             "timesheet": timesheet,
             "grid": grid,
+            "weekly_expenses": weekly_expenses,
             "can_approve_this_timesheet": can_approve_timesheet(
                 request.user, 
                 timesheet
@@ -726,6 +752,7 @@ def _posted_time_rows(request, timesheet, work_date):
             "overtime_hours": request.POST.get(f"{prefix}_overtime_hours"),
             "doubletime_hours": request.POST.get(f"{prefix}_doubletime_hours"),
             "description": request.POST.get(f"{prefix}_description", "").strip(),
+            "description_prefix_id": request.POST.get(f"{prefix}_description_prefix", "").strip(),
         }))
     return rows
 
@@ -789,6 +816,25 @@ def _validate_timesheet_hours_from_post(request, timesheet, work_dates):
     return errors
 
 
+def _validate_description_prefixes_from_post(request, timesheet, work_dates):
+    """Reject unknown/inactive prefix selections before saving any entries."""
+    errors = []
+    for work_date in work_dates:
+        for row_order, _prefix, row in _posted_time_rows(request, timesheet, work_date):
+            selected = row["description_prefix_id"]
+            if not selected:
+                continue
+            existing = TimeEntry.objects.filter(
+                timesheet=timesheet, work_date=work_date, row_order=row_order
+            ).values_list("description_prefix_id", flat=True).first()
+            valid = DescriptionPrefix.objects.filter(pk=selected, active=True).exists() if selected.isdecimal() else False
+            if not valid and str(existing or "") != selected:
+                errors.append(
+                    f"{work_date:%m/%d/%Y} row {row_order}: Select an active description prefix."
+                )
+    return errors
+
+
 def _save_timesheet_day_from_post(request, timesheet, work_date):
     """Save one date's time, expense, and parts rows from a posted timesheet form."""
     day_key = work_date.isoformat()
@@ -804,6 +850,7 @@ def _save_timesheet_day_from_post(request, timesheet, work_date):
             "overtime_hours": request.POST.get(f"{prefix}_overtime_hours"),
             "doubletime_hours": request.POST.get(f"{prefix}_doubletime_hours"),
             "description": request.POST.get(f"{prefix}_description", "").strip(),
+            "description_prefix_id": request.POST.get(f"{prefix}_description_prefix", "").strip(),
         }
 
         expense_row = {
@@ -861,6 +908,7 @@ def _save_timesheet_day_from_post(request, timesheet, work_date):
                 "doubletime_hours": as_decimal(row["doubletime_hours"]),
                 "overnight_stay": overnight_stay,
                 "description": row["description"],
+                "description_prefix_id": (row["description_prefix_id"] or None),
             },
         )
 
@@ -915,7 +963,7 @@ def timesheet_edit(request, pk):
 
         job_errors = _validate_timesheet_jobs_from_post(request, timesheet, timesheet.week_dates)
         hour_errors = _validate_timesheet_hours_from_post(request, timesheet, timesheet.week_dates)
-        validation_errors = job_errors + hour_errors
+        validation_errors = job_errors + hour_errors + _validate_description_prefixes_from_post(request, timesheet, timesheet.week_dates)
 
         if validation_errors:
             for error in validation_errors:
@@ -925,6 +973,7 @@ def timesheet_edit(request, pk):
                 "timesheet": timesheet,
                 "grid": grid,
                 "work_codes": work_codes,
+                "description_prefixes": DescriptionPrefix.objects.filter(active=True).order_by("display_order", "code"),
                 "job_options": _job_options_for_timesheet_forms(),
             })
 
@@ -939,6 +988,7 @@ def timesheet_edit(request, pk):
         "timesheet": timesheet,
         "grid": grid,
         "work_codes": work_codes,
+                "description_prefixes": DescriptionPrefix.objects.filter(active=True).order_by("display_order", "code"),
         "job_options": _job_options_for_timesheet_forms(),
     })
 
@@ -979,7 +1029,7 @@ def _timesheet_day_entry(request, target_date, page_title):
 
         job_errors = _validate_timesheet_jobs_from_post(request, timesheet, [target_date])
         hour_errors = _validate_timesheet_hours_from_post(request, timesheet, [target_date])
-        validation_errors = job_errors + hour_errors
+        validation_errors = job_errors + hour_errors + _validate_description_prefixes_from_post(request, timesheet, [target_date])
 
         if validation_errors:
             for error in validation_errors:
@@ -996,6 +1046,7 @@ def _timesheet_day_entry(request, target_date, page_title):
                     "page_title": page_title,
                     "save_button_label": "Save Yesterday" if "Yesterday" in page_title else "Save Today",
                     "work_codes": work_codes,
+                "description_prefixes": DescriptionPrefix.objects.filter(active=True).order_by("display_order", "code"),
                     "job_options": _job_options_for_timesheet_forms(),
                 },
             )
@@ -1018,6 +1069,7 @@ def _timesheet_day_entry(request, target_date, page_title):
             "page_title": page_title,
             "save_button_label": "Save Yesterday" if "Yesterday" in page_title else "Save Today",
             "work_codes": work_codes,
+                "description_prefixes": DescriptionPrefix.objects.filter(active=True).order_by("display_order", "code"),
             "job_options": _job_options_for_timesheet_forms(),
         },
     )
@@ -1071,7 +1123,7 @@ def timesheet_autosave(request):
 
     job_errors = _validate_timesheet_jobs_from_post(request, timesheet, work_dates)
     hour_errors = _validate_timesheet_hours_from_post(request, timesheet, work_dates)
-    validation_errors = job_errors + hour_errors
+    validation_errors = job_errors + hour_errors + _validate_description_prefixes_from_post(request, timesheet, work_dates)
 
     if validation_errors:
         return JsonResponse({"ok": False, "errors": validation_errors}, status=400)
