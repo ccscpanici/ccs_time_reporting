@@ -1,7 +1,7 @@
 """Application support code for admin."""
 
 from django.contrib import admin
-from .models import EmployeeProfile, OfficeLocation, UserPreference, AccountNotificationRecipient
+from .models import EmployeeProfile, OfficeLocation, UserPreference, AccountNotificationRecipient, CompanyOverhead
 
 
 @admin.register(OfficeLocation)
@@ -68,3 +68,31 @@ class AccountNotificationRecipientAdmin(admin.ModelAdmin):
     list_filter = ("active",)
     search_fields = ("email", "name")
     ordering = ("email",)
+
+@admin.register(CompanyOverhead)
+class CompanyOverheadAdmin(admin.ModelAdmin):
+    """Financial overhead is visible and editable only to superusers."""
+
+    list_display = ("name", "amount", "frequency", "annualized_amount", "effective_start", "effective_end", "active")
+    list_filter = ("active", "frequency")
+    search_fields = ("name",)
+    ordering = ("name", "-effective_start")
+
+    @admin.display(description="Annualized amount")
+    def annualized_amount(self, obj):
+        return obj.annual_amount
+
+    def has_module_permission(self, request):
+        return bool(request.user.is_active and request.user.is_superuser)
+
+    def has_view_permission(self, request, obj=None):
+        return bool(request.user.is_active and request.user.is_superuser)
+
+    def has_add_permission(self, request):
+        return bool(request.user.is_active and request.user.is_superuser)
+
+    def has_change_permission(self, request, obj=None):
+        return bool(request.user.is_active and request.user.is_superuser)
+
+    def has_delete_permission(self, request, obj=None):
+        return bool(request.user.is_active and request.user.is_superuser)

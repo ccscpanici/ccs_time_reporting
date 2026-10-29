@@ -129,3 +129,53 @@ class AccountNotificationRecipient(models.Model):
         if self.name:
             return f"{self.name} <{self.email}>"
         return self.email
+
+class CompanyOverhead(models.Model):
+    """A recurring company expense included in annualized overhead."""
+
+    class Frequency(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        ANNUAL = "annual", "Annual"
+
+    name = models.CharField(max_length=150)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    frequency = models.CharField(max_length=10, choices=Frequency.choices, default=Frequency.MONTHLY)
+    effective_start = models.DateField()
+    effective_end = models.DateField(null=True, blank=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name", "-effective_start", "pk"]
+        verbose_name = "Company Overhead"
+        verbose_name_plural = "Company Overhead"
+        constraints = [
+            models.CheckConstraint(condition=models.Q(amount__gte=0), name="accounts_overhead_nonnegative"),
+            models.CheckConstraint(
+                condition=models.Q(effective_end__isnull=True) | models.Q(effective_end__gte=models.F("effective_start")),
+                name="accounts_overhead_valid_dates",
+            ),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if self.amount is not None and self.amount < 0:
+            raise ValidationError({"amount": "Amount cannot be negative."})
+        if self.effective_start and self.effective_end and self.effective_end < self.effective_start:
+            raise ValidationError({"effective_end": "End date cannot precede start date."})
+
+    @property
+    def annual_amount(self):
+        return self.amount * (12 if self.frequency == self.Frequency.MONTHLY else 1)
+
+    @classmethod
+    def annual_total_on(cls, on_date):
+        """Annualized run-rate for expenses active on a given date."""
+        from decimal import Decimal
+        expenses = cls.objects.filter(
+            active=True, effective_start__lte=on_date
+        ).filter(models.Q(effective_end__isnull=True) | models.Q(effective_end__gte=on_date))
+        return sum((item.annual_amount for item in expenses), Decimal("0.00"))
+
+    def __str__(self):
+        return self.name
