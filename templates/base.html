@@ -62,6 +62,9 @@
                   {% endif %}
                   {% if is_project_manager %}
                     <li>
+                      <a class="dropdown-item" href="{% url 'supervisor_timesheet_history' %}">Supervisor History</a>
+                    </li>
+                    <li>
                       <a class="dropdown-item" href="{% url 'timesheet_approvals' %}">
                         Approvals
                       </a>

@@ -36,7 +36,7 @@
           <td>{{ timesheet.submitted_at|default:"—" }}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm">
-              <a class="btn btn-outline-primary" href="{{ timesheet.get_absolute_url }}">View</a>
+              <a class="btn btn-outline-primary" href="{% url 'timesheet_supervisor_review' timesheet.pk %}">View</a>
               <form method="post" action="{% url 'timesheet_approve' timesheet.pk %}" class="d-inline">
                 {% csrf_token %}
                 <button class="btn btn-outline-success" type="submit">Approve</button>

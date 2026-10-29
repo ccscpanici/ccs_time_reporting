@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path("", views.timesheet_list, name="timesheet_list"),
+    path("supervisor-history/", views.supervisor_timesheet_history, name="supervisor_timesheet_history"),
     path("downloads/", views.timesheet_downloads, name="timesheet_downloads"),
     path("downloads/batch/", views.timesheet_batch_download, name="timesheet_batch_download"),
     path("downloads/file/", views.timesheet_batch_download_file, name="timesheet_batch_download_file"),
@@ -31,6 +32,7 @@ urlpatterns = [
     path("jobs/invalid-cleanup/", views.invalid_job_cleanup, name="invalid_job_cleanup"),
     path("jobs/invalid-cleanup/<int:pk>/apply/", views.invalid_job_cleanup_apply, name="invalid_job_cleanup_apply"),
     path("jobs/<int:pk>/edit/", views.job_edit, name="job_edit"),
+    path("<int:pk>/supervisor-review/", views.timesheet_supervisor_review, name="timesheet_supervisor_review"),
     path("<int:pk>/", views.timesheet_detail, name="timesheet_detail"),
     path("<int:pk>/edit/", views.timesheet_edit, name="timesheet_edit"),
     path("<int:pk>/download/", views.timesheet_download, name="timesheet_download"),

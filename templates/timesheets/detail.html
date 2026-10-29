@@ -29,6 +29,7 @@
     {% if timesheet.can_submit and timesheet.employee_id == request.user.id %}
       <a class="btn btn-success" href="{% url 'timesheet_submit' timesheet.pk %}">Submit</a>
     {% endif %}
+    {% if timesheet.employee_id == request.user.id %}
     {% if pending_reopen_request %}
       <button class="btn btn-outline-warning" disabled>
         Reopen Request Pending
@@ -38,6 +39,7 @@
         href="{% url 'timesheet_reopen_request' timesheet.pk %}">
         Request Reopen
       </a>
+    {% endif %}
     {% endif %}
     {% if can_approve_this_timesheet and timesheet.status == timesheet.Status.SUBMITTED %}
       <form method="post" action="{% url 'timesheet_approve' timesheet.pk %}" class="d-inline">
@@ -60,7 +62,7 @@
         <button type="submit" class="btn btn-outline-info">Mark Invoiced</button>
       </form>
     {% endif %}
-    {% if timesheet.status != timesheet.Status.INVOICED %}
+    {% if timesheet.employee_id == request.user.id and timesheet.status != timesheet.Status.INVOICED %}
       <a class="btn btn-outline-danger" href="{% url 'timesheet_delete' timesheet.pk %}">Delete</a>
     {% endif %}
   </div>

@@ -451,6 +451,63 @@ def timesheet_list(request):
     })
 
 @login_required
+def supervisor_timesheet_history(request):
+    """Read-only history of previously submitted timesheets for assigned staff."""
+    if not is_project_manager(request.user):
+        raise Http404()
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    managed = is_management_staff(request.user) or is_business_admin(request.user)
+    employees = User.objects.filter(employee_profile__isnull=False)
+    if not managed:
+        employees = employees.filter(employee_profile__supervisor=request.user)
+    employees = employees.order_by("last_name", "first_name", "username")
+
+    sheets = Timesheet.objects.filter(
+        deleted_at__isnull=True,
+        submitted_at__isnull=False,
+        employee__in=employees,
+    ).select_related("employee")
+
+    employee_id = request.GET.get("employee", "").strip()
+    status = request.GET.get("status", "").strip()
+    start = request.GET.get("start", "").strip()
+    end = request.GET.get("end", "").strip()
+    if employee_id:
+        if employee_id.isdecimal():
+            sheets = sheets.filter(employee_id=int(employee_id))
+        else:
+            sheets = sheets.none()
+    allowed_statuses = {value for value, _ in Timesheet.Status.choices}
+    if status in allowed_statuses:
+        sheets = sheets.filter(status=status)
+    for raw, lookup in ((start, "week_start__gte"), (end, "week_start__lte")):
+        if raw:
+            try:
+                parsed = date.fromisoformat(raw)
+            except ValueError:
+                continue
+            sheets = sheets.filter(**{lookup: parsed})
+
+    sheets = sheets.order_by("-week_start", "employee__last_name", "employee__first_name", "-pk")
+    page_obj = Paginator(sheets, 25).get_page(request.GET.get("page"))
+    filters = request.GET.copy()
+    filters.pop("page", None)
+    return render(request, "timesheets/supervisor_history.html", {
+        "timesheets": page_obj,
+        "page_obj": page_obj,
+        "employees": employees,
+        "statuses": Timesheet.Status.choices,
+        "selected_employee": employee_id,
+        "selected_status": status,
+        "start": start,
+        "end": end,
+        "filter_query": filters.urlencode(),
+    })
+
+
+@login_required
 def timesheet_downloads(request):
     """List and filter the current user's timesheets for batch download."""
     timesheets = (
@@ -672,6 +729,26 @@ def timesheet_create(request):
 def timesheet_detail(request, pk):
     """Handle the timesheet detail request and enforce the workflow rules for this operation."""
     timesheet = get_timesheet_for_request_user(request, pk)
+    return render(request, "timesheets/detail.html", _timesheet_review_context(request, timesheet))
+
+
+@login_required
+def timesheet_supervisor_review(request, pk):
+    """Dedicated supervisor/management review for previously submitted timesheets."""
+    if not is_project_manager(request.user) and not is_business_admin(request.user):
+        raise Http404()
+    timesheet = get_timesheet_for_request_user(request, pk)
+    if timesheet.submitted_at is None:
+        raise Http404()
+    return render(
+        request,
+        "timesheets/supervisor_review.html",
+        _timesheet_review_context(request, timesheet),
+    )
+
+
+def _timesheet_review_context(request, timesheet):
+    """Build shared read-only data for employee and supervisor timesheet views."""
     grid = build_timesheet_grid(timesheet)
     weekly_total_hours = sum(day["total_hours"] for day in grid)
 
@@ -706,23 +783,15 @@ def timesheet_detail(request, pk):
         status="pending",
     ).first()
 
-    return render(
-        request,
-        "timesheets/detail.html",
-        {
-            "timesheet": timesheet,
-            "grid": grid,
-            "weekly_expenses": weekly_expenses,
-            "can_approve_this_timesheet": can_approve_timesheet(
-                request.user, 
-                timesheet
-            ),
-	    "weekly_total_hours": weekly_total_hours,
+    return {
+        "timesheet": timesheet,
+        "grid": grid,
+        "weekly_expenses": weekly_expenses,
+        "can_approve_this_timesheet": can_approve_timesheet(request.user, timesheet),
+        "weekly_total_hours": weekly_total_hours,
         "pending_reopen_request": pending_reopen_request,
         "history": history,
-        },
-    )
-
+    }
 
 
 def _job_options_for_timesheet_forms():

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Supervisor Timesheet History</h1>
+<p class="text-muted">Previously submitted timesheets for employees assigned to you. Historical records are for review.</p>
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label" for="employee">Employee</label><select class="form-select" id="employee" name="employee"><option value="">All assigned employees</option>{% for person in employees %}<option value="{{ person.pk }}" {% if selected_employee == person.pk|stringformat:"s" %}selected{% endif %}>{{ person.get_full_name|default:person.username }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label" for="status">Status</label><select class="form-select" id="status" name="status"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label" for="start">Week from</label><input class="form-control" type="date" id="start" name="start" value="{{ start }}"></div>
+    <div class="col-md-2"><label class="form-label" for="end">Week through</label><input class="form-control" type="date" id="end" name="end" value="{{ end }}"></div>
+    <div class="col-md-3"><button class="btn btn-primary" type="submit">Filter</button> <a class="btn btn-outline-secondary" href="{% url 'supervisor_timesheet_history' %}">Clear</a></div>
+  </div>
+</form>
+<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Employee</th><th>Week</th><th>Status</th><th>Submitted</th><th>Review</th></tr></thead><tbody>
+{% for ts in timesheets %}<tr><td>{{ ts.employee.get_full_name|default:ts.employee.username }}</td><td>{{ ts.week_start }}</td><td>{{ ts.get_status_display }}</td><td>{{ ts.submitted_at|date:"m/d/Y g:i A" }}</td><td><a href="{% url 'timesheet_supervisor_review' ts.pk %}" class="btn btn-sm btn-outline-primary">View</a></td></tr>{% empty %}<tr><td colspan="5" class="text-muted">No previously submitted timesheets match these filters.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if page_obj.has_other_pages %}<nav aria-label="History pages"><div class="d-flex gap-3">{% if page_obj.has_previous %}<a href="?{{ filter_query }}&page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?{{ filter_query }}&page={{ page_obj.next_page_number }}">Next</a>{% endif %}</div></nav>{% endif %}
+{% endblock %}
