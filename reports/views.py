@@ -277,3 +277,30 @@ def my_billability_report(request):
         "detail_rows": detail_rows,
         "report_ran": report_ran,
     })
+
+
+@user_passes_test(lambda user: user.is_active and user.is_superuser)
+def project_profitability_report(request):
+    """Superuser-only read-only project profitability estimates."""
+    from datetime import date
+    from django.http import HttpResponseBadRequest
+    from reports.services.project_profitability import project_profitability
+
+    report_ran = request.GET.get("run") == "1"
+    start = request.GET.get("start", "").strip()
+    end = request.GET.get("end", "").strip()
+    job_number = request.GET.get("job_number", "").strip()
+    try:
+        start_date = date.fromisoformat(start) if start else None
+        end_date = date.fromisoformat(end) if end else None
+    except ValueError:
+        return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
+    if start_date and end_date and start_date > end_date:
+        return HttpResponseBadRequest("Start date must not exceed end date.")
+    result = {"rows": [], "excluded_missing_rates": 0}
+    if report_ran:
+        result = project_profitability(start=start_date, end=end_date, job_number=job_number)
+    return render(request, "reports/project_profitability.html", {
+        "report_ran": report_ran, "start": start, "end": end,
+        "job_number": job_number, **result,
+    })

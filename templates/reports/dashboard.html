@@ -3,6 +3,13 @@
 {% block content %}
 <h1 class="h3 mb-3">Reports</h1>
 <div class="row g-3">
+  {% if request.user.is_superuser %}
+  <div class="col-md-6 col-lg-4"><div class="card shadow-sm border-0 rounded-4 h-100"><div class="card-body">
+    <h2 class="h5">Project Profitability</h2>
+    <p class="text-muted">Restricted estimates of labor cost, billing and project margin.</p>
+    <a class="btn btn-primary" href="{% url 'project_profitability_report' %}">Open report</a>
+  </div></div></div>
+  {% endif %}
   {% if is_management_staff %}
   <div class="col-md-6 col-lg-4">
     <div class="card shadow-sm border-0 rounded-4 h-100">
