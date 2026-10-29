@@ -1,7 +1,7 @@
 """Application support code for admin."""
 
 from django.contrib import admin
-from .models import EmployeeProfile, OfficeLocation, UserPreference, AccountNotificationRecipient, CompanyOverhead
+from .models import EmployeeProfile, OfficeLocation, UserPreference, AccountNotificationRecipient, CompanyOverhead, EmployeeFinancialProfile
 
 
 @admin.register(OfficeLocation)
@@ -96,3 +96,33 @@ class CompanyOverheadAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return bool(request.user.is_active and request.user.is_superuser)
+
+
+@admin.register(EmployeeFinancialProfile)
+class EmployeeFinancialProfileAdmin(admin.ModelAdmin):
+    """Compensation and burn-rate administration: superusers only."""
+
+    list_display = ("employee", "annual_salary", "include_in_overhead", "annual_working_hours", "customer_billing_rate", "current_burn_rate")
+    list_select_related = ("employee", "employee__user")
+    search_fields = ("employee__user__first_name", "employee__user__last_name", "employee__user__username")
+    list_filter = ("include_in_overhead", "employee__user__is_active")
+
+    @admin.display(description="Current burn rate")
+    def current_burn_rate(self, obj):
+        from django.utils import timezone
+        return obj.burn_rate_on(timezone.localdate())
+
+    def has_module_permission(self, request):
+        return bool(request.user.is_active and request.user.is_superuser)
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return self.has_module_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.has_module_permission(request)

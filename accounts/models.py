@@ -179,3 +179,69 @@ class CompanyOverhead(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class EmployeeFinancialProfile(models.Model):
+    """Restricted financial assumptions used for current employee burn rates."""
+
+    employee = models.OneToOneField(
+        EmployeeProfile, on_delete=models.CASCADE, related_name="financial_profile"
+    )
+    annual_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    employer_payroll_taxes = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    annual_benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    employer_401k = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    annual_bonuses = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    other_annual_costs = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    include_in_overhead = models.BooleanField(default=True)
+    annual_working_hours = models.DecimalField(max_digits=8, decimal_places=2, default=2080)
+    customer_billing_rate = models.DecimalField(max_digits=9, decimal_places=2, default=140)
+
+    class Meta:
+        verbose_name = "Employee Financial Profile"
+        verbose_name_plural = "Employee Financial Profiles"
+        constraints = [
+            models.CheckConstraint(condition=models.Q(**{field + "__gte": 0}), name="acct_fin_" + {"annual_salary":"salary", "employer_payroll_taxes":"taxes", "annual_benefits":"benefits", "employer_401k":"401k", "annual_bonuses":"bonus", "other_annual_costs":"other", "customer_billing_rate":"billing"}[field] + "_gte0")
+            for field in ("annual_salary", "employer_payroll_taxes", "annual_benefits", "employer_401k", "annual_bonuses", "other_annual_costs", "customer_billing_rate")
+        ] + [
+            models.CheckConstraint(condition=models.Q(annual_working_hours__gt=0), name="acct_fin_hours_gt0")
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        errors = {}
+        for field in ("annual_salary", "employer_payroll_taxes", "annual_benefits", "employer_401k", "annual_bonuses", "other_annual_costs", "customer_billing_rate"):
+            value = getattr(self, field)
+            if value is not None and value < 0:
+                errors[field] = "Cannot be negative."
+        if self.annual_working_hours is not None and self.annual_working_hours <= 0:
+            errors["annual_working_hours"] = "Must be greater than zero."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def direct_annual_cost(self):
+        return sum((getattr(self, field) for field in (
+            "annual_salary", "employer_payroll_taxes", "annual_benefits",
+            "employer_401k", "annual_bonuses", "other_annual_costs"
+        )), __import__("decimal").Decimal("0.00"))
+
+    def allocated_annual_overhead_on(self, on_date):
+        from decimal import Decimal
+        if not self.include_in_overhead or not self.employee.user.is_active:
+            return Decimal("0.00")
+        eligible = type(self).objects.filter(include_in_overhead=True, employee__user__is_active=True).count()
+        if not eligible:
+            return Decimal("0.00")
+        return (CompanyOverhead.annual_total_on(on_date) / Decimal(eligible)).quantize(Decimal("0.01"))
+
+    def total_annual_cost_on(self, on_date):
+        return self.direct_annual_cost + self.allocated_annual_overhead_on(on_date)
+
+    def burn_rate_on(self, on_date):
+        from decimal import Decimal
+        return (self.total_annual_cost_on(on_date) / self.annual_working_hours).quantize(Decimal("0.01"))
+
+    def __str__(self):
+        return str(self.employee)
