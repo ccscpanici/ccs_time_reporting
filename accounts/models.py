@@ -39,6 +39,7 @@ class EmployeeProfile(models.Model):
     employee_code = models.CharField(max_length=30, blank=True, unique=True, null=True)
     title = models.CharField(max_length=100, blank=True)
     department = models.CharField(max_length=100, blank=True)
+    birthday = models.DateField(null=True, blank=True, help_text="Optional employee date of birth; visible to authorized administrators.")
     office_location = models.ForeignKey(
         OfficeLocation,
         on_delete=models.PROTECT,

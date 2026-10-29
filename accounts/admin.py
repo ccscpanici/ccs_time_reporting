@@ -15,8 +15,10 @@ class OfficeLocationAdmin(admin.ModelAdmin):
 @admin.register(EmployeeProfile)
 class EmployeeProfileAdmin(admin.ModelAdmin):
     """Provide employee profile admin behavior for this module."""
-    list_display = ("user", "employee_code", "department", "office_location", "supervisor", "city", "state")
-    list_filter = ("office_location", "department", "state", "supervisor")
+    list_display = ("employee_name", "user", "employee_code", "title", "department", "office_location", "supervisor_name", "birthday", "employee_active")
+    list_select_related = ("user", "supervisor", "office_location")
+    ordering = ("user__last_name", "user__first_name", "user__username")
+    list_filter = ("user__is_active", "office_location", "department", "supervisor")
     search_fields = (
         "user__username",
         "user__first_name",
@@ -26,9 +28,24 @@ class EmployeeProfileAdmin(admin.ModelAdmin):
         "supervisor__last_name",
         "employee_code",
         "department",
+        "title",
         "address_1",
         "city",
     )
+
+    @admin.display(description="Employee", ordering="user__last_name")
+    def employee_name(self, obj):
+        return obj.user.get_full_name() or obj.user.get_username()
+
+    @admin.display(description="Supervisor", ordering="supervisor__last_name")
+    def supervisor_name(self, obj):
+        if obj.supervisor_id is None:
+            return "Not assigned"
+        return obj.supervisor.get_full_name() or obj.supervisor.get_username()
+
+    @admin.display(boolean=True, description="Active", ordering="user__is_active")
+    def employee_active(self, obj):
+        return obj.user.is_active
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Provide the formfield for foreignkey operation for this module."""
